@@ -50,7 +50,7 @@ export type {
   ChatMessage,
   ChatMode,
   StreamCallbacks,
-} from "./client/src/types";
+} from "./client";
 
 // Types
 export type {
