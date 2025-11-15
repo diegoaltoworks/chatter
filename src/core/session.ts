@@ -11,6 +11,7 @@ interface SessionData {
   requests: number;
   maxRequests: number;
   expiresAt: number;
+  metadata?: Record<string, unknown>;
 }
 
 // In-memory session store
@@ -21,7 +22,7 @@ const sessions = new Map<string, SessionData>();
 setInterval(
   () => {
     const now = Date.now();
-    for (const [key, data] of sessions.entries()) {
+    for (const [key, data] of Array.from(sessions.entries())) {
       if (now > data.expiresAt) {
         sessions.delete(key);
       }
@@ -35,13 +36,15 @@ export interface CreateSessionOptions {
   maxRequests?: number;
   /** Session lifetime in seconds (default: 3600 = 1 hour) */
   ttl?: number;
+  /** Optional metadata to store with the session */
+  metadata?: Record<string, unknown>;
 }
 
 /**
  * Create a new temporary session key
  */
 export function createSession(options: CreateSessionOptions = {}): SessionData {
-  const { maxRequests = 20, ttl = 3600 } = options;
+  const { maxRequests = 20, ttl = 3600, metadata } = options;
 
   const key = `session_${randomUUID()}`;
   const now = Date.now();
@@ -52,6 +55,7 @@ export function createSession(options: CreateSessionOptions = {}): SessionData {
     requests: 0,
     maxRequests,
     expiresAt: now + ttl * 1000,
+    ...(metadata && { metadata }),
   };
 
   sessions.set(key, session);
