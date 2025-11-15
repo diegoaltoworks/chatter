@@ -62,7 +62,7 @@ await bot.streamMessage('Tell me a story', {
 ```html
 <script src="https://bot.diegoalto.app/chatbot.min.js"></script>
 <script>
-  const bot = new Fyne.ChatBot({
+  const bot = new Chatter.ChatBot({
     host: 'bot.diegoalto.app',
     mode: 'public',
     apiKey: 'your-api-key'
@@ -99,7 +99,7 @@ const chat = new Chat({
 
 <script src="https://bot.diegoalto.app/chatbot.min.js"></script>
 <script>
-  new Fyne.Chat({
+  new Chatter.Chat({
     host: 'bot.diegoalto.app',
     mode: 'public',
     apiKey: 'your-api-key',
@@ -135,7 +135,7 @@ const chatButton = new ChatButton({
 
 <script src="https://bot.diegoalto.app/chatbot.min.js"></script>
 <script>
-  new Fyne.ChatButton({
+  new Chatter.ChatButton({
     host: 'bot.diegoalto.app',
     mode: 'public',
     apiKey: 'your-api-key',

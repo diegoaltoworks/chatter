@@ -1,6 +1,6 @@
 /**
  * Browser bundle entry point
- * Exposes all exports as global Fyne object
+ * Exposes all exports as global Chatter object
  */
 
 import { Chat } from "./Chat";
@@ -10,7 +10,7 @@ import { ChatButton } from "./ChatButton";
 // Extend window type
 declare global {
   interface Window {
-    Fyne: {
+    Chatter: {
       ChatBot: typeof ChatBot;
       Chat: typeof Chat;
       ChatButton: typeof ChatButton;
@@ -20,7 +20,7 @@ declare global {
 
 // Expose to window for script tag usage
 if (typeof window !== "undefined") {
-  window.Fyne = {
+  window.Chatter = {
     ChatBot,
     Chat,
     ChatButton,

@@ -55,10 +55,10 @@ import '@fyne/chatbot/style.css';
 <script src="https://bot.diegoalto.app/chatbot.min.js"></script>
 
 <script>
-  // All exports available under global Fyne object
-  const bot = new Fyne.ChatBot({ ... });
-  const chat = new Fyne.Chat({ ... });
-  const button = new Fyne.ChatButton({ ... });
+  // All exports available under global Chatter object
+  const bot = new Chatter.ChatBot({ ... });
+  const chat = new Chatter.Chat({ ... });
+  const button = new Chatter.ChatButton({ ... });
 </script>
 ```
 
@@ -93,7 +93,7 @@ Floating chat button with popup:
 <link rel="stylesheet" href="https://bot.diegoalto.app/chatbot.css">
 <script src="https://bot.diegoalto.app/chatbot.min.js"></script>
 <script>
-  new Fyne.ChatButton({
+  new Chatter.ChatButton({
     host: 'bot.diegoalto.app',
     mode: 'public',
     apiKey: 'your-api-key'

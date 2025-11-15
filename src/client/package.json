@@ -21,7 +21,7 @@
     "build:types": "tsc --emitDeclarationOnly --outDir dist",
     "build:esm": "bunx esbuild src/index.ts --bundle --format=esm --outfile=dist/index.mjs --external:node-fetch --platform=neutral --target=es2020",
     "build:cjs": "bunx esbuild src/index.ts --bundle --format=cjs --outfile=dist/index.js --external:node-fetch --platform=neutral --target=es2020",
-    "build:browser": "bunx esbuild src/browser.ts --bundle --format=iife --outfile=dist/chatbot.min.js --minify --global-name=Fyne --platform=browser --target=es2020",
+    "build:browser": "bunx esbuild src/browser.ts --bundle --format=iife --outfile=dist/chatbot.min.js --minify --global-name=Chatter --platform=browser --target=es2020",
     "build:css": "cp src/styles.css dist/chatbot.css",
     "clean": "rm -rf dist",
     "dev": "bun run build -- --watch",

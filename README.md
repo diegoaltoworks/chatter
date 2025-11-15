@@ -74,7 +74,7 @@ Bun.serve({
 <body>
   <script src="https://unpkg.com/@diegoaltoworks/chatter/dist/client/chatbot.min.js"></script>
   <script>
-    const bot = new Fyne.ChatBot({
+    const bot = new Chatter.ChatBot({
       apiUrl: 'https://your-api.example.com',
       apiKey: 'your-api-key',
       mode: 'public'
