@@ -1,1 +1,1 @@
-# chatter
+# Chatter - Embeddable AI Chatbot Framework
