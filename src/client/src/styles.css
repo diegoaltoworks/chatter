@@ -1,0 +1,352 @@
+/**
+ * @fyne/chatbot styles
+ */
+
+/* Chat Container */
+.fyne-chat {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  max-height: 600px;
+  background: #ffffff;
+  border-radius: 12px;
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+  overflow: hidden;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial,
+    sans-serif;
+}
+
+/* Header */
+.fyne-chat-header {
+  padding: 16px 20px;
+  background: linear-gradient(135deg, #1a1a1a 0%, #3a3a3a 100%);
+  color: white;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.fyne-chat-title {
+  font-size: 18px;
+  font-weight: 600;
+  margin: 0;
+}
+
+.fyne-chat-subtitle {
+  font-size: 13px;
+  opacity: 0.9;
+  margin-top: 4px;
+}
+
+/* Messages Container */
+.fyne-chat-messages {
+  flex: 1;
+  overflow-y: auto;
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  background: #f8f9fa;
+}
+
+.fyne-chat-messages::-webkit-scrollbar {
+  width: 6px;
+}
+
+.fyne-chat-messages::-webkit-scrollbar-thumb {
+  background: rgba(0, 0, 0, 0.2);
+  border-radius: 3px;
+}
+
+/* Message */
+.fyne-message {
+  display: flex;
+  animation: slideIn 0.2s ease-out;
+}
+
+@keyframes slideIn {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.fyne-message-user {
+  justify-content: flex-end;
+}
+
+.fyne-message-assistant {
+  justify-content: flex-start;
+}
+
+.fyne-message-content {
+  max-width: 75%;
+  padding: 10px 14px;
+  border-radius: 16px;
+  line-height: 1.4;
+  font-size: 14px;
+  white-space: pre-wrap;
+  word-wrap: break-word;
+}
+
+.fyne-message-user .fyne-message-content {
+  background: linear-gradient(135deg, #1a1a1a 0%, #3a3a3a 100%);
+  color: white;
+  border-bottom-right-radius: 4px;
+}
+
+.fyne-message-assistant .fyne-message-content {
+  background: white;
+  color: #333;
+  border-bottom-left-radius: 4px;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
+}
+
+.fyne-message-error {
+  background: #fee !important;
+  color: #c33 !important;
+}
+
+/* Input Container */
+.fyne-chat-input-container {
+  display: flex;
+  gap: 8px;
+  padding: 16px;
+  background: white;
+  border-top: 1px solid #e0e0e0;
+  align-items: flex-end;
+}
+
+.fyne-chat-input {
+  flex: 1;
+  padding: 10px 12px;
+  border: 1px solid #e0e0e0;
+  border-radius: 20px;
+  font-size: 14px;
+  font-family: inherit;
+  resize: none;
+  outline: none;
+  max-height: 120px;
+  transition: border-color 0.2s;
+}
+
+.fyne-chat-input:focus {
+  border-color: #1a1a1a;
+}
+
+.fyne-chat-input:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.fyne-chat-send {
+  width: 40px;
+  height: 40px;
+  border: none;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #1a1a1a 0%, #3a3a3a 100%);
+  color: white;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: transform 0.2s, opacity 0.2s;
+  flex-shrink: 0;
+}
+
+.fyne-chat-send:hover:not(:disabled) {
+  transform: scale(1.05);
+}
+
+.fyne-chat-send:active:not(:disabled) {
+  transform: scale(0.95);
+}
+
+.fyne-chat-send:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* Chat Button (Floating) */
+.fyne-chat-button {
+  position: fixed;
+  width: 60px;
+  height: 60px;
+  border-radius: 50%;
+  border: none;
+  background: linear-gradient(135deg, #1a1a1a 0%, #3a3a3a 100%);
+  color: white;
+  font-size: 24px;
+  cursor: pointer;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+  transition: transform 0.2s, box-shadow 0.2s;
+  z-index: 9998;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.fyne-chat-button:hover {
+  transform: scale(1.05);
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.2);
+}
+
+.fyne-chat-button:active {
+  transform: scale(0.95);
+}
+
+.fyne-chat-button-bottom-right {
+  bottom: 20px;
+  right: 20px;
+}
+
+.fyne-chat-button-bottom-left {
+  bottom: 20px;
+  left: 20px;
+}
+
+.fyne-chat-button-top-right {
+  top: 20px;
+  right: 20px;
+}
+
+.fyne-chat-button-top-left {
+  top: 20px;
+  left: 20px;
+}
+
+.fyne-chat-button-open {
+  background: #e0e0e0;
+  color: #333;
+}
+
+/* Chat Popup */
+.fyne-chat-popup {
+  position: fixed;
+  width: 380px;
+  height: 600px;
+  z-index: 9999;
+  animation: popupSlideIn 0.3s ease-out;
+}
+
+@keyframes popupSlideIn {
+  from {
+    opacity: 0;
+    transform: translateY(20px) scale(0.95);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.fyne-chat-popup-bottom-right {
+  bottom: 90px;
+  right: 20px;
+}
+
+.fyne-chat-popup-bottom-left {
+  bottom: 90px;
+  left: 20px;
+}
+
+.fyne-chat-popup-top-right {
+  top: 90px;
+  right: 20px;
+}
+
+.fyne-chat-popup-top-left {
+  top: 90px;
+  left: 20px;
+}
+
+/* Close Button */
+.fyne-chat-close {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  width: 32px;
+  height: 32px;
+  border: none;
+  background: rgba(255, 255, 255, 0.2);
+  color: white;
+  border-radius: 50%;
+  cursor: pointer;
+  display: none; /* Hidden by default, shown on mobile */
+  align-items: center;
+  justify-content: center;
+  font-size: 20px;
+  line-height: 1;
+  transition: background 0.2s;
+  z-index: 10;
+}
+
+.fyne-chat-close:hover {
+  background: rgba(255, 255, 255, 0.3);
+}
+
+/* Responsive - Mobile takes over full viewport */
+@media (max-width: 768px) {
+  .fyne-chat-popup {
+    position: fixed !important;
+    top: 0 !important;
+    left: 0 !important;
+    right: 0 !important;
+    bottom: 0 !important;
+    width: 100vw !important;
+    width: 100dvw !important; /* Dynamic viewport width */
+    height: 100vh !important;
+    height: 100dvh !important; /* Dynamic viewport height - accounts for virtual keyboard */
+    border-radius: 0 !important;
+    /* Prevent scrolling on body when chat is open */
+    overflow: hidden;
+  }
+
+  .fyne-chat-popup .fyne-chat {
+    border-radius: 0 !important;
+    max-height: none !important;
+    height: 100%;
+    /* iOS safe area support */
+    padding-top: env(safe-area-inset-top);
+    padding-bottom: env(safe-area-inset-bottom);
+    padding-left: env(safe-area-inset-left);
+    padding-right: env(safe-area-inset-right);
+  }
+
+  .fyne-chat-popup .fyne-chat-messages {
+    /* Enable momentum scrolling on iOS */
+    -webkit-overflow-scrolling: touch;
+    /* Improve touch scrolling performance */
+    touch-action: pan-y;
+  }
+
+  .fyne-chat-popup .fyne-chat-input-container {
+    /* Keep input container at bottom even when keyboard appears */
+    position: relative;
+    /* Add safe area padding for iOS home indicator */
+    padding-bottom: calc(16px + env(safe-area-inset-bottom));
+  }
+
+  .fyne-chat-popup .fyne-chat-input {
+    /* Ensure input is large enough to tap on mobile */
+    min-height: 44px;
+    /* Prevent iOS zoom on input focus */
+    font-size: 16px;
+    /* Better touch target */
+    touch-action: manipulation;
+  }
+
+  .fyne-chat-popup .fyne-chat-close {
+    display: flex !important;
+    /* Account for safe area on devices with notch */
+    top: calc(12px + env(safe-area-inset-top));
+  }
+
+  .fyne-chat-popup .fyne-chat-header {
+    padding-right: 52px; /* Make room for close button */
+    /* Add safe area padding for devices with notch */
+    padding-top: calc(16px + env(safe-area-inset-top));
+  }
+}
