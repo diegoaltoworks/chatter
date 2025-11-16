@@ -1,5 +1,5 @@
 /**
- * Node.js example for @fyne/chatbot
+ * Node.js example for @diegoaltoworks/chatter
  */
 
 import { ChatBot } from "../src/index";

@@ -31,7 +31,7 @@
     "build:esm": "esbuild src/index.ts --bundle --format=esm --outfile=dist/index.mjs --external:hono --external:openai --external:@libsql/client --external:jose --platform=node --target=node18",
     "build:cjs": "esbuild src/index.ts --bundle --format=cjs --outfile=dist/index.js --external:hono --external:openai --external:@libsql/client --external:jose --platform=node --target=node18",
     "build:client": "cd src/client && bun run build",
-    "build:copy-client": "mkdir -p dist/widgets && cp src/client/dist/chatbot.min.js src/client/dist/chatbot.css dist/widgets/",
+    "build:copy-client": "mkdir -p dist/widgets && cp src/client/dist/chatter.js src/client/dist/chatter.css dist/widgets/",
     "test": "bun test",
     "test:watch": "bun test --watch",
     "lint": "biome check .",

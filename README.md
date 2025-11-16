@@ -65,23 +65,46 @@ Bun.serve({
 
 ### Embedding the Chat Widget
 
+Every Chatter server automatically serves the chat widget files at `/chatter.js` and `/chatter.css`. This makes it easy to embed the chat on any website:
+
 ```html
 <!DOCTYPE html>
 <html>
 <head>
-  <link rel="stylesheet" href="https://unpkg.com/@diegoaltoworks/chatter/dist/client/chatbot.css">
+  <!-- Load styles from your Chatter server -->
+  <link rel="stylesheet" href="https://your-bot.example.com/chatter.css">
 </head>
 <body>
-  <script src="https://unpkg.com/@diegoaltoworks/chatter/dist/client/chatbot.min.js"></script>
+  <!-- Load widget from your Chatter server -->
+  <script src="https://your-bot.example.com/chatter.js"></script>
   <script>
-    const bot = new Chatter.ChatBot({
-      apiUrl: 'https://your-api.example.com',
+    // Create a floating chat button
+    new Chatter.ChatButton({
+      host: 'your-bot.example.com',
+      mode: 'public',
       apiKey: 'your-api-key',
-      mode: 'public'
+      position: 'bottom-right'
     });
   </script>
 </body>
 </html>
+```
+
+Alternatively, you can install from npm:
+
+```bash
+npm install @diegoaltoworks/chatter
+```
+
+```typescript
+import { ChatButton } from '@diegoaltoworks/chatter/client';
+import '@diegoaltoworks/chatter/client/style.css';
+
+new ChatButton({
+  host: 'your-bot.example.com',
+  mode: 'public',
+  apiKey: 'your-api-key'
+});
 ```
 
 ## License

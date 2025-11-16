@@ -1,6 +1,6 @@
 /**
- * @fyne/chatbot
- * Isomorphic TypeScript chatbot client for DiegoBot API
+ * @diegoaltoworks/chatter
+ * Isomorphic TypeScript chatbot client for AI chat API
  */
 
 export { ChatBot } from "./ChatBot";

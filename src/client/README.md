@@ -1,4 +1,4 @@
-# @fyne/chatbot
+# @diegoaltoworks/chatter
 
 Isomorphic TypeScript chatbot client for DiegoBot API. Works seamlessly in both Node.js and browser environments.
 
@@ -17,17 +17,17 @@ Isomorphic TypeScript chatbot client for DiegoBot API. Works seamlessly in both 
 ### NPM Package
 
 ```bash
-npm install @fyne/chatbot
+npm install @diegoaltoworks/chatter
 ```
 
 ### CDN (Browser)
 
 ```html
 <!-- Include the script -->
-<script src="https://bot.diegoalto.app/chatbot.min.js"></script>
+<script src="https://bot.diegoalto.app/chatter.js"></script>
 
 <!-- Include the styles -->
-<link rel="stylesheet" href="https://bot.diegoalto.app/chatbot.css">
+<link rel="stylesheet" href="https://bot.diegoalto.app/chatter.css">
 ```
 
 ## Usage
@@ -37,7 +37,7 @@ npm install @fyne/chatbot
 #### Node.js / ES Modules
 
 ```typescript
-import { ChatBot } from '@fyne/chatbot';
+import { ChatBot } from '@diegoaltoworks/chatter';
 
 const bot = new ChatBot({
   host: 'bot.diegoalto.app',
@@ -60,7 +60,7 @@ await bot.streamMessage('Tell me a story', {
 #### Browser (Script Tag)
 
 ```html
-<script src="https://bot.diegoalto.app/chatbot.min.js"></script>
+<script src="https://bot.diegoalto.app/chatter.js"></script>
 <script>
   const bot = new Chatter.ChatBot({
     host: 'bot.diegoalto.app',
@@ -77,8 +77,8 @@ await bot.streamMessage('Tell me a story', {
 ### 2. Chat Window Component
 
 ```typescript
-import { Chat } from '@fyne/chatbot';
-import '@fyne/chatbot/style.css';
+import { Chat } from '@diegoaltoworks/chatter';
+import '@diegoaltoworks/chatter/style.css';
 
 const chat = new Chat({
   host: 'bot.diegoalto.app',
@@ -94,10 +94,10 @@ const chat = new Chat({
 #### Browser (Script Tag)
 
 ```html
-<link rel="stylesheet" href="https://bot.diegoalto.app/chatbot.css">
+<link rel="stylesheet" href="https://bot.diegoalto.app/chatter.css">
 <div id="chat"></div>
 
-<script src="https://bot.diegoalto.app/chatbot.min.js"></script>
+<script src="https://bot.diegoalto.app/chatter.js"></script>
 <script>
   new Chatter.Chat({
     host: 'bot.diegoalto.app',
@@ -112,8 +112,8 @@ const chat = new Chat({
 ### 3. Floating Chat Button
 
 ```typescript
-import { ChatButton } from '@fyne/chatbot';
-import '@fyne/chatbot/style.css';
+import { ChatButton } from '@diegoaltoworks/chatter';
+import '@diegoaltoworks/chatter/style.css';
 
 const chatButton = new ChatButton({
   host: 'bot.diegoalto.app',
@@ -131,9 +131,9 @@ const chatButton = new ChatButton({
 #### Browser (Script Tag)
 
 ```html
-<link rel="stylesheet" href="https://bot.diegoalto.app/chatbot.css">
+<link rel="stylesheet" href="https://bot.diegoalto.app/chatter.css">
 
-<script src="https://bot.diegoalto.app/chatbot.min.js"></script>
+<script src="https://bot.diegoalto.app/chatter.js"></script>
 <script>
   new Chatter.ChatButton({
     host: 'bot.diegoalto.app',
@@ -242,7 +242,7 @@ import type {
   ChatMessage,
   ChatMode,
   StreamCallbacks
-} from '@fyne/chatbot';
+} from '@diegoaltoworks/chatter';
 ```
 
 ## Private Mode

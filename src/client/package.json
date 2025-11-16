@@ -5,15 +5,15 @@
   "main": "dist/index.js",
   "module": "dist/index.mjs",
   "types": "dist/index.d.ts",
-  "unpkg": "dist/chatbot.min.js",
-  "jsdelivr": "dist/chatbot.min.js",
+  "unpkg": "dist/chatter.js",
+  "jsdelivr": "dist/chatter.js",
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
       "import": "./dist/index.mjs",
       "require": "./dist/index.js"
     },
-    "./style.css": "./dist/chatbot.css"
+    "./style.css": "./dist/chatter.css"
   },
   "files": ["dist"],
   "scripts": {
@@ -21,8 +21,8 @@
     "build:types": "tsc --emitDeclarationOnly --outDir dist",
     "build:esm": "bunx esbuild src/index.ts --bundle --format=esm --outfile=dist/index.mjs --external:node-fetch --platform=neutral --target=es2020",
     "build:cjs": "bunx esbuild src/index.ts --bundle --format=cjs --outfile=dist/index.js --external:node-fetch --platform=neutral --target=es2020",
-    "build:browser": "bunx esbuild src/browser.ts --bundle --format=iife --outfile=dist/chatbot.min.js --minify --global-name=Chatter --platform=browser --target=es2020",
-    "build:css": "cp src/styles.css dist/chatbot.css",
+    "build:browser": "bunx esbuild src/browser.ts --bundle --format=iife --outfile=dist/chatter.js --minify --global-name=Chatter --platform=browser --target=es2020",
+    "build:css": "cp src/styles.css dist/chatter.css",
     "clean": "rm -rf dist",
     "dev": "bun run build -- --watch",
     "typecheck": "tsc --noEmit",
