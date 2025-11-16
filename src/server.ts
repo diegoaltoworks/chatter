@@ -4,6 +4,8 @@
  * Creates a configured Hono server instance with all routes and middleware.
  */
 
+import { fileURLToPath } from "node:url";
+import { dirname, join } from "node:path";
 import { Hono } from "hono";
 import { serveStatic } from "hono/bun";
 import OpenAI from "openai";
@@ -14,6 +16,12 @@ import { demoRoutes } from "./routes/demo";
 import { privateRoutes } from "./routes/private";
 import { publicRoutes } from "./routes/public";
 import type { ChatterConfig } from "./types";
+
+// Resolve paths relative to this module
+const moduleURL = import.meta.url;
+const modulePath = fileURLToPath(moduleURL);
+const moduleDir = dirname(modulePath);
+const widgetsDir = join(moduleDir, "widgets");
 
 /**
  * Create a Chatter server instance
@@ -85,9 +93,9 @@ export async function createServer(config: ChatterConfig) {
     app.get("/demo/chatbot", serveStatic({ path: `${publicDir}/demo-chatbot.html` }));
     app.get("/demo/session", serveStatic({ path: `${publicDir}/demo-session.html` }));
 
-    // Serve widget files from package dist
-    app.get("/chatter.js", serveStatic({ path: "./dist/widgets/chatter.js" }));
-    app.get("/chatter.css", serveStatic({ path: "./dist/widgets/chatter.css" }));
+    // Serve widget files from package dist (resolved relative to this module)
+    app.get("/chatter.js", serveStatic({ path: join(widgetsDir, "chatter.js") }));
+    app.get("/chatter.css", serveStatic({ path: join(widgetsDir, "chatter.css") }));
   }
 
   // Build dependencies for routes
