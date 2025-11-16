@@ -27,7 +27,7 @@ export class ChatButton {
   private render(): void {
     // Create button
     this.buttonElement = document.createElement("button");
-    this.buttonElement.className = `fyne-chat-button fyne-chat-button-${this.config.position}`;
+    this.buttonElement.className = `chatter-ui-chat-button chatter-ui-chat-button-${this.config.position}`;
     this.buttonElement.innerHTML = this.config.label || "💬";
     this.buttonElement.setAttribute("aria-label", "Open chat");
 
@@ -38,7 +38,7 @@ export class ChatButton {
 
     // Create chat container
     this.chatContainer = document.createElement("div");
-    this.chatContainer.className = `fyne-chat-popup fyne-chat-popup-${this.config.position}`;
+    this.chatContainer.className = `chatter-ui-chat-popup chatter-ui-chat-popup-${this.config.position}`;
     this.chatContainer.style.display = "none";
 
     // Add to document
@@ -93,7 +93,7 @@ export class ChatButton {
     }
 
     this.chatContainer.style.display = "block";
-    this.buttonElement.classList.add("fyne-chat-button-open");
+    this.buttonElement.classList.add("chatter-ui-chat-button-open");
     this.buttonElement.setAttribute("aria-label", "Close chat");
     this.isOpen = true;
 
@@ -109,7 +109,7 @@ export class ChatButton {
     // This ensures the popup animation completes and the DOM is fully ready
     setTimeout(
       () => {
-        const input = this.chatContainer.querySelector(".fyne-chat-input") as HTMLTextAreaElement;
+        const input = this.chatContainer.querySelector(".chatter-ui-chat-input") as HTMLTextAreaElement;
         if (input) {
           input.focus();
           // On mobile, scroll input into view after a brief delay to account for keyboard
@@ -128,7 +128,7 @@ export class ChatButton {
     if (!this.isOpen) return;
 
     this.chatContainer.style.display = "none";
-    this.buttonElement.classList.remove("fyne-chat-button-open");
+    this.buttonElement.classList.remove("chatter-ui-chat-button-open");
     this.buttonElement.setAttribute("aria-label", "Open chat");
     this.isOpen = false;
 

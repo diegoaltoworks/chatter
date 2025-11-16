@@ -51,20 +51,20 @@ export class Chat {
 
   private render(): void {
     this.container.innerHTML = `
-      <div class="fyne-chat">
-        <div class="fyne-chat-header">
-          <button class="fyne-chat-close" type="button" aria-label="Close chat">×</button>
-          <div class="fyne-chat-title">${this.title}</div>
-          ${this.subtitle ? `<div class="fyne-chat-subtitle">${this.subtitle}</div>` : ""}
+      <div class="chatter-ui-chat">
+        <div class="chatter-ui-chat-header">
+          <button class="chatter-ui-chat-close" type="button" aria-label="Close chat">×</button>
+          <div class="chatter-ui-chat-title">${this.title}</div>
+          ${this.subtitle ? `<div class="chatter-ui-chat-subtitle">${this.subtitle}</div>` : ""}
         </div>
-        <div class="fyne-chat-messages"></div>
-        <div class="fyne-chat-input-container">
+        <div class="chatter-ui-chat-messages"></div>
+        <div class="chatter-ui-chat-input-container">
           <textarea
-            class="fyne-chat-input"
+            class="chatter-ui-chat-input"
             placeholder="${this.placeholder}"
             rows="1"
           ></textarea>
-          <button class="fyne-chat-send" type="button">
+          <button class="chatter-ui-chat-send" type="button">
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <path d="M22 2L11 13M22 2l-7 20-4-9-9-4 20-7z"/>
             </svg>
@@ -73,9 +73,9 @@ export class Chat {
       </div>
     `;
 
-    const messagesContainer = this.container.querySelector(".fyne-chat-messages");
-    const inputElement = this.container.querySelector(".fyne-chat-input");
-    const sendButton = this.container.querySelector(".fyne-chat-send");
+    const messagesContainer = this.container.querySelector(".chatter-ui-chat-messages");
+    const inputElement = this.container.querySelector(".chatter-ui-chat-input");
+    const sendButton = this.container.querySelector(".chatter-ui-chat-send");
 
     if (!messagesContainer || !inputElement || !sendButton) {
       throw new Error("Required chat elements not found in container");
@@ -93,7 +93,7 @@ export class Chat {
 
   private attachEventListeners(): void {
     // Close button click (mobile)
-    const closeButton = this.container.querySelector(".fyne-chat-close");
+    const closeButton = this.container.querySelector(".chatter-ui-chat-close");
     if (closeButton && this.onClose) {
       closeButton.addEventListener("click", () => {
         this.onClose?.();
@@ -159,7 +159,7 @@ export class Chat {
       const assistantMessage: ChatMessage = { role: "assistant", content: "" };
       this.messages.push(assistantMessage);
       const messageEl = this.addMessageToUI(assistantMessage);
-      const contentEl = messageEl.querySelector(".fyne-message-content");
+      const contentEl = messageEl.querySelector(".chatter-ui-message-content");
 
       if (!contentEl) {
         throw new Error("Message content element not found");
@@ -184,7 +184,7 @@ export class Chat {
           console.error("Stream error:", error);
           assistantMessage.content = "Sorry, an error occurred. Please try again.";
           contentEl.textContent = assistantMessage.content;
-          contentEl.classList.add("fyne-message-error");
+          contentEl.classList.add("chatter-ui-message-error");
           this.setInputEnabled(true);
         },
       });
@@ -196,16 +196,16 @@ export class Chat {
       };
       this.messages.push(errorMessage);
       const messageEl = this.addMessageToUI(errorMessage);
-      messageEl.querySelector(".fyne-message-content")?.classList.add("fyne-message-error");
+      messageEl.querySelector(".chatter-ui-message-content")?.classList.add("chatter-ui-message-error");
       this.setInputEnabled(true);
     }
   }
 
   private addMessageToUI(message: ChatMessage): HTMLElement {
     const messageEl = document.createElement("div");
-    messageEl.className = `fyne-message fyne-message-${message.role}`;
+    messageEl.className = `chatter-ui-message chatter-ui-message-${message.role}`;
     messageEl.innerHTML = `
-      <div class="fyne-message-content">${message.content}</div>
+      <div class="chatter-ui-message-content">${message.content}</div>
     `;
     this.messagesContainer.appendChild(messageEl);
     this.scrollToBottom();

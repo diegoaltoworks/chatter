@@ -85,9 +85,9 @@ export async function createServer(config: ChatterConfig) {
     app.get("/demo/chatbot", serveStatic({ path: `${publicDir}/demo-chatbot.html` }));
     app.get("/demo/session", serveStatic({ path: `${publicDir}/demo-session.html` }));
 
-    // Serve widget files (from chatter client dist)
-    app.get("/chatbot.min.js", serveStatic({ path: "./src/chatter/client/dist/chatbot.min.js" }));
-    app.get("/chatbot.css", serveStatic({ path: "./src/chatter/client/dist/chatbot.css" }));
+    // Serve widget files from package dist
+    app.get("/chatter.js", serveStatic({ path: "./dist/widgets/chatter.js" }));
+    app.get("/chatter.css", serveStatic({ path: "./dist/widgets/chatter.css" }));
   }
 
   // Build dependencies for routes
