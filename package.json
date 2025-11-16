@@ -1,6 +1,6 @@
 {
   "name": "@diegoaltoworks/chatter",
-  "version": "0.4.2",
+  "version": "0.4.3",
   "description": "Embeddable AI chatbot framework with RAG, authentication, and customizable widgets",
   "main": "./dist/index.js",
   "module": "./dist/index.mjs",
@@ -22,11 +22,7 @@
       "require": "./dist/server.js"
     }
   },
-  "files": [
-    "dist",
-    "README.md",
-    "LICENSE"
-  ],
+  "files": ["dist", "README.md", "LICENSE"],
   "scripts": {
     "dev": "bun --watch src/index.ts",
     "build": "bun run build:clean && bun run build:types && bun run build:esm && bun run build:cjs && bun run build:client && bun run build:copy-client",
@@ -88,11 +84,7 @@
     "typescript": "^5.6.3"
   },
   "lint-staged": {
-    "*.{ts,js,json,md}": [
-      "biome check --write --no-errors-on-unmatched"
-    ],
-    "*.ts": [
-      "tsc --noEmit"
-    ]
+    "*.{ts,js,json,md}": ["biome check --write --no-errors-on-unmatched"],
+    "*.ts": ["tsc --noEmit"]
   }
 }
