@@ -5,7 +5,7 @@
 
 import type { Context, Next } from "hono";
 
-const DEMO_KEYS = ["fyneworks.key.here"];
+const DEMO_KEYS = ["chatter-api-key-here"];
 
 /**
  * Middleware to check if the request comes from an allowed origin

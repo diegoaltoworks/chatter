@@ -74,13 +74,13 @@ class MockHTMLElement {
   className = "";
 
   querySelector(selector: string): MockElement {
-    if (selector === ".fyne-chat-input") {
+    if (selector === ".chatter-ui-chat-input") {
       return new MockTextarea();
     }
-    if (selector === ".fyne-chat-send" || selector === ".fyne-chat-close") {
+    if (selector === ".chatter-ui-chat-send" || selector === ".chatter-ui-chat-close") {
       return new MockButton();
     }
-    if (selector === ".fyne-chat-messages") {
+    if (selector === ".chatter-ui-chat-messages") {
       return {
         appendChild: () => {},
         scrollTop: 0,
@@ -136,7 +136,7 @@ describe("Mobile Chat Widget", () => {
     test("should apply fullscreen styles on mobile", () => {
       const styles = `
         @media (max-width: 768px) {
-          .fyne-chat-popup {
+          .chatter-ui-chat-popup {
             width: 100dvw !important;
             height: 100dvh !important;
           }
@@ -157,7 +157,7 @@ describe("Mobile Chat Widget", () => {
 
     test("should prevent zoom on input focus", () => {
       const styles = `
-        .fyne-chat-input {
+        .chatter-ui-chat-input {
           font-size: 16px;
         }
       `;
@@ -167,7 +167,7 @@ describe("Mobile Chat Widget", () => {
 
     test("should enable momentum scrolling on iOS", () => {
       const styles = `
-        .fyne-chat-messages {
+        .chatter-ui-chat-messages {
           -webkit-overflow-scrolling: touch;
         }
       `;
@@ -406,7 +406,7 @@ describe("Mobile Chat Widget", () => {
     test("should show close button on mobile", () => {
       const closeButtonStyles = `
         @media (max-width: 768px) {
-          .fyne-chat-close {
+          .chatter-ui-chat-close {
             display: flex !important;
           }
         }

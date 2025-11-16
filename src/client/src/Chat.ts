@@ -50,28 +50,7 @@ export class Chat {
   }
 
   private render(): void {
-    this.container.innerHTML = `
-      <div class="chatter-ui-chat">
-        <div class="chatter-ui-chat-header">
-          <button class="chatter-ui-chat-close" type="button" aria-label="Close chat">×</button>
-          <div class="chatter-ui-chat-title">${this.title}</div>
-          ${this.subtitle ? `<div class="chatter-ui-chat-subtitle">${this.subtitle}</div>` : ""}
-        </div>
-        <div class="chatter-ui-chat-messages"></div>
-        <div class="chatter-ui-chat-input-container">
-          <textarea
-            class="chatter-ui-chat-input"
-            placeholder="${this.placeholder}"
-            rows="1"
-          ></textarea>
-          <button class="chatter-ui-chat-send" type="button">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <path d="M22 2L11 13M22 2l-7 20-4-9-9-4 20-7z"/>
-            </svg>
-          </button>
-        </div>
-      </div>
-    `;
+    this.container.innerHTML = `<div class="chatter-ui-chat"><div class="chatter-ui-chat-header"><button class="chatter-ui-chat-close" type="button" aria-label="Close chat">×</button><div class="chatter-ui-chat-title">${this.title}</div>${this.subtitle ? `<div class="chatter-ui-chat-subtitle">${this.subtitle}</div>` : ""}</div><div class="chatter-ui-chat-messages"></div><div class="chatter-ui-chat-input-container"><textarea class="chatter-ui-chat-input" placeholder="${this.placeholder}" rows="1"></textarea><button class="chatter-ui-chat-send" type="button"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 2L11 13M22 2l-7 20-4-9-9-4 20-7z"/></svg></button></div></div>`;
 
     const messagesContainer = this.container.querySelector(".chatter-ui-chat-messages");
     const inputElement = this.container.querySelector(".chatter-ui-chat-input");
@@ -204,9 +183,7 @@ export class Chat {
   private addMessageToUI(message: ChatMessage): HTMLElement {
     const messageEl = document.createElement("div");
     messageEl.className = `chatter-ui-message chatter-ui-message-${message.role}`;
-    messageEl.innerHTML = `
-      <div class="chatter-ui-message-content">${message.content}</div>
-    `;
+    messageEl.innerHTML = `<div class="chatter-ui-message-content">${message.content}</div>`;
     this.messagesContainer.appendChild(messageEl);
     this.scrollToBottom();
     return messageEl;

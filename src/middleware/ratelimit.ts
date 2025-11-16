@@ -1,4 +1,5 @@
 import type { Context, Next } from "hono";
+
 import type { ChatterConfig } from "../types";
 
 interface ContextWithJWT extends Context {
@@ -8,7 +9,7 @@ interface ContextWithJWT extends Context {
 type BucketState = { count: number; windowStart: number };
 
 // Demo API keys that get stricter rate limits
-const DEMO_KEYS = ["fyneworks.key.here"];
+const DEMO_KEYS = ["chatter-api-key-here"];
 
 function getKeyFromIP(c: Context) {
   const h = c.req.header("x-forwarded-for");
