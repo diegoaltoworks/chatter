@@ -228,6 +228,33 @@ Both tools:
 - **Rate Limiting**: Optional per-tool rate limiting (requests per minute) to control API usage
 - **Observability**: Comprehensive logging with conversation tracking and cost data
 
+## Plugins
+
+### Talker — Voice Calls & SMS
+
+Add phone call and SMS support to your Chatter bot with [Talker](https://github.com/diegoaltoworks/talker):
+
+```bash
+bun add @diegoaltoworks/talker
+```
+
+```typescript
+import { createServer } from '@diegoaltoworks/chatter';
+import { createTelephonyRoutes } from '@diegoaltoworks/talker';
+
+const app = await createServer({
+  ...config,
+  customRoutes: async (app, deps) => {
+    await createTelephonyRoutes(app, deps, {
+      twilio: { accountSid, authToken, phoneNumber },
+      transferNumber: '+441234567890',
+    });
+  },
+});
+```
+
+One server, one port — web chat, phone calls, and SMS. See the [Talker README](https://github.com/diegoaltoworks/talker) for full documentation.
+
 ## License
 
 MIT © [Diego Alto](https://github.com/diegoaltoworks)
