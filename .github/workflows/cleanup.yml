@@ -1,0 +1,20 @@
+name: Cleanup Old Workflow Runs
+
+on:
+  schedule:
+    - cron: '0 2 * * 1'
+  workflow_dispatch:
+
+jobs:
+  cleanup:
+    name: Delete Old Workflow Runs
+    runs-on: ubuntu-latest
+    permissions:
+      actions: write
+    steps:
+      - name: Delete all but latest run
+        run: |
+          gh run list --repo ${{ github.repository }} --limit 100 --json databaseId --jq '.[1:][].databaseId' | \
+          xargs -I {} gh run delete {} --repo ${{ github.repository }} || true
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
