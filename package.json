@@ -36,9 +36,9 @@
     "build": "bun run build:clean && bun run build:types && bun run build:esm && bun run build:cjs && bun run build:mcp && bun run build:client && bun run build:copy-client",
     "build:clean": "rm -rf dist",
     "build:types": "tsc --emitDeclarationOnly --outDir dist",
-    "build:esm": "esbuild src/index.ts --bundle --format=esm --outfile=dist/index.mjs --external:hono --external:openai --external:@libsql/client --external:jose --platform=node --target=node18",
-    "build:cjs": "esbuild src/index.ts --bundle --format=cjs --outfile=dist/index.js --external:hono --external:openai --external:@libsql/client --external:jose --platform=node --target=node18",
-    "build:mcp": "esbuild src/mcp-server.ts --bundle --format=esm --outfile=dist/mcp-server.mjs --external:@modelcontextprotocol/sdk --external:openai --external:@libsql/client --external:zod --platform=node --target=node18 && esbuild src/mcp-server.ts --bundle --format=cjs --outfile=dist/mcp-server.js --external:@modelcontextprotocol/sdk --external:openai --external:@libsql/client --external:zod --platform=node --target=node18",
+    "build:esm": "esbuild src/index.ts --bundle --format=esm --outfile=dist/index.mjs --external:hono --external:openai --external:@libsql/client --external:jose --platform=node --target=node24",
+    "build:cjs": "esbuild src/index.ts --bundle --format=cjs --outfile=dist/index.js --external:hono --external:openai --external:@libsql/client --external:jose --platform=node --target=node24",
+    "build:mcp": "esbuild src/mcp-server.ts --bundle --format=esm --outfile=dist/mcp-server.mjs --external:@modelcontextprotocol/sdk --external:openai --external:@libsql/client --external:zod --platform=node --target=node24 && esbuild src/mcp-server.ts --bundle --format=cjs --outfile=dist/mcp-server.js --external:@modelcontextprotocol/sdk --external:openai --external:@libsql/client --external:zod --platform=node --target=node24",
     "build:client": "cd src/client && bun run build",
     "build:copy-client": "mkdir -p dist/static && cp src/client/dist/chatter.js src/client/dist/chatter.css dist/static/",
     "test": "bun test",
@@ -79,7 +79,7 @@
   },
   "homepage": "https://github.com/diegoaltoworks/chatter#readme",
   "engines": {
-    "node": ">=18.0.0"
+    "node": ">=24.0.0"
   },
   "peerDependencies": {
     "@libsql/client": "^0.6.0 || ^0.7.0 || ^0.8.0 || ^0.9.0 || ^0.10.0",
