@@ -4,16 +4,31 @@ import { SignJWT, exportSPKI, generateKeyPair } from "jose";
 import type { ChatterConfig } from "../types";
 import { createJWTMiddleware } from "./jwt";
 
+// Helper to create minimal valid ChatterConfig for tests
+function createTestConfig(overrides: Partial<ChatterConfig> = {}): ChatterConfig {
+  return {
+    bot: {
+      name: "TestBot",
+      personName: "Test",
+      publicUrl: "http://test.com",
+      description: "Test bot",
+    },
+    openai: { apiKey: "test-key" },
+    database: { url: "test-url", authToken: "test-token" },
+    ...overrides,
+  };
+}
+
 describe("JWT Middleware", () => {
   describe("createJWTMiddleware", () => {
     it("should create middleware function", () => {
-      const config: ChatterConfig = {
+      const config = createTestConfig({
         auth: {
           jwt: {
             publicKeyPem: "test-pem",
           },
         },
-      };
+      });
 
       const middleware = createJWTMiddleware(config);
 
@@ -22,13 +37,13 @@ describe("JWT Middleware", () => {
     });
 
     it("should reject request without authorization header", async () => {
-      const config: ChatterConfig = {
+      const config = createTestConfig({
         auth: {
           jwt: {
             publicKeyPem: "test-pem",
           },
         },
-      };
+      });
 
       const app = new Hono();
       app.use("/private/*", createJWTMiddleware(config));
@@ -46,13 +61,13 @@ describe("JWT Middleware", () => {
     });
 
     it("should reject request with invalid bearer format", async () => {
-      const config: ChatterConfig = {
+      const config = createTestConfig({
         auth: {
           jwt: {
             publicKeyPem: "test-pem",
           },
         },
-      };
+      });
 
       const app = new Hono();
       app.use("/private/*", createJWTMiddleware(config));
@@ -70,13 +85,13 @@ describe("JWT Middleware", () => {
     });
 
     it("should reject request with invalid JWT token", async () => {
-      const config: ChatterConfig = {
+      const config = createTestConfig({
         auth: {
           jwt: {
             publicKeyPem: "test-pem",
           },
         },
-      };
+      });
 
       const app = new Hono();
       app.use("/private/*", createJWTMiddleware(config));
@@ -99,13 +114,13 @@ describe("JWT Middleware", () => {
       const publicKeyPem = await exportSPKI(publicKey);
 
       // Create config with public key
-      const config: ChatterConfig = {
+      const config = createTestConfig({
         auth: {
           jwt: {
             publicKeyPem,
           },
         },
-      };
+      });
 
       // Create valid JWT
       const token = await new SignJWT({ sub: "user123" })
@@ -134,13 +149,13 @@ describe("JWT Middleware", () => {
       const { publicKey, privateKey } = await generateKeyPair("RS256");
       const publicKeyPem = await exportSPKI(publicKey);
 
-      const config: ChatterConfig = {
+      const config = createTestConfig({
         auth: {
           jwt: {
             publicKeyPem,
           },
         },
-      };
+      });
 
       // Create valid JWT with subject
       const token = await new SignJWT({ sub: "user-456" })
@@ -173,14 +188,14 @@ describe("JWT Middleware", () => {
       const { publicKey, privateKey } = await generateKeyPair("RS256");
       const publicKeyPem = await exportSPKI(publicKey);
 
-      const config: ChatterConfig = {
+      const config = createTestConfig({
         auth: {
           jwt: {
             publicKeyPem,
             issuer: "https://auth.example.com",
           },
         },
-      };
+      });
 
       // Create JWT without issuer
       const invalidToken = await new SignJWT({ sub: "user123" })
@@ -228,14 +243,14 @@ describe("JWT Middleware", () => {
       const { publicKey, privateKey } = await generateKeyPair("RS256");
       const publicKeyPem = await exportSPKI(publicKey);
 
-      const config: ChatterConfig = {
+      const config = createTestConfig({
         auth: {
           jwt: {
             publicKeyPem,
             audience: "api.example.com",
           },
         },
-      };
+      });
 
       // Create JWT without audience
       const invalidToken = await new SignJWT({ sub: "user123" })
@@ -283,13 +298,13 @@ describe("JWT Middleware", () => {
       const { publicKey, privateKey } = await generateKeyPair("RS256");
       const publicKeyPem = await exportSPKI(publicKey);
 
-      const config: ChatterConfig = {
+      const config = createTestConfig({
         auth: {
           jwt: {
             publicKeyPem,
           },
         },
-      };
+      });
 
       // Create expired JWT (expired 1 second ago)
       const expiredToken = await new SignJWT({ sub: "user123" })
@@ -320,13 +335,13 @@ describe("JWT Middleware", () => {
 
       const publicKeyPem = await exportSPKI(publicKey1);
 
-      const config: ChatterConfig = {
+      const config = createTestConfig({
         auth: {
           jwt: {
             publicKeyPem,
           },
         },
-      };
+      });
 
       // Sign JWT with different private key
       const token = await new SignJWT({ sub: "user123" })
@@ -351,11 +366,11 @@ describe("JWT Middleware", () => {
     });
 
     it("should throw error when no JWT config provided", async () => {
-      const config: ChatterConfig = {
+      const config = createTestConfig({
         auth: {
           jwt: {},
         },
-      };
+      });
 
       const app = new Hono();
       app.use("/private/*", createJWTMiddleware(config));
@@ -376,13 +391,13 @@ describe("JWT Middleware", () => {
       const { publicKey, privateKey } = await generateKeyPair("RS256");
       const publicKeyPem = await exportSPKI(publicKey);
 
-      const config: ChatterConfig = {
+      const config = createTestConfig({
         auth: {
           jwt: {
             publicKeyPem,
           },
         },
-      };
+      });
 
       const token = await new SignJWT({ sub: "user123" })
         .setProtectedHeader({ alg: "RS256" })
@@ -414,13 +429,13 @@ describe("JWT Middleware", () => {
     });
 
     it("should stop middleware chain on JWT failure", async () => {
-      const config: ChatterConfig = {
+      const config = createTestConfig({
         auth: {
           jwt: {
             publicKeyPem: "test-pem",
           },
         },
-      };
+      });
 
       let nextCalled = false;
 
@@ -447,13 +462,13 @@ describe("JWT Middleware", () => {
       const { publicKey, privateKey } = await generateKeyPair("RS256");
       const publicKeyPem = await exportSPKI(publicKey);
 
-      const config: ChatterConfig = {
+      const config = createTestConfig({
         auth: {
           jwt: {
             publicKeyPem,
           },
         },
-      };
+      });
 
       // Create JWT without sub claim
       const token = await new SignJWT({})

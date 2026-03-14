@@ -15,6 +15,10 @@
 export { createServer } from "./server";
 export type { ChatterConfig, ServerDependencies } from "./types";
 
+// MCP server factory
+export { createMCPServer } from "./mcp-server";
+export type { MCPServerOptions, MCPTransportMode } from "./mcp-server";
+
 // Core modules (for advanced customization)
 export { VectorStore } from "./core/retrieval";
 export { completeOnce, completeStream } from "./core/llm";

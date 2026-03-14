@@ -51,6 +51,16 @@ npx chatter create-apikey --name "my-app" --expires-in 365d
 
 **Requirements:** OpenAI API key, Turso database, Bun runtime. See [Requirements Guide](./docs/requirements.md) for setup instructions.
 
+## Examples
+
+**[📁 Complete Examples](./examples/)** - Ready-to-run examples for all use cases:
+
+- **[HTTP Server (Basic)](./examples/http-server-basic.ts)** - Production-ready HTTP API
+- **[HTTP Server + Clerk](./examples/http-server-with-clerk.ts)** - With authentication
+- **[MCP Server](./examples/mcp-server-example.ts)** - For Claude Desktop integration
+- **[API Client](./examples/api-client-usage.ts)** - Call Chatter from code
+- **[Programmatic RAG](./examples/programmatic-rag.ts)** - Use core modules directly
+
 ## Documentation
 
 Complete guides for setup, deployment, and integration:
@@ -59,7 +69,7 @@ Complete guides for setup, deployment, and integration:
 - **[Server Setup](./docs/server.md)** - Configuration, knowledge base, prompts, API keys
 - **[Client Integration](./docs/client.md)** - Widgets, React components, theming
 - **[Deployment](./docs/deployment.md)** - Google Cloud Run, Fly.io, Railway, VPS
-- **[Testing Guide](./docs/testing/README.md)** - Comprehensive testing documentation (254 tests, 98% coverage)
+- **[Testing](./docs/testing.md)** - Comprehensive testing guide (254 tests, 98% coverage)
 - **[Code Quality](./docs/CODE_QUALITY.md)** - Security assessment and architecture review
 - **[FAQs](./docs/faqs.md)** - Troubleshooting and common questions
 
@@ -103,6 +113,102 @@ new ChatButton({ host: 'your-bot.example.com', mode: 'public', apiKey: '...' });
 ```
 
 See [Client Setup Guide](./docs/client.md) for detailed integration examples, theming, and authentication options.
+
+## MCP Server Integration
+
+Use Chatter as a Model Context Protocol (MCP) server to expose your chatbot to Claude Desktop, VS Code extensions, and other MCP-compatible tools:
+
+**Basic Setup:**
+```typescript
+import { createMCPServer } from '@diegoaltoworks/chatter/mcp';
+import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
+
+const server = await createMCPServer({
+  bot: { name: 'MyBot', personName: 'Your Name' },
+  openai: { apiKey: process.env.OPENAI_API_KEY },
+  database: { url: process.env.TURSO_URL, authToken: process.env.TURSO_AUTH_TOKEN },
+  knowledgeDir: './knowledge',
+  promptsDir: './prompts'
+});
+
+// Connect with STDIO transport (for Claude Desktop)
+const transport = new StdioServerTransport();
+await server.connect(transport);
+```
+
+**Customize Tools:**
+```typescript
+const server = await createMCPServer({
+  // ... other config ...
+  tools: {
+    public: {
+      enabled: true,
+      name: 'company_docs',
+      description: 'Search company documentation and FAQs'
+    },
+    private: {
+      enabled: false  // Disable private tool
+    }
+  }
+});
+```
+
+**Logging & Observability:**
+```typescript
+const server = await createMCPServer({
+  // ... other config ...
+  logging: {
+    console: true,  // JSON logs to stdout (default: true)
+    onChat: async (event) => {
+      // Custom logging - send to your monitoring service
+      console.log('Chat event:', {
+        timestamp: event.timestamp,
+        tool: event.toolName,
+        user_message: event.userMessage,
+        conversation_length: event.conversationHistory.length,
+        rag_chunks: event.ragContext.length,
+        response_length: event.response.length,
+        duration_ms: event.duration
+      });
+      
+      // Example: Send to external monitoring
+      // await fetch('https://your-logging-service.com/events', {
+      //   method: 'POST',
+      //   body: JSON.stringify(event)
+      // });
+    }
+  }
+});
+```
+
+**Claude Desktop Configuration:**
+
+Add to your `claude_desktop_config.json`:
+```json
+{
+  "mcpServers": {
+    "chatter": {
+      "command": "node",
+      "args": ["/path/to/your/mcp-server.js"],
+      "env": {
+        "OPENAI_API_KEY": "your-key",
+        "TURSO_URL": "your-url",
+        "TURSO_AUTH_TOKEN": "your-token"
+      }
+    }
+  }
+}
+```
+
+**Available Tools (configurable):**
+- `chat_public` (default name) - Chat using public knowledge base
+- `chat_private` (default name) - Chat using private/internal knowledge base
+
+Both tools:
+- Support single messages or full conversation history
+- Use RAG-powered context retrieval from your knowledge base
+- Can be customized with different names and descriptions
+- Can be individually enabled/disabled
 
 ## License
 
