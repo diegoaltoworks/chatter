@@ -20,7 +20,10 @@ export async function completeOnce({
   let text = res.choices[0]?.message?.content ?? "";
   if (detectLeakage(text))
     text = "Sorry, I can't share internal instructions. How else can I help?";
-  return { content: scrubOutput(text) };
+  return {
+    content: scrubOutput(text),
+    usage: res.usage || { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0 },
+  };
 }
 
 // Server-Sent Events (optional)

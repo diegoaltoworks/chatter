@@ -153,22 +153,31 @@ const server = await createMCPServer({
 });
 ```
 
-**Logging & Observability:**
+**Conversation Tracking & Cost Management:**
 ```typescript
 const server = await createMCPServer({
   // ... other config ...
+  toolRateLimit: 30,  // Max 30 requests per minute per tool (optional)
   logging: {
     console: true,  // JSON logs to stdout (default: true)
     onChat: async (event) => {
-      // Custom logging - send to your monitoring service
+      // Custom logging - includes conversation tracking and cost data
       console.log('Chat event:', {
         timestamp: event.timestamp,
+        conversationId: event.conversationId,  // Track sessions across calls
         tool: event.toolName,
         user_message: event.userMessage,
         conversation_length: event.conversationHistory.length,
         rag_chunks: event.ragContext.length,
         response_length: event.response.length,
-        duration_ms: event.duration
+        duration_ms: event.duration,
+        // OpenAI API usage and cost tracking
+        cost: {
+          promptTokens: event.cost.promptTokens,
+          completionTokens: event.cost.completionTokens,
+          totalTokens: event.cost.totalTokens,
+          estimatedCostUSD: event.cost.estimatedCost
+        }
       });
       
       // Example: Send to external monitoring
@@ -206,9 +215,18 @@ Add to your `claude_desktop_config.json`:
 
 Both tools:
 - Support single messages or full conversation history
+- Track conversation IDs across sessions for continuity
+- Return token usage and cost estimates in response metadata
 - Use RAG-powered context retrieval from your knowledge base
 - Can be customized with different names and descriptions
 - Can be individually enabled/disabled
+- Optional per-tool rate limiting
+
+**Features:**
+- **Conversation ID Tracking**: Pass `conversationId` parameter to maintain session continuity across tool calls
+- **Cost Tracking**: Every response includes token usage (prompt/completion/total) and estimated USD cost
+- **Rate Limiting**: Optional per-tool rate limiting (requests per minute) to control API usage
+- **Observability**: Comprehensive logging with conversation tracking and cost data
 
 ## License
 

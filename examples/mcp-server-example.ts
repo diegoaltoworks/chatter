@@ -19,7 +19,7 @@ async function main() {
   const server = await createMCPServer({
     bot: {
       name: "ChatterBot",
-      personName: "Diego Alto",
+      personName: "Your Name",
       publicUrl: "https://bot.example.com",
       description: "An AI chatbot with RAG capabilities",
     },

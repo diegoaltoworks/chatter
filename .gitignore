@@ -40,6 +40,7 @@ Thumbs.db
 .idea/
 *.sublime-project
 *.sublime-workspace
+.claude/
 
 # Misc
 *.tgz

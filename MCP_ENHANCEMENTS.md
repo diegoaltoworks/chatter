@@ -47,6 +47,7 @@ const server = await createMCPServer({
 {
   timestamp: string;              // ISO 8601 timestamp
   toolName: string;               // Which tool was called
+  conversationId: string;         // Conversation session ID
   userMessage: string;            // Latest user question
   conversationHistory: Array<{    // Full conversation
     role: "user" | "assistant";
@@ -55,6 +56,12 @@ const server = await createMCPServer({
   ragContext: string[];           // Retrieved knowledge chunks
   response: string;               // AI response
   duration: number;               // Milliseconds
+  cost: {                         // OpenAI API cost tracking
+    promptTokens: number;
+    completionTokens: number;
+    totalTokens: number;
+    estimatedCost: number;        // USD
+  };
 }
 ```
 
@@ -82,6 +89,7 @@ const server = await createMCPServer({
   "event": "mcp_chat",
   "timestamp": "2026-03-14T13:40:00.000Z",
   "toolName": "chat_public",
+  "conversationId": "conv_1710421200000_abc123xyz",
   "userMessage": "What's our refund policy?",
   "conversationHistory": [
     {"role": "user", "content": "What's our refund policy?"}
@@ -91,7 +99,13 @@ const server = await createMCPServer({
     "Our return policy allows..."
   ],
   "response": "Our refund policy allows returns within 30 days...",
-  "duration": 1247
+  "duration": 1247,
+  "cost": {
+    "promptTokens": 842,
+    "completionTokens": 156,
+    "totalTokens": 998,
+    "estimatedCost": 0.00367
+  }
 }
 ```
 
@@ -166,11 +180,45 @@ const server = await createMCPServer({
 });
 ```
 
-## 8. Next Steps
+## 8. Recently Implemented Features (v0.1.8)
+
+### Conversation ID Tracking ✅
+- Automatic conversation ID generation for each session
+- Optional `conversationId` parameter in tool calls for session continuity
+- IDs tracked in logs and returned in response metadata
+
+### Cost Tracking ✅
+- Real-time token usage tracking (prompt/completion/total)
+- Estimated USD cost calculation based on GPT-4o pricing
+- Cost data included in logs and response metadata
+- Pricing: $2.50 per 1M input tokens, $10.00 per 1M output tokens
+
+### Rate Limiting Per Tool ✅
+- Optional `toolRateLimit` configuration (requests per minute)
+- Separate tracking per tool (public/private)
+- Sliding window implementation
+- Automatic enforcement with clear error messages
+
+### Example with All Features:
+```typescript
+const server = await createMCPServer({
+  // ... base config ...
+  toolRateLimit: 30,  // 30 requests/minute per tool
+  logging: {
+    console: true,
+    onChat: async (event) => {
+      console.log(`Conversation ${event.conversationId}:`);
+      console.log(`  Cost: $${event.cost.estimatedCost.toFixed(6)}`);
+      console.log(`  Tokens: ${event.cost.totalTokens}`);
+    }
+  }
+});
+```
+
+## 9. Future Enhancements
 
 Consider adding:
-- [ ] Conversation ID tracking across sessions
 - [ ] User identification/authentication context
-- [ ] Cost tracking (OpenAI API usage)
-- [ ] Rate limiting per tool
 - [ ] A/B testing for different prompts
+- [ ] Persistent conversation history storage
+- [ ] Multi-model support (GPT-4, Claude, etc.)

@@ -62,10 +62,10 @@ bun run examples/http-server-with-clerk.ts
 
 ---
 
-### 3. MCP Server
+### 3. MCP Server (Basic)
 **File:** `mcp-server-example.ts`
 
-Model Context Protocol server for Claude Desktop and other MCP clients.
+Basic Model Context Protocol server for Claude Desktop and other MCP clients.
 
 ```bash
 bun run examples/mcp-server-example.ts
@@ -100,7 +100,48 @@ bun run examples/mcp-server-example.ts
 
 ---
 
-### 4. API Client Usage
+### 4. MCP Server with Advanced Features
+**File:** `mcp-server-with-features.ts`
+
+MCP server demonstrating conversation tracking, cost monitoring, and rate limiting.
+
+```bash
+bun run examples/mcp-server-with-features.ts
+```
+
+**Features:**
+- Conversation ID tracking across sessions
+- Real-time cost tracking and token usage monitoring
+- Per-tool rate limiting (30 requests/minute)
+- Custom logging with cumulative cost reporting
+- Per-conversation cost breakdown
+- Cost threshold alerts
+
+**Use when:**
+- Need to monitor OpenAI API costs
+- Managing multiple concurrent conversations
+- Want detailed observability and logging
+- Need rate limiting to control usage
+
+**Example Output:**
+```
+============================================================
+Conversation: conv_1710421200000_abc123xyz
+Tool: search_knowledge
+User: What is your refund policy?...
+Response Length: 245 chars
+Duration: 1247ms
+------------------------------------------------------------
+Tokens (prompt/completion/total): 842/156/998
+This request cost: $0.003670
+This conversation total: $0.003670
+Session total: $0.003670 (998 tokens)
+============================================================
+```
+
+---
+
+### 5. API Client Usage
 **File:** `api-client-usage.ts`
 
 Shows how to call Chatter HTTP API from code.
@@ -131,7 +172,7 @@ bun run examples/api-client-usage.ts
 
 ---
 
-### 5. Programmatic RAG
+### 6. Programmatic RAG
 **File:** `programmatic-rag.ts`
 
 Use Chatter's core modules directly without HTTP server.

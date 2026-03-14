@@ -13,59 +13,21 @@ import { z } from "zod";
 import { completeOnce } from "./core/llm";
 import { PromptLoader } from "./core/prompts";
 import { VectorStore } from "./core/retrieval";
-import type { ChatterConfig } from "./types";
+import { getOrGenerateConversationId } from "./mcp-server/conversation-id";
+import { calculateCost } from "./mcp-server/cost-tracker";
+import { createLogger } from "./mcp-server/logger";
+import { createRateLimiter } from "./mcp-server/rate-limiter";
 
-/**
- * MCP Server transport options
- */
-export type MCPTransportMode = "stdio";
-
-/**
- * Logging callback for observability
- */
-export type MCPLogCallback = (event: {
-  timestamp: string;
-  toolName: string;
-  conversationId?: string;
-  userMessage: string;
-  conversationHistory: Array<{ role: "user" | "assistant"; content: string }>;
-  ragContext: string[];
-  response: string;
-  duration: number;
-}) => void | Promise<void>;
-
-/**
- * Configuration for individual MCP tools
- */
-export interface MCPToolConfig {
-  /** Enable this tool. Default: true */
-  enabled?: boolean;
-  /** Tool name override. Defaults to chat_public/chat_private */
-  name?: string;
-  /** Tool description override */
-  description?: string;
-}
-
-export interface MCPServerOptions extends ChatterConfig {
-  /** Transport mode. Default: stdio */
-  transport?: MCPTransportMode;
-
-  /** Configuration for MCP tools */
-  tools?: {
-    /** Public chat tool configuration */
-    public?: MCPToolConfig;
-    /** Private chat tool configuration */
-    private?: MCPToolConfig;
-  };
-
-  /** Logging and observability */
-  logging?: {
-    /** Enable console logging. Default: true */
-    console?: boolean;
-    /** Custom logging callback for external monitoring */
-    onChat?: MCPLogCallback;
-  };
-}
+// Re-export types for backward compatibility
+export type {
+  ChatMessage,
+  CostInfo,
+  MCPLogCallback,
+  MCPServerOptions,
+  MCPToolConfig,
+  MCPTransportMode,
+} from "./mcp-server/types";
+import type { MCPServerOptions } from "./mcp-server/types";
 
 /**
  * Create and configure an MCP server instance
@@ -98,8 +60,10 @@ export async function createMCPServer(config: MCPServerOptions) {
   const knowledgeDir = config.knowledgeDir || "./config/knowledge";
   const promptsDir = config.promptsDir || "./config/prompts";
   const transportMode = config.transport || "stdio";
-  const enableConsoleLogging = config.logging?.console !== false;
-  const logCallback = config.logging?.onChat;
+
+  // Initialize modular components
+  const rateLimiter = createRateLimiter(config.toolRateLimit);
+  const logger = createLogger(config.logging?.console !== false, config.logging?.onChat);
 
   // Tool configurations with defaults
   const publicToolConfig = {
@@ -116,42 +80,6 @@ export async function createMCPServer(config: MCPServerOptions) {
     description:
       config.tools?.private?.description ||
       `Chat with ${config.bot.name} using private/internal knowledge base. Supports both single messages and conversation history.`,
-  };
-
-  // Logging helper
-  const logChatInteraction = async (
-    toolName: string,
-    conversationMessages: Array<{ role: "user" | "assistant"; content: string }>,
-    ragContext: string[],
-    response: string,
-    duration: number,
-  ) => {
-    const lastUserMsg = [...conversationMessages].reverse().find((m) => m.role === "user");
-
-    const logEvent = {
-      timestamp: new Date().toISOString(),
-      toolName,
-      userMessage: lastUserMsg?.content || "",
-      conversationHistory: conversationMessages,
-      ragContext,
-      response,
-      duration,
-    };
-
-    // Console logging
-    if (enableConsoleLogging) {
-      console.log(
-        JSON.stringify({
-          event: "mcp_chat",
-          ...logEvent,
-        }),
-      );
-    }
-
-    // Custom callback
-    if (logCallback) {
-      await logCallback(logEvent);
-    }
   };
 
   // Initialize OpenAI
@@ -193,6 +121,12 @@ export async function createMCPServer(config: MCPServerOptions) {
           )
           .optional()
           .describe("Conversation history with alternating user/assistant messages"),
+        conversationId: z
+          .string()
+          .optional()
+          .describe(
+            "Optional conversation ID to track sessions. If not provided, a new ID will be generated.",
+          ),
       })
       .refine(
         (data) => data.message !== undefined || data.messages !== undefined,
@@ -206,14 +140,24 @@ export async function createMCPServer(config: MCPServerOptions) {
         inputSchema: publicSchema,
       },
       async (args: z.infer<typeof publicSchema>) => {
-        const { message, messages } = args;
+        const { message, messages, conversationId } = args;
         const startTime = Date.now();
+
+        // Generate or use provided conversation ID
+        const convId = getOrGenerateConversationId(conversationId);
+
+        // Check rate limit
+        if (rateLimiter && !rateLimiter.check(publicToolConfig.name)) {
+          throw new Error(
+            `Rate limit exceeded for ${publicToolConfig.name}. Maximum ${config.toolRateLimit} requests per minute.`,
+          );
+        }
 
         // Parse input
         let conversationMessages: Array<{ role: "user" | "assistant"; content: string }>;
 
         if (messages && Array.isArray(messages)) {
-          conversationMessages = messages;
+          conversationMessages = messages as Array<{ role: "user" | "assistant"; content: string }>;
         } else if (message) {
           conversationMessages = [{ role: "user", content: String(message) }];
         } else {
@@ -241,15 +185,22 @@ export async function createMCPServer(config: MCPServerOptions) {
           messages: conversationMessages,
         });
 
+        // Calculate cost
+        const cost = calculateCost(result.usage);
+
         // Log interaction
         const duration = Date.now() - startTime;
-        await logChatInteraction(
-          publicToolConfig.name,
-          conversationMessages,
-          ctx,
-          result.content,
-          duration,
-        ).catch((err) => console.error("Logging error:", err));
+        await logger
+          .logChatInteraction(
+            publicToolConfig.name,
+            convId,
+            conversationMessages,
+            ctx,
+            result.content,
+            duration,
+            cost,
+          )
+          .catch((err) => console.error("Logging error:", err));
 
         return {
           content: [
@@ -258,6 +209,15 @@ export async function createMCPServer(config: MCPServerOptions) {
               text: result.content,
             },
           ],
+          _meta: {
+            conversationId: convId,
+            cost: {
+              promptTokens: cost.promptTokens,
+              completionTokens: cost.completionTokens,
+              totalTokens: cost.totalTokens,
+              estimatedCostUSD: cost.estimatedCost,
+            },
+          },
         };
       },
     );
@@ -279,6 +239,12 @@ export async function createMCPServer(config: MCPServerOptions) {
           )
           .optional()
           .describe("Conversation history with alternating user/assistant messages"),
+        conversationId: z
+          .string()
+          .optional()
+          .describe(
+            "Optional conversation ID to track sessions. If not provided, a new ID will be generated.",
+          ),
       })
       .refine(
         (data) => data.message !== undefined || data.messages !== undefined,
@@ -292,14 +258,24 @@ export async function createMCPServer(config: MCPServerOptions) {
         inputSchema: privateSchema,
       },
       async (args: z.infer<typeof privateSchema>) => {
-        const { message, messages } = args;
+        const { message, messages, conversationId } = args;
         const startTime = Date.now();
+
+        // Generate or use provided conversation ID
+        const convId = getOrGenerateConversationId(conversationId);
+
+        // Check rate limit
+        if (rateLimiter && !rateLimiter.check(privateToolConfig.name)) {
+          throw new Error(
+            `Rate limit exceeded for ${privateToolConfig.name}. Maximum ${config.toolRateLimit} requests per minute.`,
+          );
+        }
 
         // Parse input
         let conversationMessages: Array<{ role: "user" | "assistant"; content: string }>;
 
         if (messages && Array.isArray(messages)) {
-          conversationMessages = messages;
+          conversationMessages = messages as Array<{ role: "user" | "assistant"; content: string }>;
         } else if (message) {
           conversationMessages = [{ role: "user", content: String(message) }];
         } else {
@@ -327,15 +303,22 @@ export async function createMCPServer(config: MCPServerOptions) {
           messages: conversationMessages,
         });
 
+        // Calculate cost
+        const cost = calculateCost(result.usage);
+
         // Log interaction
         const duration = Date.now() - startTime;
-        await logChatInteraction(
-          privateToolConfig.name,
-          conversationMessages,
-          ctx,
-          result.content,
-          duration,
-        ).catch((err) => console.error("Logging error:", err));
+        await logger
+          .logChatInteraction(
+            privateToolConfig.name,
+            convId,
+            conversationMessages,
+            ctx,
+            result.content,
+            duration,
+            cost,
+          )
+          .catch((err) => console.error("Logging error:", err));
 
         return {
           content: [
@@ -344,6 +327,15 @@ export async function createMCPServer(config: MCPServerOptions) {
               text: result.content,
             },
           ],
+          _meta: {
+            conversationId: convId,
+            cost: {
+              promptTokens: cost.promptTokens,
+              completionTokens: cost.completionTokens,
+              totalTokens: cost.totalTokens,
+              estimatedCostUSD: cost.estimatedCost,
+            },
+          },
         };
       },
     );
