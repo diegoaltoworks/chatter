@@ -28,19 +28,19 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '20.x'
+          node-version: '24.x'
 
       - name: Install dependencies
-        run: npm install --production
+        run: npm ci --omit=dev --ignore-scripts
 
       - name: Run npm audit
-        run: npm audit --audit-level=moderate --production
+        run: npm audit --audit-level=moderate --omit=dev
         continue-on-error: false
 
       - name: Generate audit report
         if: always()
         run: |
-          npm audit --json --production > npm-audit-report.json || true
+          npm audit --json --omit=dev > npm-audit-report.json || true
           echo "## NPM Audit Report" >> $GITHUB_STEP_SUMMARY
           echo "\`\`\`json" >> $GITHUB_STEP_SUMMARY
           cat npm-audit-report.json >> $GITHUB_STEP_SUMMARY
@@ -129,7 +129,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '20.x'
+          node-version: '24.x'
 
       - name: Install dependencies
         run: npm install

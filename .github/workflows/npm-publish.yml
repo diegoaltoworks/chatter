@@ -6,97 +6,85 @@ on:
     paths:
       - 'src/**'
       - 'package.json'
-  workflow_dispatch:  # Allow manual trigger
+      - 'bun.lockb'
+      - 'bun.lock'
+      - '.github/workflows/npm-publish.yml'
+  workflow_dispatch:
 
 jobs:
-  check-version:
+  publish:
     runs-on: ubuntu-latest
     if: github.actor != 'github-actions[bot]' && github.actor != 'dependabot[bot]'
-    outputs:
-      version-changed: ${{ steps.check.outputs.changed }}
-      version: ${{ steps.check.outputs.version }}
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 2
-
-      - id: check
-        run: |
-          CURR=$(node -p "require('./package.json').version")
-          echo "version=$CURR" >> $GITHUB_OUTPUT
-
-          if git rev-parse HEAD^ >/dev/null 2>&1; then
-            PREV=$(git show HEAD^:package.json | node -p "JSON.parse(require('fs').readFileSync('/dev/stdin', 'utf-8')).version")
-            if [ "$CURR" != "$PREV" ]; then
-              echo "Version changed from $PREV to $CURR"
-              echo "changed=true" >> $GITHUB_OUTPUT
-            else
-              echo "Version unchanged: $CURR"
-              echo "changed=false" >> $GITHUB_OUTPUT
-            fi
-          else
-            echo "Initial commit, allowing publish"
-            echo "changed=true" >> $GITHUB_OUTPUT
-          fi
-
-  publish:
-    needs: check-version
-    if: needs.check-version.outputs.version-changed == 'true' || github.event_name == 'workflow_dispatch'
-    runs-on: ubuntu-latest
 
     permissions:
       contents: write
-      id-token: write  # Required for npm provenance
+      id-token: write
+
+    env:
+      NODE_VERSION: 24.x
 
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          registry-url: 'https://registry.npmjs.org'
 
       - name: Setup Bun
         uses: oven-sh/setup-bun@v1
         with:
           bun-version: latest
 
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: '20'
-          registry-url: 'https://registry.npmjs.org'
 
       - name: Install dependencies
         run: bun install
-
-      - name: Run tests
-        run: bun test
 
       - name: Run linting
         run: bun run lint
 
       - name: Run type check
         run: bun run typecheck
+      - name: Run security audit
+        run: bun run security:check
+
+      - name: Run tests
+        run: bun test
 
       - name: Build package
         run: bun run build
+      - name: Bump minor version
+        id: bump
+        run: |
+          git fetch --tags --force
+          LATEST_TAG=$(git tag --list 'v*' --sort=-v:refname | head -n1)
+          if [ -n "$LATEST_TAG" ]; then
+            BASE_VERSION="${LATEST_TAG#v}"
+          else
+            BASE_VERSION=$(node -p "require('./package.json').version")
+          fi
+          NEW_VERSION=$(node -e "const [major, minor] = process.argv[1].split('.').map(Number); console.log(major + '.' + (minor + 1) + '.0')" "$BASE_VERSION")
+          while git rev-parse --verify --quiet "refs/tags/v${NEW_VERSION}" >/dev/null; do
+            NEW_VERSION=$(node -e "const [major, minor] = process.argv[1].split('.').map(Number); console.log(major + '.' + (minor + 1) + '.0')" "$NEW_VERSION")
+          done
+          npm version "$NEW_VERSION" --no-git-tag-version >/dev/null
+          echo "version=$NEW_VERSION" >> $GITHUB_OUTPUT
+
+      - name: Commit and tag version bump
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add package.json
+          git commit -m "chore(release): v${{ steps.bump.outputs.version }}"
+          git tag "v${{ steps.bump.outputs.version }}"
+          git push origin HEAD:main
+          git push origin "v${{ steps.bump.outputs.version }}"
 
       - name: Publish to NPM
         run: npm publish --provenance --access public
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
-
-      - name: Create GitHub Release
-        uses: softprops/action-gh-release@v2
-        with:
-          tag_name: v${{ needs.check-version.outputs.version }}
-          name: Release v${{ needs.check-version.outputs.version }}
-          body: |
-            Published to NPM
-
-            ## Installation
-            ```bash
-            npm install @diegoaltoworks/chatter@${{ needs.check-version.outputs.version }}
-            ```
-
-            See [CHANGELOG](./CHANGELOG.md) for details.
-          generate_release_notes: true
-          draft: false
-          prerelease: false
