@@ -55,7 +55,7 @@
     "security:check": "bun audit --audit-level=moderate",
     "check": "bun run typecheck && bun run lint && bun run test && bun run security:check",
     "prepublishOnly": "bun run lint && bun run typecheck && bun run test && bun run security:check && bun run build",
-    "prepare": "husky"
+    "prepare": "husky || true"
   },
   "keywords": [
     "chatbot",
@@ -104,6 +104,6 @@
   },
   "lint-staged": {
     "*.{ts,js,json,md}": ["biome check --write --no-errors-on-unmatched"],
-    "*.ts": ["tsc --noEmit --skipLibCheck"]
+    "*.ts": ["bash -c 'tsc --noEmit --skipLibCheck'"]
   }
 }

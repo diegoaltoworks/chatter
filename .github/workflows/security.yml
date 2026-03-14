@@ -1,64 +1,39 @@
 name: Security Scan
 
 on:
-  # Run on push to main/develop
   push:
     branches: [main, develop]
-  
-  # Run on pull requests
   pull_request:
     branches: [main, develop]
-  
-  # Run weekly on Monday at 00:00 UTC
   schedule:
     - cron: '0 0 * * 1'
-  
-  # Allow manual trigger
   workflow_dispatch:
 
 jobs:
-  npm-audit:
-    name: NPM Security Audit
+  audit:
+    name: Security Audit
     runs-on: ubuntu-latest
-    
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v1
         with:
-          node-version: '24.x'
+          bun-version: latest
 
       - name: Install dependencies
-        run: npm ci --omit=dev --ignore-scripts
+        run: bun install
 
-      - name: Run npm audit
-        run: npm audit --audit-level=moderate --omit=dev
-        continue-on-error: false
-
-      - name: Generate audit report
-        if: always()
-        run: |
-          npm audit --json --omit=dev > npm-audit-report.json || true
-          echo "## NPM Audit Report" >> $GITHUB_STEP_SUMMARY
-          echo "\`\`\`json" >> $GITHUB_STEP_SUMMARY
-          cat npm-audit-report.json >> $GITHUB_STEP_SUMMARY
-          echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
-
-      - name: Upload audit report
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: npm-audit-report
-          path: npm-audit-report.json
-          retention-days: 30
+      - name: Run security audit
+        run: bun audit --audit-level=moderate
 
   dependency-review:
     name: Dependency Review
     runs-on: ubuntu-latest
     if: github.event_name == 'pull_request'
-    
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -103,58 +78,25 @@ jobs:
   secret-scanning:
     name: Secret Scanning
     runs-on: ubuntu-latest
-    
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
-      - name: TruffleHog OSS
+      - name: TruffleHog OSS (PR)
+        if: github.event_name == 'pull_request'
         uses: trufflesecurity/trufflehog@main
         with:
           path: ./
-          base: ${{ github.event.repository.default_branch }}
-          head: HEAD
-          extra_args: --debug --only-verified
+          base: ${{ github.event.pull_request.base.sha }}
+          head: ${{ github.event.pull_request.head.sha }}
+          extra_args: --only-verified
 
-  outdated-dependencies:
-    name: Check Outdated Dependencies
-    runs-on: ubuntu-latest
-    
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
+      - name: TruffleHog OSS (push/schedule)
+        if: github.event_name != 'pull_request'
+        uses: trufflesecurity/trufflehog@main
         with:
-          node-version: '24.x'
-
-      - name: Install dependencies
-        run: npm install
-
-      - name: Check for outdated dependencies
-        run: |
-          echo "## Outdated Dependencies" >> $GITHUB_STEP_SUMMARY
-          echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
-          npm outdated || true >> $GITHUB_STEP_SUMMARY
-          echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
-
-  security-summary:
-    name: Security Summary
-    runs-on: ubuntu-latest
-    needs: [npm-audit, codeql-analysis]
-    if: always()
-    
-    steps:
-      - name: Generate Security Summary
-        run: |
-          echo "# 🔒 Security Scan Summary" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "| Check | Status |" >> $GITHUB_STEP_SUMMARY
-          echo "|-------|--------|" >> $GITHUB_STEP_SUMMARY
-          echo "| NPM Audit | ${{ needs.npm-audit.result == 'success' && '✅ Passed' || '❌ Failed' }} |" >> $GITHUB_STEP_SUMMARY
-          echo "| CodeQL Analysis | ${{ needs.codeql-analysis.result == 'success' && '✅ Passed' || '❌ Failed' }} |" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "**Scan Date:** $(date -u +'%Y-%m-%d %H:%M:%S UTC')" >> $GITHUB_STEP_SUMMARY
+          path: ./
+          extra_args: --only-verified --since-commit ${{ github.event.before || github.sha }}
