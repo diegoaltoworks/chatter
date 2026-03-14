@@ -32,6 +32,9 @@ jobs:
       - name: Run type check
         run: bun run typecheck
 
+      - name: Run security audit
+        run: bun run security:check
+
       - name: Run tests
         run: bun test
 

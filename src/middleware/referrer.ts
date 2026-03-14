@@ -29,9 +29,18 @@ export function requireReferrer(allowedOrigins: string[]) {
       console.log(`[Referrer] Origin: ${origin || "none"}, Referer: ${referer || "none"}`);
 
       // Check if request comes from allowed origin
-      const isAllowed = allowedOrigins.some(
-        (allowed) => referer?.startsWith(allowed) || origin === allowed,
-      );
+      // For referer, we need to ensure it's the exact origin followed by / or ? or end of string
+      // to prevent attacks like https://example.com.evil.com
+      const isAllowed = allowedOrigins.some((allowed) => {
+        if (origin === allowed) return true;
+        if (referer) {
+          // Check if referer starts with allowed origin and is followed by /, ?, or nothing
+          if (referer === allowed) return true;
+          if (referer.startsWith(allowed + "/")) return true;
+          if (referer.startsWith(allowed + "?")) return true;
+        }
+        return false;
+      });
 
       if (!isAllowed) {
         console.log(`[Referrer] BLOCKED - not from allowed origins: ${allowedOrigins.join(", ")}`);
