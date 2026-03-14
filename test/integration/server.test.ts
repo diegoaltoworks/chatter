@@ -1,5 +1,5 @@
-import { describe, expect, it, beforeAll, afterAll } from "bun:test";
-import { mkdtemp, rm, mkdir, writeFile } from "node:fs/promises";
+import { afterAll, beforeAll, describe, expect, it } from "bun:test";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createServer } from "../../src";
@@ -32,10 +32,10 @@ describe("Server Integration", () => {
         description: "Test bot description",
       },
       openai: {
-        apiKey: process.env.OPENAI_API_KEY!,
+        apiKey: process.env.OPENAI_API_KEY ?? "",
       },
       database: {
-        url: process.env.TURSO_URL!,
+        url: process.env.TURSO_URL ?? "",
         authToken: process.env.TURSO_AUTH_TOKEN || "",
       },
       ...overrides,
@@ -63,7 +63,7 @@ describe("Server Integration", () => {
         createTestConfig({
           branding: { publicPrimaryColor: "#007bff" },
           chat: { publicTitle: "Hello!" },
-        })
+        }),
       );
 
       const res = await app.fetch(new Request("http://localhost/config"));
@@ -88,7 +88,7 @@ describe("Server Integration", () => {
       const app = await createServer(
         createTestConfig({
           server: { cors: false },
-        })
+        }),
       );
 
       const res = await app.fetch(new Request("http://localhost/healthz"));
@@ -102,7 +102,7 @@ describe("Server Integration", () => {
       const sessionRes = await app.fetch(
         new Request("http://localhost/api/session", {
           method: "POST",
-        })
+        }),
       );
       const session = await sessionRes.json();
 
@@ -115,7 +115,7 @@ describe("Server Integration", () => {
             "x-api-key": session.key,
           },
           body: JSON.stringify({ message: "test" }),
-        })
+        }),
       );
 
       expect([200, 429]).toContain(res.status);
@@ -125,7 +125,7 @@ describe("Server Integration", () => {
       const app = await createServer(
         createTestConfig({
           features: { enablePublicChat: false },
-        })
+        }),
       );
 
       const res = await app.fetch(
@@ -135,7 +135,7 @@ describe("Server Integration", () => {
             "content-type": "application/json",
           },
           body: JSON.stringify({ message: "test" }),
-        })
+        }),
       );
 
       expect(res.status).toBe(404);
@@ -147,7 +147,7 @@ describe("Server Integration", () => {
           auth: {
             jwt: { publicKeyPem: "dummy-key-for-route-check" },
           },
-        })
+        }),
       );
 
       // Try to access private chat (should get 401, not 404)
@@ -158,7 +158,7 @@ describe("Server Integration", () => {
             "content-type": "application/json",
           },
           body: JSON.stringify({ message: "test" }),
-        })
+        }),
       );
 
       expect(res.status).toBe(401); // Route exists, auth fails
@@ -168,7 +168,7 @@ describe("Server Integration", () => {
       const app = await createServer(
         createTestConfig({
           features: { enablePrivateChat: false },
-        })
+        }),
       );
 
       const res = await app.fetch(
@@ -178,7 +178,7 @@ describe("Server Integration", () => {
             "content-type": "application/json",
           },
           body: JSON.stringify({ message: "test" }),
-        })
+        }),
       );
 
       expect(res.status).toBe(404);
@@ -188,14 +188,14 @@ describe("Server Integration", () => {
       const app = await createServer(
         createTestConfig({
           features: { enableDemoRoutes: true },
-        })
+        }),
       );
 
       // Demo session endpoint should exist
       const res = await app.fetch(
         new Request("http://localhost/api/demo/session", {
           method: "POST",
-        })
+        }),
       );
 
       expect([200, 201]).toContain(res.status);
@@ -205,7 +205,7 @@ describe("Server Integration", () => {
       const app = await createServer(
         createTestConfig({
           auth: { secret: "test-secret-key" },
-        })
+        }),
       );
 
       expect(app).toBeDefined();
@@ -216,12 +216,10 @@ describe("Server Integration", () => {
       await mkdir(knowledgeDir, { recursive: true });
       await writeFile(
         join(knowledgeDir, "test.md"),
-        "# Test Knowledge\\nThis is test knowledge content."
+        "# Test Knowledge\\nThis is test knowledge content.",
       );
 
-      const app = await createServer(
-        createTestConfig({ knowledgeDir })
-      );
+      const app = await createServer(createTestConfig({ knowledgeDir }));
 
       expect(app).toBeDefined();
     });
@@ -232,7 +230,7 @@ describe("Server Integration", () => {
           customRoutes: (app, deps) => {
             app.get("/custom/test", (c) => c.json({ custom: true }));
           },
-        })
+        }),
       );
 
       const res = await app.fetch(new Request("http://localhost/custom/test"));
@@ -248,7 +246,7 @@ describe("Server Integration", () => {
           rateLimit: {
             public: 5,
           },
-        })
+        }),
       );
 
       expect(app).toBeDefined();
@@ -257,14 +255,9 @@ describe("Server Integration", () => {
     it("should load custom prompts from directory", async () => {
       const promptsDir = join(testDir, "custom-prompts");
       await mkdir(promptsDir, { recursive: true });
-      await writeFile(
-        join(promptsDir, "base.txt"),
-        "Custom system rules."
-      );
+      await writeFile(join(promptsDir, "base.txt"), "Custom system rules.");
 
-      const app = await createServer(
-        createTestConfig({ promptsDir })
-      );
+      const app = await createServer(createTestConfig({ promptsDir }));
 
       expect(app).toBeDefined();
     });

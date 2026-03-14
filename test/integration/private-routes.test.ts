@@ -1,8 +1,8 @@
 import { afterAll, beforeAll, describe, expect, it } from "bun:test";
-import { SignJWT, generateKeyPair, exportSPKI } from "jose";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { SignJWT, exportSPKI, generateKeyPair } from "jose";
 import OpenAI from "openai";
 import { createServer } from "../../src";
 import type { ChatterConfig } from "../../src/types";
@@ -52,7 +52,7 @@ describe("Private Routes Integration", () => {
     };
 
     // Create OpenAI client
-    const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY! });
+    const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY ?? "" });
 
     // Create server with test config
     app = await createServer({ config, client, storePath: testDir });
@@ -265,16 +265,16 @@ describe("Private Routes Integration", () => {
               authorization: `Bearer ${validToken}`,
             },
             body: JSON.stringify({ message: "test" }),
-          })
-        )
+          }),
+        ),
       );
 
       const responses = await Promise.all(requests);
 
       // All should succeed (within rate limit)
-      responses.forEach((res) => {
+      for (const res of responses) {
         expect([200, 429]).toContain(res.status);
-      });
+      }
     });
   });
 
@@ -308,7 +308,7 @@ describe("Private Routes Integration", () => {
         },
       };
 
-      const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY! });
+      const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY ?? "" });
       const testApp = await createServer({ config, client, storePath: tempDir });
 
       // Make request with JWT

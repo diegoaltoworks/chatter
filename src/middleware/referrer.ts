@@ -36,8 +36,8 @@ export function requireReferrer(allowedOrigins: string[]) {
         if (referer) {
           // Check if referer starts with allowed origin and is followed by /, ?, or nothing
           if (referer === allowed) return true;
-          if (referer.startsWith(allowed + "/")) return true;
-          if (referer.startsWith(allowed + "?")) return true;
+          if (referer.startsWith(`${allowed}/`)) return true;
+          if (referer.startsWith(`${allowed}?`)) return true;
         }
         return false;
       });

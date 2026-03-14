@@ -204,7 +204,7 @@ describe("Rate Limit Middleware", () => {
 
       // Mock JWT subject in context
       app.use("/api/*", async (c, next) => {
-        (c as any).jwtSub = "user-123";
+        (c as unknown as { jwtSub: string }).jwtSub = "user-123";
         await next();
       });
 
@@ -226,7 +226,7 @@ describe("Rate Limit Middleware", () => {
       const limiter = createRateLimiter(baseConfig);
 
       app.use("/api/*", async (c, next) => {
-        (c as any).jwtSub = "user-456";
+        (c as unknown as { jwtSub: string }).jwtSub = "user-456";
         await next();
       });
 
@@ -257,7 +257,7 @@ describe("Rate Limit Middleware", () => {
 
       app.use("/api/*", async (c, next) => {
         const url = new URL(c.req.url);
-        (c as any).jwtSub = url.searchParams.get("user") || "default";
+        (c as unknown as { jwtSub: string }).jwtSub = url.searchParams.get("user") || "default";
         await next();
       });
 
@@ -352,7 +352,7 @@ describe("Rate Limit Middleware", () => {
       const limiter = createRateLimiter(config);
 
       app.use("/api/*", async (c, next) => {
-        (c as any).jwtSub = "test-user";
+        (c as unknown as { jwtSub: string }).jwtSub = "test-user";
         await next();
       });
 

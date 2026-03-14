@@ -99,7 +99,7 @@ describe("Widget Static Resolution", () => {
     });
 
     it("should handle paths with trailing slashes", () => {
-      const pathWithSlash = join(testDir, "static") + "/";
+      const pathWithSlash = `${join(testDir, "static")}/`;
       const pathWithoutSlash = join(testDir, "static");
 
       // Both should work if directory exists

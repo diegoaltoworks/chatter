@@ -69,10 +69,10 @@ describe("Public Routes Integration", () => {
       knowledgeDir,
       promptsDir,
       openai: {
-        apiKey: process.env.OPENAI_API_KEY!,
+        apiKey: process.env.OPENAI_API_KEY ?? "",
       },
       database: {
-        url: process.env.TURSO_URL!,
+        url: process.env.TURSO_URL ?? "",
         authToken: process.env.TURSO_AUTH_TOKEN || "",
       },
       auth: {

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "bun:test";
 import { Hono } from "hono";
-import { SignJWT, generateKeyPair, exportSPKI } from "jose";
+import { SignJWT, exportSPKI, generateKeyPair } from "jose";
 import type { ChatterConfig } from "../types";
 import { createJWTMiddleware } from "./jwt";
 
@@ -154,7 +154,7 @@ describe("JWT Middleware", () => {
       const app = new Hono();
       app.use("/private/*", createJWTMiddleware(config));
       app.get("/private/test", (c) => {
-        capturedSub = (c as any).jwtSub;
+        capturedSub = (c as unknown as { jwtSub?: string }).jwtSub;
         return c.json({ ok: true });
       });
 
@@ -467,7 +467,7 @@ describe("JWT Middleware", () => {
       const app = new Hono();
       app.use("/private/*", createJWTMiddleware(config));
       app.get("/private/test", (c) => {
-        capturedSub = (c as any).jwtSub;
+        capturedSub = (c as unknown as { jwtSub?: string }).jwtSub;
         return c.json({ ok: true });
       });
 

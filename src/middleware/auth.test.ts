@@ -248,7 +248,9 @@ describe("Auth Middleware", () => {
         },
       };
 
-      const deps: Partial<ServerDependencies> = { apiKeyManager: customManager as any };
+      const deps: Partial<ServerDependencies> = {
+        apiKeyManager: customManager as unknown as ApiKeyManager,
+      };
 
       const app = new Hono();
       app.use("/api/*", createAuthMiddleware(deps as ServerDependencies));
