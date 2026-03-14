@@ -92,7 +92,7 @@
     "jose": "^5.9.6"
   },
   "devDependencies": {
-    "@biomejs/biome": "^1.9.4",
+    "@biomejs/biome": "^2.4.7",
     "@modelcontextprotocol/sdk": "^1.27.1",
     "@types/bun": "^1.1.12",
     "@types/node": "^22.9.1",
