@@ -90,7 +90,7 @@
     "zod": "^3.25.0"
   },
   "dependencies": {
-    "jose": "^5.9.6"
+    "jose": "^6.2.1"
   },
   "devDependencies": {
     "@biomejs/biome": "^1.9.4",
