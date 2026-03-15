@@ -1,4 +1,3 @@
-#!/usr/bin/env node
 /**
  * CLI tool for creating Chatter API keys
  *

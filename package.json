@@ -6,7 +6,7 @@
   "module": "./dist/index.mjs",
   "types": "./dist/index.d.ts",
   "bin": {
-    "chatter": "./bin/create-apikey.ts"
+    "chatter": "./dist/bin/create-apikey.js"
   },
   "exports": {
     ".": {
@@ -30,15 +30,16 @@
       "require": "./dist/mcp-server.js"
     }
   },
-  "files": ["dist", "bin", "README.md", "LICENSE"],
+  "files": ["dist", "README.md", "LICENSE"],
   "scripts": {
     "dev": "bun --watch src/index.ts",
-    "build": "bun run build:clean && bun run build:types && bun run build:esm && bun run build:cjs && bun run build:mcp && bun run build:client && bun run build:copy-client",
+    "build": "bun run build:clean && bun run build:types && bun run build:esm && bun run build:cjs && bun run build:mcp && bun run build:bin && bun run build:client && bun run build:copy-client",
     "build:clean": "rm -rf dist",
     "build:types": "tsc --emitDeclarationOnly --outDir dist",
     "build:esm": "esbuild src/index.ts --bundle --format=esm --outfile=dist/index.mjs --external:hono --external:openai --external:@libsql/client --external:jose --platform=node --target=node24",
     "build:cjs": "esbuild src/index.ts --bundle --format=cjs --outfile=dist/index.js --external:hono --external:openai --external:@libsql/client --external:jose --platform=node --target=node24",
     "build:mcp": "esbuild src/mcp-server.ts --bundle --format=esm --outfile=dist/mcp-server.mjs --external:@modelcontextprotocol/sdk --external:openai --external:@libsql/client --external:zod --platform=node --target=node24 && esbuild src/mcp-server.ts --bundle --format=cjs --outfile=dist/mcp-server.js --external:@modelcontextprotocol/sdk --external:openai --external:@libsql/client --external:zod --platform=node --target=node24",
+    "build:bin": "esbuild bin/create-apikey.ts --bundle --format=cjs --outfile=dist/bin/create-apikey.js --external:jose --platform=node --target=node18 --banner:js='#!/usr/bin/env node'",
     "build:client": "cd src/client && bun run build",
     "build:copy-client": "mkdir -p dist/static && cp src/client/dist/chatter.js src/client/dist/chatter.css dist/static/",
     "test": "bun test",
