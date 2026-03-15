@@ -137,6 +137,15 @@ export interface ChatterConfig {
     port?: number;
     /** Enable CORS. Default: true */
     cors?: boolean;
+    /**
+     * Allowed origins for CORS and referrer checks.
+     * Requests from these domains will be permitted.
+     *
+     * @example ["https://myapp.com", "https://staging.myapp.com"]
+     *
+     * When not set, defaults to `["*"]` (all origins allowed).
+     */
+    allowedOrigins?: string[];
   };
 
   // Custom routes (advanced)

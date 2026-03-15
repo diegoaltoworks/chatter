@@ -11,16 +11,13 @@ import { createSession, getActiveSessions } from "../core/session";
 import type { ServerDependencies } from "../types";
 
 /**
- * Check if origin/referer is allowed for demo routes
+ * Check if origin/referer is allowed for demo routes.
+ *
+ * When `allowedOrigins` contains `"*"` or is empty, all origins are allowed.
+ * Localhost is always permitted regardless of the list.
  */
-function checkDemoOrigin() {
-  const allowedOrigins = [
-    "https://bot.diegoalto.app",
-    "https://diegoalto.co.uk",
-    "http://diegoalto.co.uk",
-    "https://diegoalto.works",
-    "http://diegoalto.works",
-  ];
+function checkDemoOrigin(allowedOrigins: string[]) {
+  const allowAll = allowedOrigins.length === 0 || allowedOrigins.includes("*");
 
   return async (c: Context, next: () => Promise<void>) => {
     const origin = c.req.header("origin");
@@ -29,6 +26,11 @@ function checkDemoOrigin() {
 
     // Allow localhost on any port
     if (host.startsWith("localhost:") || host.startsWith("127.0.0.1:")) {
+      return next();
+    }
+
+    // When no explicit origins are configured, allow everything
+    if (allowAll) {
       return next();
     }
 
@@ -125,15 +127,18 @@ function limitDemo() {
 }
 
 export function demoRoutes(deps: ServerDependencies) {
-  const { client, store, prompts } = deps;
+  const { client, store, config, prompts } = deps;
   const app = new Hono();
+
+  // Derive demo allowed origins from configured origins, falling back to allow-all
+  const demoOrigins = config.server?.allowedOrigins ?? [];
 
   /**
    * GET /api/demo/session
    * Create a temporary session key for demos
    * Protected by origin check and rate limiting (10 per hour per IP)
    */
-  app.get("/api/demo/session", checkDemoOrigin(), limitSessionCreation(), (c) => {
+  app.get("/api/demo/session", checkDemoOrigin(demoOrigins), limitSessionCreation(), (c) => {
     const session = createSession({
       maxRequests: 20,
       ttl: 3600, // 1 hour

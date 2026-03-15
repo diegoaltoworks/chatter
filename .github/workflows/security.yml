@@ -1,11 +1,9 @@
-# Disabled temporarily — TruffleHog and npm audit integration issues to resolve
-# name: Security Scan
-#
-# on:
-#   push:
-#     branches: [main, develop]
-#   pull_request:
-#     branches: [main, develop]
-#   schedule:
-#     - cron: '0 0 * * 1'
-#   workflow_dispatch:
+name: Security Scan (disabled)
+
+# Temporarily disabled — TruffleHog and audit integration issues to resolve
+on:
+  workflow_dispatch:
+    inputs:
+      placeholder:
+        description: "This workflow is temporarily disabled"
+        required: false

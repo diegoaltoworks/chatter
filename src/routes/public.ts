@@ -23,13 +23,16 @@ export function publicRoutes(deps: ServerDependencies) {
   const requirePublicKey = createAuthMiddleware(deps);
   const { limitPublic } = createRateLimiter(config);
 
+  // Build the referrer allowlist from configured origins.
+  // Falls back to publicUrl + localhost defaults when no origins are specified.
+  const referrerOrigins = config.server?.allowedOrigins?.length
+    ? config.server.allowedOrigins.filter((o) => o !== "*")
+    : [config.bot.publicUrl, "http://localhost:8181", "http://127.0.0.1:8181"];
+
   // Security middleware stack
   app.use("/api/public/*", validateSessionKey()); // Validate session keys first
   app.use("/api/public/*", requirePublicKey); // Then check API key
-  app.use(
-    "/api/public/*",
-    requireReferrer([config.bot.publicUrl, "http://localhost:8181", "http://127.0.0.1:8181"]),
-  ); // Referrer checking for demo keys
+  app.use("/api/public/*", requireReferrer(referrerOrigins)); // Referrer checking for demo keys
   app.use("/api/public/*", limitPublic()); // Rate limiting (stricter for demo keys)
 
   app.post("/api/public/chat", async (c) => {

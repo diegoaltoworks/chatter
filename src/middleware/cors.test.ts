@@ -3,7 +3,7 @@ import { Hono } from "hono";
 import { cors } from "./cors";
 
 describe("CORS Middleware", () => {
-  describe("cors", () => {
+  describe("cors (no origins – default allow all)", () => {
     it("should set CORS headers on GET requests", async () => {
       const app = new Hono();
       app.use("*", cors());
@@ -179,6 +179,133 @@ describe("CORS Middleware", () => {
 
       expect(res.status).toBe(404);
       expect(res.headers.get("access-control-allow-origin")).toBe("*");
+    });
+
+    it("should treat explicit ['*'] the same as no origins", async () => {
+      const app = new Hono();
+      app.use("*", cors(["*"]));
+      app.get("/test", (c) => c.text("ok"));
+
+      const req = new Request("http://localhost/test", {
+        headers: { Origin: "https://anything.com" },
+      });
+      const res = await app.fetch(req);
+
+      expect(res.headers.get("access-control-allow-origin")).toBe("*");
+    });
+  });
+
+  describe("cors (specific allowed origins)", () => {
+    const allowed = ["https://myapp.com", "https://staging.myapp.com"];
+
+    it("should echo back a matching origin", async () => {
+      const app = new Hono();
+      app.use("*", cors(allowed));
+      app.get("/test", (c) => c.text("ok"));
+
+      const req = new Request("http://localhost/test", {
+        headers: { Origin: "https://myapp.com" },
+      });
+      const res = await app.fetch(req);
+
+      expect(res.headers.get("access-control-allow-origin")).toBe("https://myapp.com");
+    });
+
+    it("should set Vary header when origins are restricted", async () => {
+      const app = new Hono();
+      app.use("*", cors(allowed));
+      app.get("/test", (c) => c.text("ok"));
+
+      const req = new Request("http://localhost/test", {
+        headers: { Origin: "https://myapp.com" },
+      });
+      const res = await app.fetch(req);
+
+      expect(res.headers.get("vary")).toBe("Origin");
+    });
+
+    it("should not set Vary header when all origins are allowed", async () => {
+      const app = new Hono();
+      app.use("*", cors());
+      app.get("/test", (c) => c.text("ok"));
+
+      const req = new Request("http://localhost/test", {
+        headers: { Origin: "https://whatever.com" },
+      });
+      const res = await app.fetch(req);
+
+      expect(res.headers.get("vary")).toBeNull();
+    });
+
+    it("should return first allowed origin when request origin does not match", async () => {
+      const app = new Hono();
+      app.use("*", cors(allowed));
+      app.get("/test", (c) => c.text("ok"));
+
+      const req = new Request("http://localhost/test", {
+        headers: { Origin: "https://evil.com" },
+      });
+      const res = await app.fetch(req);
+
+      // Browser will reject because response origin doesn't match request origin
+      expect(res.headers.get("access-control-allow-origin")).toBe("https://myapp.com");
+    });
+
+    it("should handle OPTIONS preflight with matching origin", async () => {
+      const app = new Hono();
+      app.use("*", cors(allowed));
+      app.post("/test", (c) => c.json({ ok: true }));
+
+      const req = new Request("http://localhost/test", {
+        method: "OPTIONS",
+        headers: { Origin: "https://staging.myapp.com" },
+      });
+      const res = await app.fetch(req);
+
+      expect(res.status).toBe(204);
+      expect(res.headers.get("access-control-allow-origin")).toBe("https://staging.myapp.com");
+      expect(res.headers.get("vary")).toBe("Origin");
+    });
+
+    it("should handle OPTIONS preflight with non-matching origin", async () => {
+      const app = new Hono();
+      app.use("*", cors(allowed));
+      app.post("/test", (c) => c.json({ ok: true }));
+
+      const req = new Request("http://localhost/test", {
+        method: "OPTIONS",
+        headers: { Origin: "https://evil.com" },
+      });
+      const res = await app.fetch(req);
+
+      expect(res.status).toBe(204);
+      // Falls back to first allowed origin – browser will reject the mismatch
+      expect(res.headers.get("access-control-allow-origin")).toBe("https://myapp.com");
+    });
+
+    it("should echo correct origin from multiple allowed origins", async () => {
+      const app = new Hono();
+      app.use("*", cors(allowed));
+      app.get("/test", (c) => c.text("ok"));
+
+      for (const origin of allowed) {
+        const req = new Request("http://localhost/test", {
+          headers: { Origin: origin },
+        });
+        const res = await app.fetch(req);
+        expect(res.headers.get("access-control-allow-origin")).toBe(origin);
+      }
+    });
+
+    it("should return first allowed origin when no Origin header is sent", async () => {
+      const app = new Hono();
+      app.use("*", cors(allowed));
+      app.get("/test", (c) => c.text("ok"));
+
+      const req = new Request("http://localhost/test");
+      const res = await app.fetch(req);
+
+      expect(res.headers.get("access-control-allow-origin")).toBe("https://myapp.com");
     });
   });
 });

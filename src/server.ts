@@ -72,7 +72,7 @@ export async function createServer(config: ChatterConfig) {
 
   // Apply CORS
   if (config.server?.cors !== false) {
-    app.use("*", cors());
+    app.use("*", cors(config.server?.allowedOrigins));
   }
 
   // Health check
