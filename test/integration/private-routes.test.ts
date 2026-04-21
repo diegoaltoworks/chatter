@@ -2,7 +2,7 @@ import { afterAll, beforeAll, describe, expect, it } from "bun:test";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { SignJWT, exportSPKI, generateKeyPair } from "jose";
+import { exportSPKI, generateKeyPair, SignJWT } from "jose";
 import OpenAI from "openai";
 import { createServer } from "../../src";
 import type { ChatterConfig } from "../../src/types";

@@ -1,4 +1,4 @@
-import { type Client as LibsqlClient, createClient } from "@libsql/client";
+import { createClient, type Client as LibsqlClient } from "@libsql/client";
 import type OpenAI from "openai";
 import { type Bucket, type LoadedDoc, loadKnowledge } from "./loaders";
 

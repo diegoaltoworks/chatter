@@ -27,4 +27,4 @@ if (typeof window !== "undefined") {
   };
 }
 
-export { ChatBot, Chat, ChatButton };
+export { Chat, ChatBot, ChatButton };

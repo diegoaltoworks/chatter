@@ -6,7 +6,7 @@
  */
 
 import { randomUUID } from "node:crypto";
-import { SignJWT, jwtVerify } from "jose";
+import { jwtVerify, SignJWT } from "jose";
 
 export interface ApiKeyOptions {
   /** Name/label for the API key */

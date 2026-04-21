@@ -27,6 +27,7 @@ export type {
   MCPToolConfig,
   MCPTransportMode,
 } from "./mcp-server/types";
+
 import type { MCPServerOptions } from "./mcp-server/types";
 
 /**
@@ -109,37 +110,32 @@ export async function createMCPServer(config: MCPServerOptions) {
 
   // Register chat_public tool (if enabled)
   if (publicToolConfig.enabled) {
-    const publicSchema = z
-      .object({
-        message: z.string().optional().describe("A single message to send (for simple queries)"),
-        messages: z
-          .array(
-            z.object({
-              role: z.enum(["user", "assistant"]),
-              content: z.string(),
-            }),
-          )
-          .optional()
-          .describe("Conversation history with alternating user/assistant messages"),
-        conversationId: z
-          .string()
-          .optional()
-          .describe(
-            "Optional conversation ID to track sessions. If not provided, a new ID will be generated.",
-          ),
-      })
-      .refine(
-        (data) => data.message !== undefined || data.messages !== undefined,
-        "Either 'message' or 'messages' must be provided",
-      );
+    const publicShape = {
+      message: z.string().optional().describe("A single message to send (for simple queries)"),
+      messages: z
+        .array(
+          z.object({
+            role: z.enum(["user", "assistant"]),
+            content: z.string(),
+          }),
+        )
+        .optional()
+        .describe("Conversation history with alternating user/assistant messages"),
+      conversationId: z
+        .string()
+        .optional()
+        .describe(
+          "Optional conversation ID to track sessions. If not provided, a new ID will be generated.",
+        ),
+    };
 
     server.registerTool(
       publicToolConfig.name,
       {
         description: publicToolConfig.description,
-        inputSchema: publicSchema,
+        inputSchema: publicShape,
       },
-      async (args: z.infer<typeof publicSchema>) => {
+      async (args: z.infer<z.ZodObject<typeof publicShape>>) => {
         const { message, messages, conversationId } = args;
         const startTime = Date.now();
 
@@ -227,37 +223,32 @@ export async function createMCPServer(config: MCPServerOptions) {
 
   // Register chat_private tool (if enabled)
   if (privateToolConfig.enabled) {
-    const privateSchema = z
-      .object({
-        message: z.string().optional().describe("A single message to send (for simple queries)"),
-        messages: z
-          .array(
-            z.object({
-              role: z.enum(["user", "assistant"]),
-              content: z.string(),
-            }),
-          )
-          .optional()
-          .describe("Conversation history with alternating user/assistant messages"),
-        conversationId: z
-          .string()
-          .optional()
-          .describe(
-            "Optional conversation ID to track sessions. If not provided, a new ID will be generated.",
-          ),
-      })
-      .refine(
-        (data) => data.message !== undefined || data.messages !== undefined,
-        "Either 'message' or 'messages' must be provided",
-      );
+    const privateShape = {
+      message: z.string().optional().describe("A single message to send (for simple queries)"),
+      messages: z
+        .array(
+          z.object({
+            role: z.enum(["user", "assistant"]),
+            content: z.string(),
+          }),
+        )
+        .optional()
+        .describe("Conversation history with alternating user/assistant messages"),
+      conversationId: z
+        .string()
+        .optional()
+        .describe(
+          "Optional conversation ID to track sessions. If not provided, a new ID will be generated.",
+        ),
+    };
 
     server.registerTool(
       privateToolConfig.name,
       {
         description: privateToolConfig.description,
-        inputSchema: privateSchema,
+        inputSchema: privateShape,
       },
-      async (args: z.infer<typeof privateSchema>) => {
+      async (args: z.infer<z.ZodObject<typeof privateShape>>) => {
         const { message, messages, conversationId } = args;
         const startTime = Date.now();
 

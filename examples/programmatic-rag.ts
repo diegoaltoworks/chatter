@@ -15,7 +15,7 @@
  */
 
 import OpenAI from "openai";
-import { PromptLoader, VectorStore, completeOnce } from "../src/index";
+import { completeOnce, PromptLoader, VectorStore } from "../src/index";
 
 async function main() {
   console.log("🔧 Programmatic RAG Example\n");

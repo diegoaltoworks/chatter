@@ -3,15 +3,15 @@
  * Isomorphic TypeScript chatbot client for AI chat API
  */
 
-export { ChatBot } from "./ChatBot";
 export { Chat } from "./Chat";
+export { ChatBot } from "./ChatBot";
 export { ChatButton } from "./ChatButton";
 export type {
-  ChatMode,
   ChatBotConfig,
+  ChatButtonConfig,
+  ChatConfig,
   ChatMessage,
+  ChatMode,
   ChatResponse,
   StreamCallbacks,
-  ChatConfig,
-  ChatButtonConfig,
 } from "./types";

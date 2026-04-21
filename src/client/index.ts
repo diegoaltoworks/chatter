@@ -3,11 +3,11 @@
  * Re-exports all client widgets and types
  */
 
-export { ChatBot, Chat, ChatButton } from "./src";
+export { Chat, ChatBot, ChatButton } from "./src";
 export type {
   ChatBotConfig,
-  ChatConfig,
   ChatButtonConfig,
+  ChatConfig,
   ChatMessage,
   ChatMode,
   StreamCallbacks,
