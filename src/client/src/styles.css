@@ -109,6 +109,126 @@
   color: #c33 !important;
 }
 
+/* Markdown content (assistant messages) */
+.chatter-ui-message-content > *:first-child {
+  margin-top: 0;
+}
+
+.chatter-ui-message-content > *:last-child {
+  margin-bottom: 0;
+}
+
+.chatter-ui-message-content p {
+  margin: 0 0 8px 0;
+}
+
+.chatter-ui-message-content h1,
+.chatter-ui-message-content h2,
+.chatter-ui-message-content h3,
+.chatter-ui-message-content h4,
+.chatter-ui-message-content h5,
+.chatter-ui-message-content h6 {
+  margin: 12px 0 6px 0;
+  font-weight: 600;
+  line-height: 1.25;
+}
+
+.chatter-ui-message-content h1 {
+  font-size: 1.3em;
+}
+.chatter-ui-message-content h2 {
+  font-size: 1.2em;
+}
+.chatter-ui-message-content h3 {
+  font-size: 1.1em;
+}
+.chatter-ui-message-content h4,
+.chatter-ui-message-content h5,
+.chatter-ui-message-content h6 {
+  font-size: 1em;
+}
+
+.chatter-ui-message-content ul,
+.chatter-ui-message-content ol {
+  margin: 0 0 8px 0;
+  padding-left: 22px;
+}
+
+.chatter-ui-message-content li {
+  margin: 2px 0;
+}
+
+.chatter-ui-message-content a {
+  color: inherit;
+  text-decoration: underline;
+  word-break: break-word;
+}
+
+.chatter-ui-message-user .chatter-ui-message-content a {
+  color: #ffffff;
+}
+
+.chatter-ui-message-content code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono",
+    "Courier New", monospace;
+  font-size: 0.9em;
+  padding: 1px 5px;
+  background: rgba(0, 0, 0, 0.06);
+  border-radius: 4px;
+}
+
+.chatter-ui-message-user .chatter-ui-message-content code {
+  background: rgba(255, 255, 255, 0.18);
+}
+
+.chatter-ui-message-content pre {
+  margin: 8px 0;
+  padding: 10px 12px;
+  background: #0f1115;
+  color: #e6e6e6;
+  border-radius: 8px;
+  overflow-x: auto;
+  font-size: 0.9em;
+  line-height: 1.45;
+}
+
+.chatter-ui-message-content pre code {
+  padding: 0;
+  background: transparent;
+  color: inherit;
+  font-size: inherit;
+  border-radius: 0;
+}
+
+.chatter-ui-message-content blockquote {
+  margin: 8px 0;
+  padding: 4px 12px;
+  border-left: 3px solid rgba(0, 0, 0, 0.15);
+  color: rgba(0, 0, 0, 0.7);
+  background: rgba(0, 0, 0, 0.03);
+  border-radius: 0 6px 6px 0;
+}
+
+.chatter-ui-message-user .chatter-ui-message-content blockquote {
+  border-left-color: rgba(255, 255, 255, 0.4);
+  color: rgba(255, 255, 255, 0.85);
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.chatter-ui-message-content hr {
+  border: none;
+  border-top: 1px solid rgba(0, 0, 0, 0.12);
+  margin: 10px 0;
+}
+
+.chatter-ui-message-content strong {
+  font-weight: 600;
+}
+
+.chatter-ui-message-content em {
+  font-style: italic;
+}
+
 /* Input Container */
 .chatter-ui-chat-input-container {
   display: flex;

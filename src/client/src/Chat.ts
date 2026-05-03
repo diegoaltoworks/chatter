@@ -4,6 +4,7 @@
  */
 
 import { ChatBot } from "./ChatBot";
+import { escapeHtml, renderMarkdown } from "./markdown";
 import type { ChatConfig, ChatMessage } from "./types";
 
 export class Chat {
@@ -148,10 +149,11 @@ export class Chat {
       await this.bot.streamConversation(this.messages, {
         onChunk: (delta) => {
           assistantMessage.content += delta;
-          contentEl.textContent = assistantMessage.content;
+          this.renderMessageContent(contentEl as HTMLElement, assistantMessage);
           this.scrollToBottom();
         },
         onEnd: () => {
+          this.renderMessageContent(contentEl as HTMLElement, assistantMessage);
           this.setInputEnabled(true);
           // Only auto-focus on desktop; on mobile, let user tap to focus
           // This prevents the keyboard from popping up unexpectedly
@@ -185,10 +187,21 @@ export class Chat {
   private addMessageToUI(message: ChatMessage): HTMLElement {
     const messageEl = document.createElement("div");
     messageEl.className = `chatter-ui-message chatter-ui-message-${message.role}`;
-    messageEl.innerHTML = `<div class="chatter-ui-message-content">${message.content}</div>`;
+    const contentEl = document.createElement("div");
+    contentEl.className = "chatter-ui-message-content";
+    messageEl.appendChild(contentEl);
+    this.renderMessageContent(contentEl, message);
     this.messagesContainer.appendChild(messageEl);
     this.scrollToBottom();
     return messageEl;
+  }
+
+  private renderMessageContent(target: HTMLElement, message: ChatMessage): void {
+    if (message.role === "assistant") {
+      target.innerHTML = renderMarkdown(message.content);
+    } else {
+      target.innerHTML = escapeHtml(message.content).replace(/\n/g, "<br>");
+    }
   }
 
   private setInputEnabled(enabled: boolean): void {
