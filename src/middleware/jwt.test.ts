@@ -1,6 +1,6 @@
 import { describe, expect, it } from "bun:test";
 import { Hono } from "hono";
-import { SignJWT, exportSPKI, generateKeyPair } from "jose";
+import { exportSPKI, generateKeyPair, SignJWT } from "jose";
 import type { ChatterConfig } from "../types";
 import { createJWTMiddleware } from "./jwt";
 

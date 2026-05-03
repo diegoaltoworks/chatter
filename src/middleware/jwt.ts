@@ -1,11 +1,5 @@
 import type { Context, Next } from "hono";
-import {
-  type JWTVerifyOptions,
-  type KeyLike,
-  createRemoteJWKSet,
-  importSPKI,
-  jwtVerify,
-} from "jose";
+import { createRemoteJWKSet, importSPKI, type JWTVerifyOptions, jwtVerify } from "jose";
 import type { ChatterConfig } from "../types";
 
 // Extend Context type to include jwtSub
@@ -19,7 +13,7 @@ interface ContextWithJWT extends Context {
  */
 export function createJWTMiddleware(config: ChatterConfig) {
   let jwks: ReturnType<typeof createRemoteJWKSet> | null = null;
-  let spkiKey: KeyLike | CryptoKey | null = null;
+  let spkiKey: CryptoKey | null = null;
 
   const jwtConfig = config.auth?.jwt;
 

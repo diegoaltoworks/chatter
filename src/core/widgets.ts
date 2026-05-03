@@ -25,9 +25,7 @@ export function resolveStatic(configStaticDir?: string): StaticResolution {
 
   // Try ESM import.meta.url
   try {
-    // @ts-ignore
     if (import.meta.url) {
-      // @ts-ignore
       const moduleDir = dirname(fileURLToPath(import.meta.url));
       const staticDir = join(moduleDir, "static");
       if (existsSync(staticDir)) return { staticDir };
@@ -36,9 +34,7 @@ export function resolveStatic(configStaticDir?: string): StaticResolution {
 
   // Try CJS __dirname
   try {
-    // @ts-ignore
     if (typeof __dirname !== "undefined") {
-      // @ts-ignore
       const staticDir = join(__dirname, "static");
       if (existsSync(staticDir)) return { staticDir };
     }

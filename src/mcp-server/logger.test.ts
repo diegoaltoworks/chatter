@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, mock, spyOn } from "bun:test";
-import { MCPLogger, createLogger } from "./logger";
+import { createLogger, MCPLogger } from "./logger";
 import type { CostInfo, MCPLogCallback } from "./types";
 
 describe("MCPLogger", () => {
