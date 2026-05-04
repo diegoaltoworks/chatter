@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **Markdown rendering in chat widget**: Assistant messages now render a safe subset of Markdown (headings, bold/italic, inline + fenced code, lists, blockquotes, links, horizontal rules). All input is HTML-escaped and link URLs are restricted to a `http(s):/mailto:/#` allowlist to prevent XSS.
+
 ## [0.5.0] - 2025-11-16
 
 ### Added

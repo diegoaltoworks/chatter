@@ -17,6 +17,7 @@
 
 - 🤖 **RAG-Powered**: Retrieval-Augmented Generation using OpenAI embeddings and Turso vector database
 - 🎨 **Customizable Widgets**: Pre-built chat components (ChatBot, Chat, ChatButton) with full styling control
+- 📝 **Markdown Rendering**: Assistant replies render Markdown (headings, lists, code blocks, links) safely with HTML escaping
 - 🔐 **Built-in API Key Management**: JWT-based API keys with CLI tool for easy creation
 - 🔑 **Authentication Ready**: Built-in support for JWT, Clerk, and custom auth providers
 - 📱 **Mobile Optimized**: Responsive design with iOS/Android-specific fixes
