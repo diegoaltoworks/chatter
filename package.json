@@ -105,7 +105,7 @@
     "esbuild": "0.28.1",
     "hono": "4.12.27",
     "husky": "9.1.7",
-    "lint-staged": "16.4.0",
+    "lint-staged": "17.0.8",
     "openai": "6.45.0",
     "typescript": "6.0.3",
     "zod": "3.25.76"
