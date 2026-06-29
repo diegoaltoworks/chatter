@@ -108,7 +108,7 @@
     "lint-staged": "16.4.0",
     "openai": "6.45.0",
     "typescript": "6.0.3",
-    "zod": "3.25.76"
+    "zod": "4.4.3"
   },
   "lint-staged": {
     "*.{ts,js,json,md}": [
