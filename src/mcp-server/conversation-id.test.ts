@@ -23,7 +23,7 @@ describe("Conversation ID", () => {
       const id = generateConversationId();
       const after = Date.now();
 
-      const timestamp = Number.parseInt(id.split("_")[1]);
+      const timestamp = Number.parseInt(id.split("_")[1], 10);
       expect(timestamp).toBeGreaterThanOrEqual(before);
       expect(timestamp).toBeLessThanOrEqual(after);
     });

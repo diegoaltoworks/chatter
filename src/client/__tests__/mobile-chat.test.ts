@@ -3,7 +3,7 @@
  * Tests mobile-specific behavior including viewport handling, input focus, and touch interactions
  */
 
-import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
+import { beforeEach, describe, expect, test } from "bun:test";
 
 // Mock DOM environment
 type EventCallback = (event?: { preventDefault: () => void }) => void;

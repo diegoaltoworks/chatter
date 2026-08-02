@@ -441,7 +441,7 @@ describe("JWT Middleware", () => {
 
       const app = new Hono();
       app.use("/private/*", createJWTMiddleware(config));
-      app.use("/private/*", async (c, next) => {
+      app.use("/private/*", async (_c, next) => {
         nextCalled = true;
         await next();
       });

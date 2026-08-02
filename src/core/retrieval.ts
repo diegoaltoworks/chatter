@@ -1,6 +1,6 @@
 import { createClient, type Client as LibsqlClient } from "@libsql/client";
 import type OpenAI from "openai";
-import { type Bucket, type LoadedDoc, loadKnowledge } from "./loaders";
+import { type Bucket, loadKnowledge } from "./loaders";
 
 const EMB_MODEL = "text-embedding-3-large";
 

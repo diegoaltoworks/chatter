@@ -4,7 +4,6 @@
  * Creates a configured Hono server instance with all routes and middleware.
  */
 
-import { join } from "node:path";
 import { Hono } from "hono";
 import { serveStatic } from "hono/bun";
 import OpenAI from "openai";
