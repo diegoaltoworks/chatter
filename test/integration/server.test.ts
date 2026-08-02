@@ -227,7 +227,7 @@ describe("Server Integration", () => {
     it("should support custom routes via config", async () => {
       const app = await createServer(
         createTestConfig({
-          customRoutes: (app, deps) => {
+          customRoutes: (app, _deps) => {
             app.get("/custom/test", (c) => c.json({ custom: true }));
           },
         }),

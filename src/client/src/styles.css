@@ -169,8 +169,9 @@
 }
 
 .chatter-ui-message-content code {
-  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono",
-    "Courier New", monospace;
+  font-family:
+    ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New",
+    monospace;
   font-size: 0.9em;
   padding: 1px 5px;
   background: rgba(0, 0, 0, 0.06);

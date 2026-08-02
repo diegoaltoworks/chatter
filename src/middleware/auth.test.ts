@@ -221,7 +221,7 @@ describe("Auth Middleware", () => {
 
       const app = new Hono();
       app.use("/api/*", createAuthMiddleware(deps as ServerDependencies));
-      app.use("/api/*", async (c, next) => {
+      app.use("/api/*", async (_c, next) => {
         nextCalled = true;
         await next();
       });

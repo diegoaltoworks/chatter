@@ -50,7 +50,7 @@ export interface VerifyResult {
 export class ApiKeyManager {
   private secretBytes: Uint8Array;
 
-  constructor(private secret: string) {
+  constructor(secret: string) {
     if (!secret) {
       throw new Error("API key secret is required");
     }
