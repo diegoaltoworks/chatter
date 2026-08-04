@@ -30,9 +30,11 @@ export function escapeHtml(input: string): string {
 }
 
 function sanitizeUrl(url: string): string {
+  // Input arrives already HTML-escaped (renderInline runs after escapeHtml),
+  // so escaping again here would corrupt `&` in query strings.
   const trimmed = url.trim();
   if (!SAFE_URL_RE.test(trimmed)) return "#";
-  return escapeHtml(trimmed);
+  return trimmed;
 }
 
 function renderInline(escaped: string): string {
