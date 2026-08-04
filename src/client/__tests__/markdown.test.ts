@@ -40,6 +40,12 @@ describe("renderMarkdown - inline", () => {
       '<p><a href="https://example.com" target="_blank" rel="noopener noreferrer">ex</a></p>',
     );
   });
+
+  test("does not double-escape ampersands in link query strings", () => {
+    expect(renderMarkdown("[ex](https://example.com/?a=1&b=2)")).toBe(
+      '<p><a href="https://example.com/?a=1&amp;b=2" target="_blank" rel="noopener noreferrer">ex</a></p>',
+    );
+  });
 });
 
 describe("renderMarkdown - blocks", () => {
