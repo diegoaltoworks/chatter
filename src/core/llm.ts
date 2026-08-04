@@ -1,19 +1,23 @@
 import type OpenAI from "openai";
 import { detectLeakage, scrubOutput } from "./guardrails";
 
+export const DEFAULT_MODEL = "gpt-4o";
+
 export async function completeOnce({
   client,
   system,
   messages,
   temperature = 0.2,
+  model = DEFAULT_MODEL,
 }: {
   client: OpenAI;
   system: string;
   messages: { role: "user" | "assistant"; content: string }[];
   temperature?: number;
+  model?: string;
 }) {
   const res = await client.chat.completions.create({
-    model: "gpt-4o",
+    model,
     temperature,
     messages: [{ role: "system", content: system }, ...messages],
   });
@@ -32,14 +36,16 @@ export async function* completeStream({
   system,
   messages,
   temperature = 0.2,
+  model = DEFAULT_MODEL,
 }: {
   client: OpenAI;
   system: string;
   messages: { role: "user" | "assistant"; content: string }[];
   temperature?: number;
+  model?: string;
 }) {
   const stream = await client.chat.completions.create({
-    model: "gpt-4o",
+    model,
     temperature,
     stream: true,
     messages: [{ role: "system", content: system }, ...messages],

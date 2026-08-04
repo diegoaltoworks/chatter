@@ -18,6 +18,8 @@
 - 🤖 **RAG-Powered**: Retrieval-Augmented Generation using OpenAI embeddings and Turso vector database
 - 🎨 **Customizable Widgets**: Pre-built chat components (ChatBot, Chat, ChatButton) with full styling control
 - 📝 **Markdown Rendering**: Assistant replies render Markdown (headings, lists, code blocks, links) safely with HTML escaping
+- 🔌 **OpenAI-Compatible API**: `POST /v1/chat/completions` (streaming + non-streaming) so any chat UI or SDK — [Deep Chat](https://deepchat.dev), [assistant-ui](https://www.assistant-ui.com), the OpenAI SDKs — can be the front end ([guide](./docs/integrations.md))
+- 🎛️ **Headless Mode**: Run the server as a pure API with `features: { headless: true }` — no built-in widget or demo pages
 - 🔐 **Built-in API Key Management**: JWT-based API keys with CLI tool for easy creation
 - 🔑 **Authentication Ready**: Built-in support for JWT, Clerk, and custom auth providers
 - 📱 **Mobile Optimized**: Responsive design with iOS/Android-specific fixes

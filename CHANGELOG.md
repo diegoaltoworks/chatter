@@ -8,6 +8,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **OpenAI-compatible endpoints**: `POST /v1/chat/completions` (public pipeline, API key auth) and `POST /api/private/v1/chat/completions` (private pipeline, JWT auth), with SSE streaming (`chat.completion.chunk` + `[DONE]`) and non-streaming responses. Any OpenAI-format chat UI or SDK can now be the front end. Disable with `features.enableOpenAICompat: false`.
+- **Headless mode**: `features.headless: true` runs the server as a pure API — widget assets and static/demo pages are not served.
+- **Exported chat pipeline**: `prepareChat` (RAG retrieval + system prompt assembly) is exported for programmatic use, fully decoupled from HTTP and the widget.
+- **UI integration examples**: runnable sample apps for [Deep Chat](https://deepchat.dev) (`examples/deep-chat`) and [assistant-ui](https://www.assistant-ui.com) (`examples/assistant-ui`), plus a new [integrations guide](./docs/integrations.md).
+
+### Fixed
+- `config.openai.model` is now respected; previously all completions were hard-coded to `gpt-4o`.
+
+### Security
+- The OpenAI-compatible endpoints ignore client-supplied `model` (server config decides spend) and drop incoming `system`/`tool` messages (the server owns guardrails and persona).
 - **Markdown rendering in chat widget**: Assistant messages now render a safe subset of Markdown (headings, bold/italic, inline + fenced code, lists, blockquotes, links, horizontal rules). All input is HTML-escaped and link URLs are restricted to a `http(s):/mailto:/#` allowlist to prevent XSS.
 
 ## [0.5.0] - 2025-11-16

@@ -13,6 +13,7 @@ import { VectorStore } from "./core/retrieval";
 import { resolveStatic } from "./core/widgets";
 import { cors } from "./middleware/cors";
 import { demoRoutes } from "./routes/demo";
+import { openaiRoutes } from "./routes/openai";
 import { privateRoutes } from "./routes/private";
 import { publicRoutes } from "./routes/public";
 import type { ChatterConfig } from "./types";
@@ -33,6 +34,8 @@ export async function createServer(config: ChatterConfig) {
   const enablePublic = config.features?.enablePublicChat !== false;
   const enablePrivate = config.features?.enablePrivateChat !== false;
   const enableDemo = config.features?.enableDemoRoutes || false;
+  const enableOpenAICompat = config.features?.enableOpenAICompat !== false;
+  const headless = config.features?.headless === true;
 
   // Resolve static assets directory
   const { staticDir } = resolveStatic(config.staticDir);
@@ -90,14 +93,14 @@ export async function createServer(config: ChatterConfig) {
   );
 
   // Serve static assets (chatter.js, chatter.css)
-  if (staticDir) {
+  if (!headless && staticDir) {
     const relativePath = require("node:path").relative(process.cwd(), staticDir);
     app.get("/chatter.js", serveStatic({ path: `${relativePath}/chatter.js` }));
     app.get("/chatter.css", serveStatic({ path: `${relativePath}/chatter.css` }));
   }
 
   // Serve static files from public directory
-  if (publicDir) {
+  if (!headless && publicDir) {
     app.get("/", serveStatic({ path: `${publicDir}/index.html` }));
     app.get("/chat", serveStatic({ path: `${publicDir}/chat.html` }));
     app.get("/private", serveStatic({ path: `${publicDir}/private.html` }));
@@ -158,6 +161,11 @@ export async function createServer(config: ChatterConfig) {
 
   if (enableDemo) {
     app.route("/", demoRoutes(deps));
+  }
+
+  // OpenAI-compatible endpoints for third-party chat UIs and SDKs
+  if (enableOpenAICompat) {
+    app.route("/", openaiRoutes(deps));
   }
 
   // Custom routes

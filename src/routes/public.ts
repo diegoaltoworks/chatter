@@ -2,6 +2,7 @@ import type { Context } from "hono";
 import { Hono } from "hono";
 import { stream } from "hono/streaming";
 import { completeOnce, completeStream } from "../core/llm";
+import { prepareChat } from "../core/pipeline";
 import { createAuthMiddleware } from "../middleware/auth";
 import { createRateLimiter } from "../middleware/ratelimit";
 import { requireReferrer } from "../middleware/referrer";
@@ -54,29 +55,25 @@ export function publicRoutes(deps: ServerDependencies) {
       return c.json({ error: "either 'message' or 'messages' required" }, 400);
     }
 
-    // Get the latest user message for RAG context
-    const lastUserMsg = [...messages].reverse().find((m) => m.role === "user");
-    if (!lastUserMsg) {
+    let system: string;
+    try {
+      ({ system } = await prepareChat({ store, prompts, mode: "public", messages }));
+    } catch {
       return c.json({ error: "no user message found in conversation" }, 400);
     }
 
-    const ctx = await store.query(lastUserMsg.content, 6, ["base", "public"]);
-    const system = [
-      prompts.baseSystemRules,
-      prompts.publicPersona,
-      `Context:\n${ctx.join("\n\n")}`,
-    ].join("\n\n");
+    const model = config.openai.model;
 
     if (wantsStream(c)) {
       return stream(c, async (s) => {
-        for await (const delta of completeStream({ client, system, messages })) {
+        for await (const delta of completeStream({ client, system, messages, model })) {
           await s.write(`data: ${JSON.stringify({ delta })}\n\n`);
         }
         await s.write("event: end\ndata: {}\n\n");
       });
     }
 
-    const out = await completeOnce({ client, system, messages });
+    const out = await completeOnce({ client, system, messages, model });
     return c.json({ reply: out.content });
   });
 

@@ -239,6 +239,32 @@ bun build examples/http-server-basic.ts --outdir examples/dist
 node examples/dist/http-server-basic.js
 ```
 
+## UI Integrations (bring your own chat UI)
+
+Chatter exposes an OpenAI-compatible endpoint (`POST /v1/chat/completions`), so
+any chat UI or SDK that speaks the OpenAI wire format can be the front end —
+see the [integrations guide](../docs/integrations.md).
+
+### Deep Chat (framework-agnostic web component)
+**Directory:** `deep-chat/`
+
+Single HTML page, no build step. A `connect.handler` streams from Chatter's
+OpenAI-compatible endpoint.
+
+```bash
+bunx serve examples/deep-chat
+```
+
+### assistant-ui (React)
+**Directory:** `assistant-ui/`
+
+Vite React app with a custom `ChatModelAdapter` streaming from the same
+endpoint.
+
+```bash
+cd examples/assistant-ui && bun install && bun run dev
+```
+
 ## Environment Variables Reference
 
 | Variable | Required | Description |
