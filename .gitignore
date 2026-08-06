@@ -47,3 +47,6 @@ Thumbs.db
 .npmrc
 .yarnrc.yml
 .pnp.*
+
+# Local workflow state (never committed)
+.claude/
