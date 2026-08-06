@@ -28,7 +28,13 @@ Welcome to the Chatter documentation! This guide will help you set up and deploy
    - Authentication modes
    - Framework integration
 
-4. **[Deployment](./deployment.md)** - Deploy to production
+4. **[UI Integrations & OpenAI-Compatible API](./integrations.md)** - Bring your own chat UI
+   - OpenAI-compatible endpoints (`/v1/chat/completions`)
+   - Headless mode (API only, no built-in widget)
+   - Programmatic RAG pipeline (no HTTP)
+   - Deep Chat and assistant-ui sample apps
+
+5. **[Deployment](./deployment.md)** - Deploy to production
    - Platform compatibility
    - Docker deployment
    - Google Cloud Run
@@ -37,7 +43,7 @@ Welcome to the Chatter documentation! This guide will help you set up and deploy
    - VPS setup
    - Security best practices
 
-5. **[FAQs](./faqs.md)** - Common questions and troubleshooting
+6. **[FAQs](./faqs.md)** - Common questions and troubleshooting
    - General questions
    - Platform compatibility
    - Knowledge base and RAG

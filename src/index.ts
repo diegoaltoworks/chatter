@@ -25,8 +25,11 @@ export type {
 // Client library (re-export from client subpackage)
 export { Chat, ChatBot, ChatButton } from "./client";
 export { detectLeakage, scrubOutput } from "./core/guardrails";
-export { completeOnce, completeStream } from "./core/llm";
+export { completeOnce, completeStream, DEFAULT_MODEL } from "./core/llm";
 export { loadKnowledge } from "./core/loaders";
+export type { PipelineMessage, PipelineMode, PreparedChat } from "./core/pipeline";
+// Chat pipeline (RAG without any UI or transport)
+export { prepareChat } from "./core/pipeline";
 export { PromptLoader } from "./core/prompts";
 // Core modules (for advanced customization)
 export { VectorStore } from "./core/retrieval";
@@ -48,6 +51,8 @@ export { createRateLimiter } from "./middleware/ratelimit";
 export { createReferrerCheck } from "./middleware/referrer";
 export { createSessionMiddleware } from "./middleware/session";
 export { demoRoutes } from "./routes/demo";
+// OpenAI-compatible route factory
+export { openaiRoutes } from "./routes/openai";
 export { privateRoutes } from "./routes/private";
 // Route factories (for custom setup)
 export { publicRoutes } from "./routes/public";

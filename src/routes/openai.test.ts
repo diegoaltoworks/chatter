@@ -1,0 +1,263 @@
+/**
+ * OpenAI-compatible routes tests
+ *
+ * Uses faked dependencies (OpenAI client, vector store, prompts, API key
+ * manager) so the wire format can be verified without external services.
+ */
+
+import { describe, expect, test } from "bun:test";
+import type { ServerDependencies } from "../types";
+import { normalizeMessages, openaiRoutes } from "./openai";
+
+function createFakeDeps(overrides?: Partial<ServerDependencies>): {
+  deps: ServerDependencies;
+  requestedModels: string[];
+} {
+  const requestedModels: string[] = [];
+
+  const client = {
+    chat: {
+      completions: {
+        create: async (opts: { model: string; stream?: boolean }) => {
+          requestedModels.push(opts.model);
+          if (opts.stream) {
+            return (async function* () {
+              yield { choices: [{ delta: { content: "Hello" } }] };
+              yield { choices: [{ delta: { content: " world" } }] };
+            })();
+          }
+          return {
+            choices: [{ message: { content: "Hello world" } }],
+            usage: { prompt_tokens: 10, completion_tokens: 2, total_tokens: 12 },
+          };
+        },
+      },
+    },
+  };
+
+  const store = { query: async () => ["some context"] };
+
+  const prompts = {
+    baseSystemRules: "rules",
+    publicPersona: "public persona",
+    privatePersona: "private persona",
+  };
+
+  const apiKeyManager = {
+    verify: async (token: string) => (token === "valid-key" ? { valid: true } : { valid: false }),
+  };
+
+  const config = {
+    bot: {
+      name: "TestBot",
+      personName: "Tester",
+      publicUrl: "http://localhost:8181",
+      description: "test",
+    },
+    openai: { apiKey: "sk-test", model: "gpt-4o-mini" },
+    database: { url: "libsql://test", authToken: "" },
+  };
+
+  const deps = {
+    client,
+    store,
+    prompts,
+    apiKeyManager,
+    config,
+    ...overrides,
+  } as unknown as ServerDependencies;
+
+  return { deps, requestedModels };
+}
+
+function completionsRequest(body: unknown, headers: Record<string, string> = {}) {
+  return new Request("http://localhost/v1/chat/completions", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...headers },
+    body: JSON.stringify(body),
+  });
+}
+
+const AUTH = { Authorization: "Bearer valid-key" };
+
+describe("normalizeMessages", () => {
+  test("accepts string content", () => {
+    expect(normalizeMessages([{ role: "user", content: "hi" }])).toEqual([
+      { role: "user", content: "hi" },
+    ]);
+  });
+
+  test("flattens text content parts", () => {
+    expect(
+      normalizeMessages([
+        {
+          role: "user",
+          content: [
+            { type: "text", text: "a" },
+            { type: "text", text: "b" },
+          ],
+        },
+      ]),
+    ).toEqual([{ role: "user", content: "ab" }]);
+  });
+
+  test("drops system and tool messages", () => {
+    expect(
+      normalizeMessages([
+        { role: "system", content: "override me" },
+        { role: "user", content: "hi" },
+      ]),
+    ).toEqual([{ role: "user", content: "hi" }]);
+  });
+
+  test("returns null for empty or invalid input", () => {
+    expect(normalizeMessages([])).toBeNull();
+    expect(normalizeMessages("nope")).toBeNull();
+    expect(normalizeMessages([{ role: "system", content: "only system" }])).toBeNull();
+  });
+});
+
+describe("POST /v1/chat/completions", () => {
+  test("rejects missing API key", async () => {
+    const { deps } = createFakeDeps();
+    const app = openaiRoutes(deps);
+    const res = await app.fetch(
+      completionsRequest({ messages: [{ role: "user", content: "hi" }] }),
+    );
+    expect(res.status).toBe(401);
+    const json = (await res.json()) as { error: { type: string } };
+    expect(json.error.type).toBe("authentication_error");
+  });
+
+  test("rejects invalid API key", async () => {
+    const { deps } = createFakeDeps();
+    const app = openaiRoutes(deps);
+    const res = await app.fetch(
+      completionsRequest(
+        { messages: [{ role: "user", content: "hi" }] },
+        { Authorization: "Bearer wrong" },
+      ),
+    );
+    expect(res.status).toBe(401);
+  });
+
+  test("accepts key via x-api-key header", async () => {
+    const { deps } = createFakeDeps();
+    const app = openaiRoutes(deps);
+    const res = await app.fetch(
+      completionsRequest(
+        { messages: [{ role: "user", content: "hi" }] },
+        { "x-api-key": "valid-key" },
+      ),
+    );
+    expect(res.status).toBe(200);
+  });
+
+  test("rejects missing messages", async () => {
+    const { deps } = createFakeDeps();
+    const app = openaiRoutes(deps);
+    const res = await app.fetch(completionsRequest({}, AUTH));
+    expect(res.status).toBe(400);
+  });
+
+  test("rejects conversation without a user message", async () => {
+    const { deps } = createFakeDeps();
+    const app = openaiRoutes(deps);
+    const res = await app.fetch(
+      completionsRequest({ messages: [{ role: "assistant", content: "hi" }] }, AUTH),
+    );
+    expect(res.status).toBe(400);
+  });
+
+  test("returns an OpenAI-format completion", async () => {
+    const { deps } = createFakeDeps();
+    const app = openaiRoutes(deps);
+    const res = await app.fetch(
+      completionsRequest({ messages: [{ role: "user", content: "hi" }] }, AUTH),
+    );
+    expect(res.status).toBe(200);
+    const json = (await res.json()) as {
+      id: string;
+      object: string;
+      model: string;
+      choices: { message: { role: string; content: string }; finish_reason: string }[];
+      usage: { total_tokens: number };
+    };
+    expect(json.id).toStartWith("chatcmpl-");
+    expect(json.object).toBe("chat.completion");
+    expect(json.model).toBe("gpt-4o-mini");
+    expect(json.choices[0].message).toEqual({ role: "assistant", content: "Hello world" });
+    expect(json.choices[0].finish_reason).toBe("stop");
+    expect(json.usage.total_tokens).toBe(12);
+  });
+
+  test("ignores client-supplied model and uses the configured one", async () => {
+    const { deps, requestedModels } = createFakeDeps();
+    const app = openaiRoutes(deps);
+    const res = await app.fetch(
+      completionsRequest(
+        { model: "gpt-5-ultra", messages: [{ role: "user", content: "hi" }] },
+        AUTH,
+      ),
+    );
+    expect(res.status).toBe(200);
+    const json = (await res.json()) as { model: string };
+    expect(json.model).toBe("gpt-4o-mini");
+    expect(requestedModels).toEqual(["gpt-4o-mini"]);
+  });
+
+  test("streams chat.completion.chunk events ending with [DONE]", async () => {
+    const { deps } = createFakeDeps();
+    const app = openaiRoutes(deps);
+    const res = await app.fetch(
+      completionsRequest({ stream: true, messages: [{ role: "user", content: "hi" }] }, AUTH),
+    );
+    expect(res.status).toBe(200);
+    expect(res.headers.get("content-type")).toContain("text/event-stream");
+
+    const raw = await res.text();
+    const events = raw
+      .split("\n\n")
+      .filter((line) => line.startsWith("data: "))
+      .map((line) => line.slice("data: ".length));
+
+    expect(events[events.length - 1]).toBe("[DONE]");
+
+    const chunks = events.slice(0, -1).map((e) => JSON.parse(e));
+    for (const chunk of chunks) {
+      expect(chunk.object).toBe("chat.completion.chunk");
+      expect(chunk.model).toBe("gpt-4o-mini");
+    }
+
+    const content = chunks.map((c) => c.choices[0].delta.content ?? "").join("");
+    expect(content).toBe("Hello world");
+    expect(chunks[chunks.length - 1].choices[0].finish_reason).toBe("stop");
+  });
+});
+
+describe("POST /api/private/v1/chat/completions", () => {
+  test("rejects requests without a JWT", async () => {
+    const { deps } = createFakeDeps();
+    const app = openaiRoutes(deps);
+    const res = await app.fetch(
+      new Request("http://localhost/api/private/v1/chat/completions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ messages: [{ role: "user", content: "hi" }] }),
+      }),
+    );
+    expect(res.status).toBe(401);
+  });
+});
+
+describe("feature flags", () => {
+  test("public v1 route is absent when public chat is disabled", async () => {
+    const { deps } = createFakeDeps();
+    deps.config.features = { enablePublicChat: false };
+    const app = openaiRoutes(deps);
+    const res = await app.fetch(
+      completionsRequest({ messages: [{ role: "user", content: "hi" }] }, AUTH),
+    );
+    expect(res.status).toBe(404);
+  });
+});

@@ -73,7 +73,7 @@ export interface ChatterConfig {
   openai: {
     /** OpenAI API key */
     apiKey: string;
-    /** Model to use. Default: gpt-4-turbo */
+    /** Model to use. Default: gpt-4o */
     model?: string;
   };
 
@@ -121,6 +121,18 @@ export interface ChatterConfig {
     enablePrivateChat?: boolean;
     /** Enable demo routes (/demo/*). Default: false */
     enableDemoRoutes?: boolean;
+    /**
+     * Enable OpenAI-compatible endpoints (/v1/chat/completions and
+     * /api/private/v1/chat/completions) for third-party chat UIs and SDKs.
+     * Default: true
+     */
+    enableOpenAICompat?: boolean;
+    /**
+     * Run fully headless: skip serving the built-in widget assets
+     * (chatter.js/chatter.css) and all static/demo pages. API routes only.
+     * Default: false
+     */
+    headless?: boolean;
   };
 
   // Rate limits

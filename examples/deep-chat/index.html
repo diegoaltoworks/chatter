@@ -1,0 +1,99 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Chatter + Deep Chat</title>
+    <style>
+      body {
+        font-family: system-ui, sans-serif;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 1rem;
+        padding: 2rem;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>Chatter + Deep Chat</h1>
+    <p>
+      <a href="https://deepchat.dev">Deep Chat</a> web component talking to Chatter's
+      OpenAI-compatible endpoint (<code>/v1/chat/completions</code>).
+    </p>
+
+    <deep-chat
+      id="chat"
+      style="border-radius: 10px; width: 420px; height: 520px"
+    ></deep-chat>
+
+    <script type="module" src="https://unpkg.com/deep-chat@2/dist/deepChat.bundle.js"></script>
+    <script type="module">
+      // Point these at your Chatter server + API key
+      // (create a key with: bunx chatter create-apikey)
+      const CHATTER_URL = "http://localhost:8181";
+      const CHATTER_API_KEY = "YOUR_CHATTER_API_KEY";
+
+      const chat = document.getElementById("chat");
+
+      chat.introMessage = { text: "Hi! Ask me anything." };
+
+      // Custom handler: convert Deep Chat's message format to the OpenAI
+      // wire format, stream the SSE response back into the widget.
+      chat.connect = {
+        stream: true,
+        handler: async (body, signals) => {
+          try {
+            const messages = body.messages.map((m) => ({
+              role: m.role === "ai" ? "assistant" : "user",
+              content: m.text ?? "",
+            }));
+
+            const res = await fetch(`${CHATTER_URL}/v1/chat/completions`, {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+                Authorization: `Bearer ${CHATTER_API_KEY}`,
+              },
+              body: JSON.stringify({ stream: true, messages }),
+            });
+
+            if (!res.ok || !res.body) {
+              const detail = await res.text().catch(() => "");
+              signals.onResponse({ error: `Request failed (${res.status}): ${detail}` });
+              return;
+            }
+
+            signals.onOpen();
+
+            const reader = res.body.getReader();
+            const decoder = new TextDecoder();
+            let buffer = "";
+
+            while (true) {
+              const { done, value } = await reader.read();
+              if (done) break;
+              buffer += decoder.decode(value, { stream: true });
+
+              const events = buffer.split("\n\n");
+              buffer = events.pop() ?? "";
+
+              for (const event of events) {
+                const line = event.split("\n").find((l) => l.startsWith("data: "));
+                if (!line) continue;
+                const data = line.slice("data: ".length);
+                if (data === "[DONE]") continue;
+                const delta = JSON.parse(data).choices?.[0]?.delta?.content;
+                if (delta) signals.onResponse({ text: delta });
+              }
+            }
+
+            signals.onClose();
+          } catch (err) {
+            signals.onResponse({ error: `Connection error: ${err.message}` });
+          }
+        },
+      };
+    </script>
+  </body>
+</html>
