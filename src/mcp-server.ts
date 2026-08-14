@@ -9,7 +9,7 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import OpenAI from "openai";
 import { z } from "zod";
-import { completeOnce } from "./core/llm";
+import { answerOnce } from "./core/answer";
 import { PromptLoader } from "./core/prompts";
 import { VectorStore } from "./core/retrieval";
 import { getOrGenerateConversationId } from "./mcp-server/conversation-id";
@@ -174,10 +174,12 @@ export async function createMCPServer(config: MCPServerOptions) {
         ].join("\n\n");
 
         // Generate response
-        const result = await completeOnce({
+        const result = await answerOnce({
+          answerFn: config.answerFn,
           client,
           system,
           messages: conversationMessages,
+          mode: "public",
         });
 
         // Calculate cost
@@ -287,10 +289,12 @@ export async function createMCPServer(config: MCPServerOptions) {
         ].join("\n\n");
 
         // Generate response
-        const result = await completeOnce({
+        const result = await answerOnce({
+          answerFn: config.answerFn,
           client,
           system,
           messages: conversationMessages,
+          mode: "private",
         });
 
         // Calculate cost

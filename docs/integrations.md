@@ -119,6 +119,55 @@ inserted as its own section after the persona and before the retrieved
 context, and is omitted entirely when blank. With neither set the prompt is
 unchanged, so existing callers need no updates.
 
+## Bringing your own brain (`answerFn`)
+
+Prompt shaping stops at the completion call. `answerFn` replaces the call
+itself, so an agent framework, a graph runtime, or a remote service can produce
+the answer while Chatter keeps everything around it — retrieval and prompt
+assembly upstream, and auth, rate limiting, transports and output guardrails
+downstream:
+
+```ts
+const server = await createServer({
+  // ...
+  answerFn: async ({ system, messages, mode, sender }) => {
+    const result = await myAgent.invoke({ system, messages });
+    return result.text; // or { content, usage }
+  },
+});
+```
+
+`answerFn` is consulted by every chat surface: the widget chat routes, the
+OpenAI-compatible endpoints, and the MCP chat tools. It receives the system
+prompt exactly as `prepareChat` assembled it, the conversation, the pipeline
+`mode`, and — where the surface knows one — a `sender` identity (the HTTP
+surfaces have no sender concept, so it is left unset there).
+
+Return a string, or an object with `content` and optional `usage` for the
+surfaces that report token counts (a plain string reports zero usage). A
+rejection surfaces as a normal completion error rather than silently falling
+back to the built-in completion.
+
+Guardrails still apply to whatever comes back — and because a brain's answer
+arrives whole, it gets the leakage check as well as credential scrubbing, where
+the built-in stream can only scrub each delta as it passes. A streamed brain
+answer is therefore held to the stricter of the two checks.
+
+Streaming surfaces keep their wire format: a brain that returns a whole answer
+at once is delivered as a single chunk followed by the stream's normal end, so
+`stream: true` clients need no changes. Leave `answerFn` unset and the built-in
+OpenAI completion is used, unchanged.
+
+For programmatic use, `answerOnce` and `answerStream` are exported and take the
+same `answerFn` argument the routes pass:
+
+```ts
+import { prepareChat, answerOnce } from "@diegoaltoworks/chatter";
+
+const { system, messages } = await prepareChat({ store, prompts, mode: "public", messages: turns });
+const { content } = await answerOnce({ answerFn, client, system, messages, mode: "public" });
+```
+
 ## Third-party chat UIs
 
 Two runnable sample apps live in `examples/`:

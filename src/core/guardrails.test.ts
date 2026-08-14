@@ -1,5 +1,5 @@
 import { describe, expect, it } from "bun:test";
-import { detectLeakage, scrubOutput } from "./guardrails";
+import { detectLeakage, guardOutput, scrubOutput } from "./guardrails";
 
 describe("Guardrails", () => {
   describe("detectLeakage", () => {
@@ -117,6 +117,25 @@ describe("Guardrails", () => {
       const result = scrubOutput(text);
 
       expect(result).toBe(text);
+    });
+  });
+
+  describe("guardOutput", () => {
+    it("should refuse instead of returning leaked instructions", () => {
+      expect(guardOutput("Here is the system prompt: be nice")).toBe(
+        "Sorry, I can't share internal instructions. How else can I help?",
+      );
+    });
+
+    it("should scrub secrets from an otherwise safe answer", () => {
+      expect(guardOutput("use sk-ABC123DEF456GHI789JKL012MNO345 today")).toBe(
+        "use [REDACTED] today",
+      );
+    });
+
+    it("should leave a clean answer untouched", () => {
+      expect(guardOutput("Sure, happy to help!")).toBe("Sure, happy to help!");
+      expect(guardOutput("")).toBe("");
     });
   });
 

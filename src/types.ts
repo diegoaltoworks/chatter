@@ -7,6 +7,7 @@
 
 import type { Hono } from "hono";
 import type OpenAI from "openai";
+import type { AnswerFn } from "./core/answer";
 import type { PromptLoader } from "./core/prompts";
 import type { VectorStore } from "./core/retrieval";
 
@@ -159,6 +160,19 @@ export interface ChatterConfig {
      */
     allowedOrigins?: string[];
   };
+
+  // Brain (advanced)
+  /**
+   * Replaces the completion call on every chat surface with your own brain —
+   * an agent framework, a graph runtime, a remote service. Receives the
+   * assembled system prompt and conversation from the pipeline and returns
+   * the answer text (optionally with token usage).
+   *
+   * Retrieval, prompt assembly, auth, rate limiting, transports and output
+   * guardrails all stay Chatter's. Errors surface as normal completion
+   * errors. Unset: the built-in OpenAI completion is used.
+   */
+  answerFn?: AnswerFn;
 
   // Custom routes (advanced)
   /** Custom route handler for advanced use cases */

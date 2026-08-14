@@ -25,7 +25,8 @@
 import type { Context, Next } from "hono";
 import { Hono } from "hono";
 import { stream } from "hono/streaming";
-import { completeOnce, completeStream, DEFAULT_MODEL } from "../core/llm";
+import { answerOnce, answerStream } from "../core/answer";
+import { DEFAULT_MODEL } from "../core/llm";
 import { type PipelineMessage, type PipelineMode, prepareChat } from "../core/pipeline";
 import { createJWTMiddleware } from "../middleware/jwt";
 import { createRateLimiter } from "../middleware/ratelimit";
@@ -153,10 +154,12 @@ export function openaiRoutes(deps: ServerDependencies) {
           })}\n\n`;
 
         await s.write(chunk({ role: "assistant", content: "" }, null));
-        for await (const delta of completeStream({
+        for await (const delta of answerStream({
+          answerFn: config.answerFn,
           client,
           system,
           messages,
+          mode,
           temperature,
           model: serverModel,
         })) {
@@ -167,7 +170,15 @@ export function openaiRoutes(deps: ServerDependencies) {
       });
     }
 
-    const out = await completeOnce({ client, system, messages, temperature, model: serverModel });
+    const out = await answerOnce({
+      answerFn: config.answerFn,
+      client,
+      system,
+      messages,
+      mode,
+      temperature,
+      model: serverModel,
+    });
     return c.json({
       id,
       object: "chat.completion",

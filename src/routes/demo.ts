@@ -6,7 +6,7 @@
 import type { Context } from "hono";
 import { Hono } from "hono";
 import { stream } from "hono/streaming";
-import { completeOnce, completeStream } from "../core/llm";
+import { answerOnce, answerStream } from "../core/answer";
 import { createSession, getActiveSessions } from "../core/session";
 import type { ServerDependencies } from "../types";
 
@@ -209,7 +209,13 @@ export function demoRoutes(deps: ServerDependencies) {
 
       if (wantsStream) {
         return stream(c, async (s) => {
-          for await (const delta of completeStream({ client, system, messages })) {
+          for await (const delta of answerStream({
+            answerFn: config.answerFn,
+            client,
+            system,
+            messages,
+            mode: "public",
+          })) {
             await s.write(`data: ${JSON.stringify({ delta })}\n\n`);
           }
           await s.write("event: end\ndata: {}\n\n");
@@ -217,7 +223,13 @@ export function demoRoutes(deps: ServerDependencies) {
       }
 
       // Non-streaming response
-      const out = await completeOnce({ client, system, messages });
+      const out = await answerOnce({
+        answerFn: config.answerFn,
+        client,
+        system,
+        messages,
+        mode: "public",
+      });
       return c.json({ reply: out.content });
     } catch (error) {
       const err = error as Error;

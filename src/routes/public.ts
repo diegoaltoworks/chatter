@@ -1,7 +1,7 @@
 import type { Context } from "hono";
 import { Hono } from "hono";
 import { stream } from "hono/streaming";
-import { completeOnce, completeStream } from "../core/llm";
+import { answerOnce, answerStream } from "../core/answer";
 import { prepareChat } from "../core/pipeline";
 import { createAuthMiddleware } from "../middleware/auth";
 import { createRateLimiter } from "../middleware/ratelimit";
@@ -63,17 +63,25 @@ export function publicRoutes(deps: ServerDependencies) {
     }
 
     const model = config.openai.model;
+    const answerFn = config.answerFn;
 
     if (wantsStream(c)) {
       return stream(c, async (s) => {
-        for await (const delta of completeStream({ client, system, messages, model })) {
+        for await (const delta of answerStream({
+          answerFn,
+          client,
+          system,
+          messages,
+          mode: "public",
+          model,
+        })) {
           await s.write(`data: ${JSON.stringify({ delta })}\n\n`);
         }
         await s.write("event: end\ndata: {}\n\n");
       });
     }
 
-    const out = await completeOnce({ client, system, messages, model });
+    const out = await answerOnce({ answerFn, client, system, messages, mode: "public", model });
     return c.json({ reply: out.content });
   });
 
