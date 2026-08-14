@@ -227,8 +227,16 @@ describe("Server Integration", () => {
     it("should support custom routes via config", async () => {
       const app = await createServer(
         createTestConfig({
-          customRoutes: (app, _deps) => {
-            app.get("/custom/test", (c) => c.json({ custom: true }));
+          customRoutes: (app, deps) => {
+            // Custom routes get the same database connection the vector store
+            // uses - no second client is opened for them.
+            expect(deps.db).toBeDefined();
+            expect(deps.db).toBe(deps.store.db);
+
+            app.get("/custom/test", async (c) => {
+              const res = await deps.db.execute("SELECT count(*) AS n FROM chunks");
+              return c.json({ custom: true, chunks: Number(res.rows[0].n) });
+            });
           },
         }),
       );
@@ -238,6 +246,7 @@ describe("Server Integration", () => {
       expect(res.status).toBe(200);
       const json = await res.json();
       expect(json.custom).toBe(true);
+      expect(json.chunks).toBeGreaterThanOrEqual(0);
     });
 
     it("should handle rate limiting configuration", async () => {

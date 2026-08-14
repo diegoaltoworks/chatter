@@ -40,6 +40,7 @@ export type { PipelineMessage, PipelineMode, PreparedChat } from "./core/pipelin
 // Chat pipeline (RAG without any UI or transport)
 export { prepareChat } from "./core/pipeline";
 export { PromptLoader } from "./core/prompts";
+export type { VectorStoreOptions } from "./core/retrieval";
 // Core modules (for advanced customization)
 export { VectorStore } from "./core/retrieval";
 export {

@@ -4,6 +4,7 @@
  * Creates a configured Hono server instance with all routes and middleware.
  */
 
+import { createClient } from "@libsql/client";
 import { Hono } from "hono";
 import { serveStatic } from "hono/bun";
 import OpenAI from "openai";
@@ -16,7 +17,7 @@ import { demoRoutes } from "./routes/demo";
 import { openaiRoutes } from "./routes/openai";
 import { privateRoutes } from "./routes/private";
 import { publicRoutes } from "./routes/public";
-import type { ChatterConfig } from "./types";
+import type { ChatterConfig, ServerDependencies } from "./types";
 
 /**
  * Create a Chatter server instance
@@ -45,10 +46,16 @@ export async function createServer(config: ChatterConfig) {
     apiKey: config.openai.apiKey,
   });
 
+  // Open the single database connection shared by the vector store, the route
+  // factories and anything mounted through customRoutes or channels.
+  const db = createClient({
+    url: config.database.url,
+    authToken: config.database.authToken,
+  });
+
   // Build vector store
   const store = new VectorStore(client, {
-    databaseUrl: config.database.url,
-    databaseAuthToken: config.database.authToken,
+    databaseClient: db,
     knowledgeDir,
   });
   await store.build();
@@ -148,7 +155,7 @@ export async function createServer(config: ChatterConfig) {
   }
 
   // Build dependencies for routes
-  const deps = { client, store, config, prompts, apiKeyManager };
+  const deps: ServerDependencies = { client, store, db, config, prompts, apiKeyManager };
 
   // Mount API routes
   if (enablePublic) {

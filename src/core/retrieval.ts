@@ -25,22 +25,52 @@ async function sha256(input: string) {
     .join("");
 }
 
+/**
+ * How a {@link VectorStore} obtains its database connection: either credentials
+ * to open its own, or an existing libsql client to reuse.
+ *
+ * Reusing a client is preferred when the store lives alongside other consumers
+ * of the same database (route factories, custom routes) — the process then
+ * holds one connection instead of one per consumer.
+ */
+export type VectorStoreOptions = {
+  /** Directory of markdown knowledge files. Default: `./config/knowledge` */
+  knowledgeDir?: string;
+} & (
+  | {
+      /** Turso database URL */
+      databaseUrl: string;
+      /** Turso auth token */
+      databaseAuthToken: string;
+      databaseClient?: never;
+    }
+  | {
+      /** An existing libsql client to reuse instead of opening a second connection */
+      databaseClient: LibsqlClient;
+      databaseUrl?: never;
+      databaseAuthToken?: never;
+    }
+);
+
 export class VectorStore {
-  private db: LibsqlClient;
+  /**
+   * The libsql client backing this store. When a client was injected this is
+   * that same instance, so callers holding it (e.g. `ServerDependencies.db`)
+   * and the store share one connection.
+   */
+  readonly db: LibsqlClient;
   private knowledgeDir: string;
 
   constructor(
     private client: OpenAI,
-    options: {
-      databaseUrl: string;
-      databaseAuthToken: string;
-      knowledgeDir?: string;
-    },
+    options: VectorStoreOptions,
   ) {
-    this.db = createClient({
-      url: options.databaseUrl,
-      authToken: options.databaseAuthToken,
-    });
+    this.db = options.databaseClient
+      ? options.databaseClient
+      : createClient({
+          url: options.databaseUrl,
+          authToken: options.databaseAuthToken,
+        });
     this.knowledgeDir = options.knowledgeDir || "./config/knowledge";
   }
 

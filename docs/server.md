@@ -140,6 +140,48 @@ Omit it to use the built-in OpenAI completion. See
 [integrations.md](./integrations.md) for the streaming behaviour and the
 programmatic equivalents.
 
+### Custom Routes
+
+Custom routes receive the same dependencies the built-in route factories use:
+
+```typescript
+{
+  customRoutes: (app, deps) => {
+    // deps.client         OpenAI client
+    // deps.store          VectorStore (retrieval)
+    // deps.db             libsql database client
+    // deps.config         the resolved ChatterConfig
+    // deps.prompts        PromptLoader
+    // deps.apiKeyManager  API key manager, when configured
+
+    app.get("/my-route", async (c) => {
+      const rows = await deps.db.execute("SELECT count(*) AS n FROM chunks");
+      return c.json({ chunks: rows.rows[0].n });
+    });
+  }
+}
+```
+
+`deps.db` is the ready libsql client the server opened for the vector store.
+Custom routes should use it rather than calling `createClient` again — the
+process then holds one connection to the database instead of one per consumer.
+
+Constructing a `VectorStore` yourself follows the same rule: pass an existing
+client instead of credentials when one is already open.
+
+```typescript
+import { createClient } from "@libsql/client";
+import { VectorStore } from "@diegoaltoworks/chatter";
+
+const db = createClient({ url, authToken });
+const store = new VectorStore(openai, { databaseClient: db, knowledgeDir });
+await store.build();
+```
+
+Passing `databaseUrl` / `databaseAuthToken` instead makes the store open its
+own connection; either way the client it ends up using is available as
+`store.db`.
+
 ### Authentication
 
 #### API Key Secret (Required for Public Chat)
