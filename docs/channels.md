@@ -283,3 +283,8 @@ under `"whatsapp:<sessionId>"`:
 ```ts
 await deps.senders.sendText("whatsapp", "447700900123@s.whatsapp.net", "hi");
 ```
+
+## Full example
+
+[`examples/full-bot`](../examples/full-bot/) wires this channel, a persona
+registry, gates, images and the scheduler into one config-driven server.

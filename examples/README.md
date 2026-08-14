@@ -283,6 +283,20 @@ OpenAI-compatible endpoint.
 cd examples/langgraph-brain && bun install && bun run brain-server
 ```
 
+## Channels (WhatsApp, personas, images, scheduler)
+
+### Full bot
+**Directory:** `full-bot/`
+
+A complete, config-driven server wiring the WhatsApp channel, a persona
+registry, reply gates, image requests and a scheduler tick together — see
+[docs/channels.md](../docs/channels.md) and
+[docs/personas.md](../docs/personas.md).
+
+```bash
+cd examples/full-bot && bun install && bun run start
+```
+
 ## Environment Variables Reference
 
 | Variable | Required | Description |

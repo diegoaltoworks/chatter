@@ -136,3 +136,9 @@ timeContext(["Europe/London", "America/New_York"]);
 
 An empty `zones` list returns `""`. This is the only place the module reasons
 about time; everything else about a persona's content is the registry's.
+
+## Full example
+
+[`examples/full-bot`](../examples/full-bot/) wires a registry like the one
+above into the WhatsApp channel end to end, alongside gates, images and the
+scheduler.
