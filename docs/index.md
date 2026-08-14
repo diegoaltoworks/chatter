@@ -62,7 +62,12 @@ Welcome to the Chatter documentation! This guide will help you set up and deploy
    - Cache-before-spend ordering, optional Cloudinary upload
    - Optional caption helper with pool + LLM compose fallback
 
-10. **[Deployment](./deployment.md)** - Deploy to production
+10. **[Scheduler](./scheduler.md)** - Exactly-once outbound scheduling
+    - Content-free: candidate entries are always caller-supplied
+    - Multi-instance-safe claim via Turso, with a fire-time grace window
+    - Pluggable compose step and voice-attempted/text-guaranteed delivery
+
+11. **[Deployment](./deployment.md)** - Deploy to production
     - Platform compatibility
     - Docker deployment
     - Google Cloud Run
@@ -71,7 +76,7 @@ Welcome to the Chatter documentation! This guide will help you set up and deploy
     - VPS setup
     - Security best practices
 
-11. **[FAQs](./faqs.md)** - Common questions and troubleshooting
+12. **[FAQs](./faqs.md)** - Common questions and troubleshooting
     - General questions
     - Platform compatibility
     - Knowledge base and RAG
