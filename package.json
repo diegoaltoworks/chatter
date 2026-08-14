@@ -59,6 +59,13 @@
     "security:audit:fix": "bun update",
     "security:check": "bun audit --audit-level=moderate",
     "check": "bun run typecheck && bun run lint && bun run test && bun run security:check",
+    "work": "bun ./.claude/work.ts run",
+    "work:continuous": "bun ./.claude/work.ts run --continuous",
+    "work:status": "bun ./.claude/work.ts status",
+    "work:reset": "bun ./.claude/work.ts reset",
+    "work:watch": "bun ./.claude/work.ts watch",
+    "work:resume": "bun ./.claude/work.ts resume",
+    "work:halt": "bun ./.claude/work.ts halt",
     "prepublishOnly": "bun run lint && bun run typecheck && bun run test && bun run security:check && bun run build",
     "prepare": "husky || true"
   },
