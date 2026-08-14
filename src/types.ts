@@ -5,6 +5,7 @@
  * These types define the public API and configuration interface.
  */
 
+import type { Client as LibsqlClient } from "@libsql/client";
 import type { Hono } from "hono";
 import type OpenAI from "openai";
 import type { AnswerFn } from "./core/answer";
@@ -187,6 +188,12 @@ export interface ServerDependencies {
   client: OpenAI;
   /** Vector store instance */
   store: VectorStore;
+  /**
+   * The libsql database client, shared with the vector store. Custom routes
+   * should use this handle rather than opening their own connection to the
+   * same database.
+   */
+  db: LibsqlClient;
   /** Chatter configuration */
   config: ChatterConfig;
   /** Prompt loader instance */
