@@ -9,6 +9,8 @@ import { Hono } from "hono";
 import { serveStatic } from "hono/bun";
 import OpenAI from "openai";
 import { ApiKeyManager } from "./auth/apikeys";
+import type { Channel } from "./channels";
+import { createSenderRegistry } from "./channels";
 import { PromptLoader } from "./core/prompts";
 import { VectorStore } from "./core/retrieval";
 import { resolveStatic } from "./core/widgets";
@@ -20,12 +22,30 @@ import { publicRoutes } from "./routes/public";
 import type { ChatterConfig, ServerDependencies } from "./types";
 
 /**
+ * A Chatter server: the Hono app plus a disposer for anything `createServer`
+ * started outside the request/response cycle. Deliberately not a signal
+ * handler — a library calling `process.exit` on a host's process would race
+ * the host's own shutdown (e.g. an in-flight-request drain) and override its
+ * exit code. Hosts that start channels wire `stopChannels` into their own
+ * shutdown path:
+ *
+ * ```ts
+ * const app = await createServer(config);
+ * process.on("SIGTERM", async () => {
+ *   await app.stopChannels();
+ *   process.exit(0);
+ * });
+ * ```
+ */
+export type ChatterApp = Hono & { stopChannels: () => Promise<void> };
+
+/**
  * Create a Chatter server instance
  *
  * @param config - Chatter configuration
- * @returns Configured Hono app instance
+ * @returns Configured Hono app instance, plus `stopChannels()` — see {@link ChatterApp}
  */
-export async function createServer(config: ChatterConfig) {
+export async function createServer(config: ChatterConfig): Promise<ChatterApp> {
   console.log(`🚀 Starting ${config.bot.name}...`);
 
   // Set defaults
@@ -154,8 +174,11 @@ export async function createServer(config: ChatterConfig) {
     app.get("/demo/react", serveStatic({ path: `${publicDir}/react-demo.html` }));
   }
 
-  // Build dependencies for routes
-  const deps: ServerDependencies = { client, store, db, config, prompts, apiKeyManager };
+  // Build dependencies for routes. `senders` is the one instance channels
+  // register into and brain-side features (a scheduler, the flows engine)
+  // send through by channel name, without importing a transport.
+  const senders = createSenderRegistry();
+  const deps: ServerDependencies = { client, store, db, config, prompts, apiKeyManager, senders };
 
   // Mount API routes
   if (enablePublic) {
@@ -181,7 +204,39 @@ export async function createServer(config: ChatterConfig) {
     await config.customRoutes(app, deps);
   }
 
+  // Channels start last, once routes and custom mounting are in place. A
+  // channel that throws is logged and skipped rather than failing the whole
+  // server — one broken transport must not take down the others or the API.
+  const started: Channel[] = [];
+  if (config.channels && config.channels.length > 0) {
+    for (const channel of config.channels) {
+      try {
+        await channel.start(deps);
+        started.push(channel);
+        console.log(`✅ Channel "${channel.name}" started`);
+      } catch (error) {
+        console.error(`❌ Channel "${channel.name}" failed to start:`, error);
+      }
+    }
+  }
+
   console.log(`✅ ${config.bot.name} server ready`);
 
-  return app;
+  return Object.assign(app, {
+    // Scoped to this call's started channels, not global — two servers in
+    // one process each stop only their own. A channel's `stop()` throwing
+    // (sync or async) is caught per-channel so one misbehaving channel can't
+    // stop the rest from cleaning up.
+    stopChannels: async (): Promise<void> => {
+      await Promise.allSettled(
+        started.map(async (channel) => {
+          try {
+            await channel.stop?.();
+          } catch (error) {
+            console.error(`Channel "${channel.name}" failed to stop:`, error);
+          }
+        }),
+      );
+    },
+  });
 }

@@ -175,6 +175,7 @@ Custom routes receive the same dependencies the built-in route factories use:
     // deps.config         the resolved ChatterConfig
     // deps.prompts        PromptLoader
     // deps.apiKeyManager  API key manager, when configured
+    // deps.senders        ChannelSenderRegistry channels register into
 
     app.get("/my-route", async (c) => {
       const rows = await deps.db.execute("SELECT count(*) AS n FROM chunks");
@@ -227,6 +228,93 @@ Synchronous functions keep working unchanged, including expression-bodied ones
 that return the app for chaining. If the mount throws or rejects, `createServer`
 rejects with that error rather than returning a half-mounted app, so a failed
 migration fails start-up instead of surfacing later as broken routes.
+
+### Channels
+
+Attach transports (a WhatsApp client, or any future channel) that plug into
+the same server without owning their own auth, rate limiting, or chat
+pipeline:
+
+```typescript
+{
+  channels: [myChannel]
+}
+```
+
+A channel is anything matching the `Channel` SPI — `{ name, start(deps), stop?() }`.
+`createServer` starts every configured channel after routes (and
+`customRoutes`) are mounted, with the same `deps` custom routes receive
+(including `deps.senders`, below), so a channel can call
+`prepareChat`/`answerFn`, share `deps.db`, etc. A channel that throws on
+`start` is logged and skipped; the server and the other channels keep
+running. `start(deps)` also works when called directly, without
+`createServer`, for standalone use (a pairing script, a one-off worker) —
+just return once the transport is *initiated* (a socket opened), not once a
+slow handshake or pairing flow completes, since `createServer` awaits it
+before the app starts serving requests.
+
+#### Shutdown
+
+`createServer` never installs its own process signal handlers or calls
+`process.exit` — a library doing that would race a host's own shutdown logic
+(draining in-flight requests, closing other resources) and override its exit
+code. Instead the returned app carries a `stopChannels()` disposer that stops
+every channel `createServer` started; wire it into whatever shutdown path the
+host already has:
+
+```typescript
+const app = await createServer(config);
+
+process.on("SIGTERM", async () => {
+  await app.stopChannels();
+  process.exit(0);
+});
+```
+
+A channel's `stop()` throwing (sync or async) is caught per-channel, so one
+misbehaving channel can't block the others from cleaning up.
+
+#### Sending without a transport
+
+Brain-side features (a scheduler, the flows engine) send outbound messages by
+channel name without importing a transport, through the
+`ChannelSenderRegistry` every channel is started with as `deps.senders`. A
+channel registers itself on start:
+
+```typescript
+const myChannel: Channel = {
+  name: "my-transport",
+  start(deps) {
+    deps.senders.register("my-transport", {
+      sendText: (chatId, text) => mySocket.send(chatId, text),
+    });
+  },
+};
+```
+
+and any custom route (or another channel) can then reach it:
+
+```typescript
+customRoutes: (app, deps) => {
+  app.post("/notify", async (c) => {
+    const ok = await deps.senders.sendText("my-transport", "some-chat-id", "hi");
+    return c.json({ sent: ok });
+  });
+};
+```
+
+`sendText`/`sendVoice`/`sendMedia` all resolve to `false` — never throw — when
+the name is unregistered, the channel omits that capability, or the
+underlying send fails.
+
+The full channel toolkit — the `Channel` type, the channel-agnostic reply
+gates (allowlist, mute/unmute, rate limits, cross-session loop guard), and
+`createSenderRegistry` — also lives behind the `./channels` subpath for
+transports that want it without pulling in the rest of the core package:
+
+```typescript
+import { createSenderRegistry, decideChannelAction } from '@diegoaltoworks/chatter/channels';
+```
 
 ### Authentication
 

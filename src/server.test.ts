@@ -10,6 +10,8 @@ import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import type { Channel } from "./channels";
+import { createSenderRegistry } from "./channels";
 import { createServer } from "./server";
 import type { ChatterConfig, CustomRoutes } from "./types";
 
@@ -25,6 +27,13 @@ afterAll(async () => {
 
 function config(customRoutes: CustomRoutes): ChatterConfig {
   return {
+    ...baseConfig(),
+    customRoutes,
+  };
+}
+
+function baseConfig(): ChatterConfig {
+  return {
     bot: {
       name: "Test Bot",
       personName: "Test Person",
@@ -36,7 +45,6 @@ function config(customRoutes: CustomRoutes): ChatterConfig {
     database: { url: "file::memory:", authToken: "" },
     knowledgeDir,
     features: { headless: true },
-    customRoutes,
   };
 }
 
@@ -120,5 +128,149 @@ describe("createServer customRoutes", () => {
         }),
       ),
     ).rejects.toThrow("migration failed");
+  });
+});
+
+describe("createServer channels", () => {
+  test("starts a configured channel with full server dependencies", async () => {
+    let receivedDb: unknown;
+    const channel: Channel = {
+      name: "fake",
+      start: async (deps) => {
+        receivedDb = deps.db;
+      },
+    };
+
+    await createServer({ ...baseConfig(), channels: [channel] });
+
+    expect(receivedDb).toBeDefined();
+  });
+
+  test("a throwing channel is logged and does not crash the server", async () => {
+    const boom = new Error("connect failed");
+    const badChannel: Channel = {
+      name: "broken",
+      start: async () => {
+        throw boom;
+      },
+    };
+    let goodStarted = false;
+    const goodChannel: Channel = {
+      name: "fine",
+      start: async () => {
+        goodStarted = true;
+      },
+    };
+
+    const app = await createServer({ ...baseConfig(), channels: [badChannel, goodChannel] });
+
+    expect(app).toBeDefined();
+    expect(goodStarted).toBe(true);
+  });
+
+  test("channel.start(deps) also works standalone, outside createServer", () => {
+    const calls: string[] = [];
+    const channel: Channel = {
+      name: "standalone",
+      start: (deps) => {
+        calls.push(typeof deps.db.execute);
+      },
+    };
+
+    // A hand-built ServerDependencies-shaped object, no server involved -
+    // proves the Channel SPI does not require createServer to be usable.
+    channel.start({
+      client: {} as never,
+      store: {} as never,
+      db: { execute: async () => ({ rows: [] }) } as never,
+      config: baseConfig(),
+      prompts: {} as never,
+      senders: createSenderRegistry(),
+    });
+
+    expect(calls).toEqual(["function"]);
+  });
+
+  test("stopChannels() stops every channel that started successfully", async () => {
+    const stopped: string[] = [];
+    const badChannel: Channel = {
+      name: "broken",
+      start: async () => {
+        throw new Error("connect failed");
+      },
+      stop: async () => {
+        stopped.push("broken");
+      },
+    };
+    const channelA: Channel = {
+      name: "a",
+      start: async () => {},
+      stop: async () => {
+        stopped.push("a");
+      },
+    };
+    const channelB: Channel = {
+      name: "b",
+      start: async () => {},
+      stop: async () => {
+        stopped.push("b");
+      },
+    };
+
+    const app = await createServer({ ...baseConfig(), channels: [badChannel, channelA, channelB] });
+    await app.stopChannels();
+
+    // "broken" never started, so its stop() must not run - only the two
+    // that actually started are torn down.
+    expect(stopped.sort()).toEqual(["a", "b"]);
+  });
+
+  test("stopChannels() isolates a channel whose stop() throws synchronously", async () => {
+    const stopped: string[] = [];
+    const throwsChannel: Channel = {
+      name: "throws",
+      start: async () => {},
+      stop: () => {
+        throw new Error("teardown failed");
+      },
+    };
+    const okChannel: Channel = {
+      name: "ok",
+      start: async () => {},
+      stop: async () => {
+        stopped.push("ok");
+      },
+    };
+
+    const app = await createServer({ ...baseConfig(), channels: [throwsChannel, okChannel] });
+
+    // Must not reject and must still stop the other channel.
+    await app.stopChannels();
+    expect(stopped).toEqual(["ok"]);
+  });
+
+  test("two servers each stop only their own channels", async () => {
+    const stopped: string[] = [];
+    const channel1: Channel = {
+      name: "one",
+      start: async () => {},
+      stop: async () => {
+        stopped.push("one");
+      },
+    };
+    const channel2: Channel = {
+      name: "two",
+      start: async () => {},
+      stop: async () => {
+        stopped.push("two");
+      },
+    };
+
+    const app1 = await createServer({ ...baseConfig(), channels: [channel1] });
+    const app2 = await createServer({ ...baseConfig(), channels: [channel2] });
+
+    await app1.stopChannels();
+
+    expect(stopped).toEqual(["one"]);
   });
 });
