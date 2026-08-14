@@ -52,7 +52,12 @@ Welcome to the Chatter documentation! This guide will help you set up and deploy
    - Encrypted, multi-session auth state
    - Deploy lease and reconnect behaviour
 
-8. **[Deployment](./deployment.md)** - Deploy to production
+8. **[Flows](./flows.md)** - Multi-turn, schema-driven slot-filling flows
+   - Directory-loaded flow contract (flow.json/handler.ts/instructions.md)
+   - Hybrid keyword + LLM intent matching
+   - Multi-instance-safe session state via a Turso-backed store
+
+9. **[Deployment](./deployment.md)** - Deploy to production
    - Platform compatibility
    - Docker deployment
    - Google Cloud Run
@@ -61,13 +66,13 @@ Welcome to the Chatter documentation! This guide will help you set up and deploy
    - VPS setup
    - Security best practices
 
-9. **[FAQs](./faqs.md)** - Common questions and troubleshooting
-   - General questions
-   - Platform compatibility
-   - Knowledge base and RAG
-   - Authentication
-   - Customization
-   - Performance and scaling
+10. **[FAQs](./faqs.md)** - Common questions and troubleshooting
+    - General questions
+    - Platform compatibility
+    - Knowledge base and RAG
+    - Authentication
+    - Customization
+    - Performance and scaling
 
 ## Documentation Flow
 

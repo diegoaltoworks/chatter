@@ -1,0 +1,11 @@
+{
+  "id": "not-broken",
+  "name": "Broken",
+  "description": "id does not match its directory name",
+  "triggerKeywords": ["broken"],
+  "schema": {
+    "type": "object",
+    "properties": { "x": { "type": "string" } },
+    "required": ["x"]
+  }
+}
