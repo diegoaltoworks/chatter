@@ -96,6 +96,29 @@ const { content } = await completeOnce({ client, system, messages });
 This is the same code path the HTTP routes use, so behaviour (retrieval depth,
 personas, guardrails) is identical.
 
+### Shaping the prompt per caller
+
+`prepareChat` assembles the system prompt in layers — base rules, persona,
+channel hint, retrieved context — and two optional parameters let a caller
+adjust the middle layers without rebuilding the sandwich itself:
+
+```ts
+const { system, messages } = await prepareChat({
+  store,
+  prompts,
+  mode: "public",
+  messages: [{ role: "user", content: "Hello!" }],
+  personaLayer: resolvedPersona,       // replaces the mode's persona
+  channelHint: "Channel: SMS. Keep replies short.",
+});
+```
+
+`personaLayer` replaces the persona the `PromptLoader` would supply for the
+mode; a blank or omitted value keeps the configured persona. `channelHint` is
+inserted as its own section after the persona and before the retrieved
+context, and is omitted entirely when blank. With neither set the prompt is
+unchanged, so existing callers need no updates.
+
 ## Third-party chat UIs
 
 Two runnable sample apps live in `examples/`:
