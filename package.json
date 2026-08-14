@@ -6,7 +6,8 @@
   "module": "./dist/index.mjs",
   "types": "./dist/index.d.ts",
   "bin": {
-    "chatter": "./dist/bin/create-apikey.js"
+    "chatter": "./dist/bin/create-apikey.js",
+    "wa-pair": "./dist/bin/wa-pair.js"
   },
   "exports": {
     ".": {
@@ -38,6 +39,11 @@
       "types": "./dist/channels/index.d.ts",
       "import": "./dist/channels/index.mjs",
       "require": "./dist/channels/index.js"
+    },
+    "./whatsapp": {
+      "types": "./dist/channels/whatsapp/index.d.ts",
+      "import": "./dist/channels/whatsapp/index.mjs",
+      "require": "./dist/channels/whatsapp/index.js"
     }
   },
   "files": [
@@ -47,7 +53,7 @@
   ],
   "scripts": {
     "dev": "bun --watch src/index.ts",
-    "build": "bun run build:clean && bun run build:types && bun run build:esm && bun run build:cjs && bun run build:mcp && bun run build:usage && bun run build:channels && bun run build:bin && bun run build:client && bun run build:copy-client",
+    "build": "bun run build:clean && bun run build:types && bun run build:esm && bun run build:cjs && bun run build:mcp && bun run build:usage && bun run build:channels && bun run build:whatsapp && bun run build:bin && bun run build:client && bun run build:copy-client",
     "build:clean": "rm -rf dist",
     "build:types": "tsc --emitDeclarationOnly --outDir dist",
     "build:esm": "esbuild src/index.ts --bundle --format=esm --outfile=dist/index.mjs --external:hono --external:openai --external:@libsql/client --external:jose --platform=node --target=node24",
@@ -55,7 +61,8 @@
     "build:mcp": "esbuild src/mcp-server.ts --bundle --format=esm --outfile=dist/mcp-server.mjs --external:@modelcontextprotocol/sdk --external:openai --external:@libsql/client --external:zod --platform=node --target=node24 && esbuild src/mcp-server.ts --bundle --format=cjs --outfile=dist/mcp-server.js --external:@modelcontextprotocol/sdk --external:openai --external:@libsql/client --external:zod --platform=node --target=node24",
     "build:usage": "esbuild src/usage/index.ts --bundle --format=esm --outfile=dist/usage/index.mjs --external:@libsql/client --platform=node --target=node24 && esbuild src/usage/index.ts --bundle --format=cjs --outfile=dist/usage/index.js --external:@libsql/client --platform=node --target=node24",
     "build:channels": "esbuild src/channels/index.ts --bundle --format=esm --outfile=dist/channels/index.mjs --external:hono --external:openai --external:@libsql/client --platform=node --target=node24 && esbuild src/channels/index.ts --bundle --format=cjs --outfile=dist/channels/index.js --external:hono --external:openai --external:@libsql/client --platform=node --target=node24",
-    "build:bin": "esbuild bin/create-apikey.ts --bundle --format=cjs --outfile=dist/bin/create-apikey.js --external:jose --platform=node --target=node18 --banner:js='#!/usr/bin/env node'",
+    "build:whatsapp": "esbuild src/channels/whatsapp/index.ts --bundle --format=esm --outfile=dist/channels/whatsapp/index.mjs --external:@libsql/client --external:@whiskeysockets/baileys --platform=node --target=node24 && esbuild src/channels/whatsapp/index.ts --bundle --format=cjs --outfile=dist/channels/whatsapp/index.js --external:@libsql/client --external:@whiskeysockets/baileys --platform=node --target=node24",
+    "build:bin": "esbuild bin/create-apikey.ts --bundle --format=cjs --outfile=dist/bin/create-apikey.js --external:jose --platform=node --target=node18 --banner:js='#!/usr/bin/env node' && esbuild bin/wa-pair.ts --bundle --format=cjs --outfile=dist/bin/wa-pair.js --external:@libsql/client --external:@whiskeysockets/baileys --external:qrcode-terminal --platform=node --target=node18 --banner:js='#!/usr/bin/env node'",
     "build:client": "cd src/client && bun run build",
     "build:copy-client": "mkdir -p dist/static && cp src/client/dist/chatter.js src/client/dist/chatter.css dist/static/",
     "test": "bun test",
@@ -108,9 +115,19 @@
   "peerDependencies": {
     "@libsql/client": "^0.17.2",
     "@modelcontextprotocol/sdk": "^1.30.0",
+    "@whiskeysockets/baileys": "^7.0.0-rc14",
     "hono": "^4.12.14",
     "openai": "^7.3.0",
+    "qrcode-terminal": "^0.12.0",
     "zod": "^3.25.76 || ^4.4.3"
+  },
+  "peerDependenciesMeta": {
+    "@whiskeysockets/baileys": {
+      "optional": true
+    },
+    "qrcode-terminal": {
+      "optional": true
+    }
   },
   "dependencies": {
     "jose": "6.2.8"
@@ -121,11 +138,13 @@
     "@modelcontextprotocol/sdk": "1.30.0",
     "@types/bun": "1.3.14",
     "@types/node": "26.2.0",
+    "@whiskeysockets/baileys": "7.0.0-rc14",
     "esbuild": "0.28.1",
     "hono": "4.13.1",
     "husky": "9.1.7",
     "lint-staged": "17.3.0",
     "openai": "7.4.0",
+    "qrcode-terminal": "0.12.0",
     "typescript": "7.0.2",
     "zod": "4.4.3"
   },

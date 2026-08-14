@@ -316,6 +316,10 @@ transports that want it without pulling in the rest of the core package:
 import { createSenderRegistry, decideChannelAction } from '@diegoaltoworks/chatter/channels';
 ```
 
+A built-in WhatsApp transport ships behind `./whatsapp` and dogfoods this
+same SPI — see [WhatsApp Channel](./channels.md) for setup, pairing, and its
+ToS warning.
+
 ### Authentication
 
 #### API Key Secret (Required for Public Chat)
