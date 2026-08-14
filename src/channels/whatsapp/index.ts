@@ -41,6 +41,16 @@ export {
 } from "./channel";
 export { decrypt, encrypt } from "./crypto";
 export {
+  createWhatsAppImageHandler,
+  type DrawRequestDetectorConfig,
+  drawSubject,
+  isDrawRequest,
+  type WhatsAppImageHandler,
+  type WhatsAppImageHandlerDeps,
+  type WhatsAppImageRequestContext,
+  type WhatsAppImageStrings,
+} from "./images";
+export {
   createWhatsAppInboundHandler,
   extractText,
   isGroupJid,

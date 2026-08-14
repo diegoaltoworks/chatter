@@ -572,6 +572,53 @@ describe("createWhatsAppInboundHandler", () => {
     expect(answerCalls).toHaveLength(1);
   });
 
+  test("an images handler that reports it handled the message short-circuits before chat runs", async () => {
+    const imagesCalls: unknown[] = [];
+    const { handler, sock, answerCalls } = createHarness({
+      images: async (ctx) => {
+        imagesCalls.push(ctx);
+        return true;
+      },
+    });
+
+    await handler(waEvent(sock));
+
+    expect(imagesCalls).toEqual([
+      {
+        sock,
+        message: expect.anything(),
+        chatId: "447700900123@s.whatsapp.net",
+        senderId: "+447700900123",
+        text: "hello there",
+        hasPhoto: false,
+      },
+    ]);
+    expect(answerCalls).toHaveLength(0);
+    expect(sock.sendMessage).not.toHaveBeenCalled();
+  });
+
+  test("an images handler that reports it did not handle the message falls through to normal chat", async () => {
+    const { handler, sock, answerCalls } = createHarness({ images: async () => false });
+
+    await handler(waEvent(sock));
+
+    expect(answerCalls).toHaveLength(1);
+  });
+
+  test("hasPhoto reflects an attached imageMessage on the raw Baileys message", async () => {
+    const imagesCalls: Array<{ hasPhoto: boolean }> = [];
+    const { handler, sock } = createHarness({
+      images: async (ctx) => {
+        imagesCalls.push(ctx);
+        return true;
+      },
+    });
+
+    await handler(waEvent(sock, { message: { imageMessage: { caption: "draw me here" } } }));
+
+    expect(imagesCalls[0]?.hasPhoto).toBe(true);
+  });
+
   test("rate limiting drops replies past the configured budget without throwing", async () => {
     const { handler, sock, answerCalls } = createHarness({
       dmRateLimit: { max: 1, windowMs: 60_000 },

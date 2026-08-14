@@ -135,6 +135,56 @@ Configuration:
   reply.
 - **`channelHint`** — passed straight through to `prepareChat`.
 
+## Image requests
+
+`createWhatsAppImageHandler` (see `./whatsapp`) plugs `./images` into the
+channel: it detects a drawing/picture request — with or without an attached
+photo — and replies with the generated image. It's inert unless `./images`
+is configured, so wiring it up is safe even before you've set up an image
+provider:
+
+```ts
+import { createWhatsAppImageHandler, loadBaileys } from "@diegoaltoworks/chatter/whatsapp";
+
+handleInbound = createWhatsAppInboundHandler({
+  ...,
+  images: createWhatsAppImageHandler({
+    images: imageUploader, // from `./images`'s createImageUploader
+    checkAndReserve: (senderId) => dailyImageLimiter.checkAndReserve(senderId),
+    downloadPhoto: async (message) => {
+      const baileys = await loadBaileys();
+      return new Uint8Array((await baileys.downloadMediaMessage(message, "buffer", {})) as Buffer);
+    },
+    strings: {
+      ack: "Working on it!",
+      limitReached: "That's enough images for today — try again tomorrow.",
+      moderationBlocked: "I can't draw that one.",
+      error: "Something went wrong generating that image.",
+    },
+  }),
+});
+```
+
+- **`images`** (required) — the slice of an `ImageUploader` this module
+  needs: `isConfigured`, `peekCached`, `getOrCreateImage`.
+- **`checkAndReserve`** — an optional per-sender/day cap (e.g. `./usage`'s
+  `DailyLimiter.checkAndReserve`). Checked only on a cache miss, so a
+  repeated request never burns a unit of quota.
+- **`downloadPhoto`** — resolves the attached photo's bytes when a request
+  arrives with one, so the image module can composite against it. Wire it
+  through `loadBaileys` yourself, as shown above — `images.ts` never
+  imports Baileys, matching the rule that only `./baileys` touches the
+  optional peer dependency at runtime.
+- **`strings`** — no defaults are shipped for any outcome (ack, cap
+  reached, moderation-blocked, generic error); an unset string means that
+  outcome replies silently.
+
+The detector and subject-cleaner (which strips mention tokens, greetings,
+and the draw verb itself to derive the picture's subject) default to a
+generic set of drawing verbs with no bot-specific names; override both via
+`detector: { detectPattern, stripPatterns }` if your host needs different
+triggers.
+
 ## Auth state
 
 Session material (which grants full account access) is stored encrypted in
