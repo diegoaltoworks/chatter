@@ -175,9 +175,10 @@ export async function createServer(config: ChatterConfig) {
     app.route("/", openaiRoutes(deps));
   }
 
-  // Custom routes
+  // Custom routes. Awaited so async mounting (migrations, plugin registries)
+  // is complete before the caller receives a server it can start serving with.
   if (config.customRoutes) {
-    config.customRoutes(app, deps);
+    await config.customRoutes(app, deps);
   }
 
   console.log(`✅ ${config.bot.name} server ready`);
