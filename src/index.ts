@@ -76,6 +76,9 @@ export { publicRoutes } from "./routes/public";
 export type { ChatterApp } from "./server";
 // Main server factory
 export { createServer } from "./server";
+export type { Shortener, ShortenerConfig } from "./shortener";
+// Kutt-compatible URL shortener (config-injected; failures return the original URL)
+export { createShortener } from "./shortener";
 // Types
 export type {
   BotBranding,
