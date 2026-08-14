@@ -228,6 +228,15 @@ connection reports open, printing each attempt. Only an explicit logout or
 running out of attempts ends the run, so one invocation completes a link — no
 shell loop around `wa-pair` needed.
 
+Credentials keep being saved across that whole window, and the CLI holds the
+open connection until it has **re-read the stored session and seen it marked
+registered** — the flag the server looks for when deciding whether a session
+is usable often arrives on a final update just after the connection opens.
+Success is reported only after that read, so `✅ Paired session ...` means the
+server will find the session. If the flag never lands, the CLI says so and
+exits non-zero instead of claiming a link that isn't there; run `wa-pair`
+again (add `--reset` to pair from scratch).
+
 Pairing a session for the **first time** needs no restart: an unpaired
 session re-checks its auth state every 60 seconds, so the running server
 picks it up on its next check. Re-pairing **after a logout** (see
