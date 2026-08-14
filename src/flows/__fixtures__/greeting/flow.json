@@ -1,0 +1,13 @@
+{
+  "id": "greeting",
+  "name": "Greeting",
+  "description": "Collects a name and greets them",
+  "triggerKeywords": ["hello", "hi"],
+  "schema": {
+    "type": "object",
+    "properties": {
+      "name": { "type": "string", "description": "The person's name" }
+    },
+    "required": ["name"]
+  }
+}
