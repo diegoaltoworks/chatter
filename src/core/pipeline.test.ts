@@ -132,6 +132,58 @@ describe("prepareChat", () => {
     });
   });
 
+  describe("buckets", () => {
+    test("replaces the mode defaults when provided", async () => {
+      const { store, prompts, queries } = createFakes();
+
+      await prepareChat({
+        store,
+        prompts,
+        mode: "private",
+        messages,
+        buckets: ["base", "finance"],
+      });
+
+      expect(queries[0]).toEqual({
+        query: "latest question",
+        topK: 8,
+        buckets: ["base", "finance"],
+      });
+    });
+
+    test("keeps the mode topK and prompt layers", async () => {
+      const { store, prompts } = createFakes();
+
+      const result = await prepareChat({
+        store,
+        prompts,
+        mode: "public",
+        messages,
+        buckets: ["base"],
+      });
+
+      expect(result.system).toBe("rules\n\npublic persona\n\nContext:\nsome context");
+    });
+
+    test("falls back to the mode defaults when omitted", async () => {
+      const { store, prompts, queries } = createFakes();
+
+      await prepareChat({ store, prompts, mode: "private", messages, buckets: undefined });
+
+      expect(queries[0]?.buckets).toEqual(["base", "private"]);
+    });
+
+    test("an empty array retrieves nothing rather than reverting to defaults", async () => {
+      const { store, prompts, queries } = createFakes();
+
+      // Reverting here would hand back the private bucket exactly when a
+      // caller had scoped it away.
+      await prepareChat({ store, prompts, mode: "private", messages, buckets: [] });
+
+      expect(queries[0]?.buckets).toEqual([]);
+    });
+  });
+
   describe("channelHint", () => {
     test("sits between persona and context", async () => {
       const { store, prompts } = createFakes();

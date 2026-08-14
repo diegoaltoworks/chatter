@@ -9,6 +9,7 @@ import type { Client as LibsqlClient } from "@libsql/client";
 import type { Hono } from "hono";
 import type OpenAI from "openai";
 import type { AnswerFn } from "./core/answer";
+import type { BucketsFor } from "./core/buckets";
 import type { PromptLoader } from "./core/prompts";
 import type { VectorStore } from "./core/retrieval";
 
@@ -174,6 +175,23 @@ export interface ChatterConfig {
    * errors. Unset: the built-in OpenAI completion is used.
    */
   answerFn?: AnswerFn;
+
+  // Retrieval scope (advanced)
+  /**
+   * Decides which knowledge buckets each chat turn may retrieve from, given
+   * the pipeline mode and — where the surface knows it — the sender's
+   * identity. Use it for role-gated knowledge: entitle a signed-in operator
+   * to buckets an anonymous visitor cannot see.
+   *
+   * Consulted by the chat routes, the OpenAI-compatible endpoints, the MCP
+   * chat tools and the demo route. Return `undefined` to keep the mode
+   * defaults (`base` plus the mode's own bucket). For a caller the surface
+   * could not identify, the answer is filtered down to those same defaults —
+   * the hook can narrow retrieval for an unnamed caller but never widen it.
+   *
+   * Unset: the mode defaults apply everywhere.
+   */
+  bucketsFor?: BucketsFor;
 
   // Custom routes (advanced)
   /** Custom route handler for advanced use cases. May be async — see {@link CustomRoutes} */

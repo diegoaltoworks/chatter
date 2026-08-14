@@ -8,6 +8,20 @@ interface ContextWithJWT extends Context {
 }
 
 /**
+ * The verified JWT subject attached by {@link createJWTMiddleware}, or
+ * `undefined` when the request carried no identity (unauthenticated route, or
+ * a token whose payload had no `sub`).
+ *
+ * Surfaces use this as the sender identity for per-request policy such as
+ * retrieval bucket gating, where "no identity" must mean anonymous rather
+ * than an empty-string user.
+ */
+export function jwtSubject(c: Context): string | undefined {
+  const sub = (c as ContextWithJWT).jwtSub;
+  return sub && sub.trim().length > 0 ? sub : undefined;
+}
+
+/**
  * Create JWT authentication middleware for private API endpoints
  * Supports JWKS and public key PEM verification
  */

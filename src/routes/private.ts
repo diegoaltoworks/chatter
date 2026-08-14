@@ -2,8 +2,9 @@ import type { Context } from "hono";
 import { Hono } from "hono";
 import { stream } from "hono/streaming";
 import { answerOnce, answerStream } from "../core/answer";
+import { resolveBuckets } from "../core/buckets";
 import { prepareChat } from "../core/pipeline";
-import { createJWTMiddleware } from "../middleware/jwt";
+import { createJWTMiddleware, jwtSubject } from "../middleware/jwt";
 import { createRateLimiter } from "../middleware/ratelimit";
 import type { ServerDependencies } from "../types";
 
@@ -44,9 +45,16 @@ export function privateRoutes(deps: ServerDependencies) {
       return c.json({ error: "either 'message' or 'messages' required" }, 400);
     }
 
+    // The verified JWT subject is this surface's sender identity.
+    const buckets = await resolveBuckets({
+      mode: "private",
+      sender: jwtSubject(c),
+      bucketsFor: config.bucketsFor,
+    });
+
     let system: string;
     try {
-      ({ system } = await prepareChat({ store, prompts, mode: "private", messages }));
+      ({ system } = await prepareChat({ store, prompts, mode: "private", messages, buckets }));
     } catch {
       return c.json({ error: "no user message found in conversation" }, 400);
     }

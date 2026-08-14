@@ -9,6 +9,7 @@
  * so a caller-supplied brain is honoured.
  */
 
+import { defaultBuckets } from "./buckets";
 import type { PromptLoader } from "./prompts";
 import type { VectorStore } from "./retrieval";
 
@@ -42,6 +43,12 @@ const MODE_SETTINGS: Record<PipelineMode, { topK: number; label: string }> = {
  * optional, and blank (or whitespace-only) values are ignored: omit them and
  * the prompt is exactly what it has always been.
  *
+ * `buckets` does the same for retrieval scope. It is taken at face value —
+ * this is the low-level primitive, and it trusts its caller. A surface that
+ * derives buckets from anything a request controls must run them through
+ * `resolveBuckets` (see ./buckets) first, which is where the anonymous
+ * ceiling is enforced.
+ *
  * @throws if the conversation contains no user message
  */
 export async function prepareChat({
@@ -51,6 +58,7 @@ export async function prepareChat({
   messages,
   personaLayer,
   channelHint,
+  buckets,
 }: {
   store: VectorStore;
   prompts: PromptLoader;
@@ -60,6 +68,11 @@ export async function prepareChat({
   personaLayer?: string;
   /** Extra system-prompt section describing the delivery channel */
   channelHint?: string;
+  /**
+   * Retrieval buckets for this turn, replacing the mode default of
+   * `["base", mode]`. An empty array retrieves nothing.
+   */
+  buckets?: string[];
 }): Promise<PreparedChat> {
   const lastUserMsg = [...messages].reverse().find((m) => m.role === "user");
   if (!lastUserMsg) {
@@ -67,7 +80,7 @@ export async function prepareChat({
   }
 
   const { topK, label } = MODE_SETTINGS[mode];
-  const ctx = await store.query(lastUserMsg.content, topK, ["base", mode]);
+  const ctx = await store.query(lastUserMsg.content, topK, buckets ?? defaultBuckets(mode));
   const persona =
     personaLayer?.trim() || (mode === "private" ? prompts.privatePersona : prompts.publicPersona);
   const hint = channelHint?.trim();

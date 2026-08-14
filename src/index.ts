@@ -33,6 +33,9 @@ export type {
 } from "./core/answer";
 // Brain hook (answerFn-aware completion used by every chat surface)
 export { answerOnce, answerStream } from "./core/answer";
+export type { BucketsFor, BucketsForContext } from "./core/buckets";
+// Retrieval bucket seam (role-gated knowledge, with the anonymous ceiling)
+export { defaultBuckets, resolveBuckets } from "./core/buckets";
 export { detectLeakage, guardOutput, scrubOutput } from "./core/guardrails";
 export { completeOnce, completeStream, DEFAULT_MODEL } from "./core/llm";
 export { loadKnowledge } from "./core/loaders";
@@ -56,7 +59,7 @@ export { createMCPServer } from "./mcp-server";
 // Middleware (for custom routes)
 export { createAuthMiddleware } from "./middleware/auth";
 export { cors } from "./middleware/cors";
-export { createJWTMiddleware } from "./middleware/jwt";
+export { createJWTMiddleware, jwtSubject } from "./middleware/jwt";
 export { createRateLimiter } from "./middleware/ratelimit";
 export { createReferrerCheck } from "./middleware/referrer";
 export { createSessionMiddleware } from "./middleware/session";

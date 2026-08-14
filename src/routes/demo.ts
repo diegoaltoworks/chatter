@@ -7,6 +7,7 @@ import type { Context } from "hono";
 import { Hono } from "hono";
 import { stream } from "hono/streaming";
 import { answerOnce, answerStream } from "../core/answer";
+import { defaultBuckets, resolveBuckets } from "../core/buckets";
 import { createSession, getActiveSessions } from "../core/session";
 import type { ServerDependencies } from "../types";
 
@@ -195,8 +196,12 @@ export function demoRoutes(deps: ServerDependencies) {
         return c.json({ error: "no user message found in conversation" }, 400);
       }
 
-      // Retrieve context from knowledge base
-      const ctx = await store.query(lastUserMsg.content, 6, ["base", "public"]);
+      // Retrieve context from knowledge base. The demo surface is anonymous,
+      // so the hook may narrow the scope but not widen it.
+      const buckets =
+        (await resolveBuckets({ mode: "public", bucketsFor: config.bucketsFor })) ??
+        defaultBuckets("public");
+      const ctx = await store.query(lastUserMsg.content, 6, buckets);
       const system = [
         prompts.baseSystemRules,
         prompts.publicPersona,

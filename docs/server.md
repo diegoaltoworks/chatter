@@ -140,6 +140,28 @@ Omit it to use the built-in OpenAI completion. See
 [integrations.md](./integrations.md) for the streaming behaviour and the
 programmatic equivalents.
 
+### Retrieval Scope
+
+Gate knowledge buckets per caller. Every chat surface consults the hook with
+the pipeline mode and, where it knows one, the sender's identity:
+
+```typescript
+{
+  bucketsFor: async ({ mode, sender }) => {
+    if (!sender) return undefined;              // keep the mode defaults
+    return (await isStaff(sender)) ? ["base", "private"] : ["base", "public"];
+  }
+}
+```
+
+Omit it and each mode retrieves from `base` plus its own bucket. For a caller
+the surface could not identify, the hook's answer is filtered down to those
+same defaults, so it can narrow retrieval but never widen it — private
+knowledge stays out of reach of the public pipeline. See
+[integrations.md](./integrations.md) for the full rules, which surfaces consult
+the hook, and the `resolveBuckets` helper channels and custom routes should
+use.
+
 ### Custom Routes
 
 Custom routes receive the same dependencies the built-in route factories use:

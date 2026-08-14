@@ -60,6 +60,26 @@ describe("VectorStore connection", () => {
     expect(calls[0].args).toEqual(["base"]);
   });
 
+  test("retrieves nothing for an empty bucket list, without embedding the query", async () => {
+    const { db, calls } = createFakeDb();
+    const embedded: string[] = [];
+    const openai = {
+      embeddings: {
+        create: async ({ input }: { input: string[] }) => {
+          embedded.push(...input);
+          return { data: [{ embedding: [1, 0] }] };
+        },
+      },
+    } as unknown as OpenAI;
+    const store = new VectorStore(openai, { databaseClient: db });
+
+    // A caller that scoped retrieval down to nothing gets nothing - not an
+    // `IN ()` syntax error, and not a paid embedding call.
+    expect(await store.query("a question", 3, [])).toEqual([]);
+    expect(calls).toEqual([]);
+    expect(embedded).toEqual([]);
+  });
+
   test("opens a connection of its own when given credentials", () => {
     const openai = createFakeOpenAI([1, 0]);
     const credentials = { databaseUrl: "file::memory:", databaseAuthToken: "" } as const;

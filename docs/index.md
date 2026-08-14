@@ -32,6 +32,8 @@ Welcome to the Chatter documentation! This guide will help you set up and deploy
    - OpenAI-compatible endpoints (`/v1/chat/completions`)
    - Headless mode (API only, no built-in widget)
    - Programmatic RAG pipeline (no HTTP)
+   - Per-caller prompt shaping and role-gated retrieval scope
+   - Bringing your own brain (`answerFn`)
    - Deep Chat and assistant-ui sample apps
 
 5. **[Deployment](./deployment.md)** - Deploy to production
