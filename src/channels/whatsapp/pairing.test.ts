@@ -281,6 +281,61 @@ describe("runPairing", () => {
     expect(statuses.some((s) => s.includes("QR render failed"))).toBe(true);
   });
 
+  test("a handler error is surfaced via onStatus and ends the run, instead of hanging forever", async () => {
+    const statuses: string[] = [];
+    const socket = fakeSocket();
+
+    const result = runPairing({
+      connect: () => socket.sock,
+      loggedOutCode: LOGGED_OUT,
+      schedule: immediateScheduler().schedule,
+      onStatus: (message) => statuses.push(message),
+    });
+
+    await tick();
+    // A malformed update (e.g. a Boom shape Baileys didn't document) throws
+    // while the handler reads it, before a reconnect gets scheduled — that
+    // must fail the run loudly, not leave the CLI waiting on a dead socket.
+    const poisoned = { connection: "close" } as PairingConnectionUpdate;
+    Object.defineProperty(poisoned, "lastDisconnect", {
+      get() {
+        throw new Error("malformed disconnect payload");
+      },
+    });
+    socket.emit(poisoned);
+
+    expect(await result).toMatchObject({ ok: false, reason: "error" });
+    expect(statuses.some((s) => s.includes("connection.update handler error"))).toBe(true);
+    expect(statuses.some((s) => s.includes("malformed disconnect payload"))).toBe(true);
+  });
+
+  test("a superseded socket that fails to close does not block the reconnect", async () => {
+    const statuses: string[] = [];
+    const sockets = [
+      fakeSocket({
+        end: () => {
+          throw new Error("socket already destroyed");
+        },
+      }),
+      fakeSocket(),
+    ];
+
+    const result = runPairing({
+      connect: (attempt) => sockets[attempt].sock,
+      loggedOutCode: LOGGED_OUT,
+      schedule: immediateScheduler().schedule,
+      onStatus: (message) => statuses.push(message),
+    });
+
+    await tick();
+    sockets[0].emit(closedWith(RESTART_REQUIRED_STATUS));
+    await tick();
+    sockets[1].emit({ connection: "open" });
+
+    expect(statuses.some((s) => s.includes("Failed to close the previous socket"))).toBe(true);
+    expect(await result).toMatchObject({ ok: true });
+  });
+
   test("a connect failure ends the run with the underlying error", async () => {
     const result = await runPairing({
       connect: () => {

@@ -206,7 +206,14 @@ export function runPairing(deps: PairingRunDeps): Promise<PairingResult> {
         // during the reconnect delay. Counting those would fail the pairing or
         // fan out into two live sockets writing the same session row.
         generation += 1;
-        sock.end?.();
+        try {
+          sock.end?.();
+        } catch (error) {
+          // A failure closing the superseded socket must not block the
+          // reconnect that's about to happen — that would silently stall a
+          // pairing that's otherwise fine.
+          status(`Failed to close the previous socket: ${describeError(error)}`);
+        }
         status(
           statusCode === RESTART_REQUIRED_STATUS
             ? `Registered — WhatsApp asked for a restart (515). Reconnecting to finish the link (${action.attempt}/${maxAttempts})...`
@@ -230,7 +237,15 @@ export function runPairing(deps: PairingRunDeps): Promise<PairingResult> {
 
       sock.ev.on("connection.update", (update) => {
         if (mine !== generation || settled) return;
-        void handleUpdate(update, sock);
+        // A throw here means the update was never fully handled — in
+        // particular a close that never got to `schedule()` a reconnect.
+        // Surface it AND end the run rather than leaving a dead socket the
+        // CLI silently waits on forever.
+        handleUpdate(update, sock).catch((error) => {
+          const message = `connection.update handler error: ${describeError(error)}`;
+          status(message);
+          settle({ ok: false, reason: "error", message });
+        });
       });
 
       if (deps.phoneNumber && !codeRequested) {

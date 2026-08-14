@@ -209,7 +209,15 @@ bun run wa-pair [sessionId] --reset
 ```
 
 QR mode additionally needs the optional peer dependency `qrcode-terminal`
-(`bun add qrcode-terminal`); pairing-code mode does not.
+(`bun add qrcode-terminal`); pairing-code mode does not. If the terminal
+render is unavailable (dependency missing, or its exports don't match the
+runtime's interop shape), `wa-pair` prints the raw QR payload and pairing-code
+instructions instead of dead-ending — pairing keeps progressing either way.
+
+Bun's `ws` client can log an `"upgrade"`/`"unexpected-response"` "not
+implemented" warning to stderr while a socket negotiates — that's a benign gap
+in Bun's WebSocket event coverage, not a pairing failure; ignore it as long as
+the CLI keeps printing reconnect/status lines.
 
 Expect the connection to close mid-pairing — WhatsApp always asks for a
 restart (status 515) the instant a QR scan registers the device, and bounces

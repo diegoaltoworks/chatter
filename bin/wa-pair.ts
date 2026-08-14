@@ -33,6 +33,7 @@ import { createClient } from "@libsql/client";
 import { type AuthStateRuntime, useTursoAuthState } from "../src/channels/whatsapp/authState";
 import { loadBaileys } from "../src/channels/whatsapp/baileys";
 import { type PairingSocket, runPairing } from "../src/channels/whatsapp/pairing";
+import { resolveQrGenerate } from "../src/channels/whatsapp/qr";
 
 const args = process.argv.slice(2);
 
@@ -88,18 +89,48 @@ const db = createClient({
   authToken: process.env.TURSO_AUTH_TOKEN || "",
 });
 
+// A dying socket can hand back several QR refreshes before it settles; print
+// the full explanation once and just the raw code on the rest.
+let printedQrFallbackHelp = false;
+
+/**
+ * Prints the raw QR payload plus pairing-code instructions. Reached whenever
+ * the terminal render is unavailable or throws — pairing must never dead-end
+ * silently just because a QR couldn't be drawn.
+ */
+function printQrFallback(qr: string): void {
+  if (!printedQrFallbackHelp) {
+    printedQrFallbackHelp = true;
+    console.log(
+      "\nCouldn't render a QR image here. Raw code below (rarely scannable as text\n" +
+        "directly, but confirms pairing is alive) — re-run with --code <phoneNumber>\n" +
+        "for pairing-code mode instead:\n",
+    );
+  }
+  console.log(qr);
+}
+
 async function renderQr(qr: string): Promise<void> {
   const qrcodeTerminal = await import("qrcode-terminal").catch(() => undefined);
-  if (!qrcodeTerminal) {
-    console.error(
-      "❌ QR mode requires the optional peer dependency 'qrcode-terminal'. Install it with " +
-        "`bun add qrcode-terminal`, or re-run with --code <phoneNumber> for pairing-code mode instead.",
-    );
-    process.exit(1);
+  const generate = resolveQrGenerate(qrcodeTerminal);
+  if (!generate) {
+    if (!printedQrFallbackHelp) {
+      console.error(
+        "❌ QR mode requires the optional peer dependency 'qrcode-terminal' (not installed, or its " +
+          "exports weren't recognized). Install it with `bun add qrcode-terminal`, or re-run with " +
+          "--code <phoneNumber> for pairing-code mode instead.",
+      );
+    }
+    printQrFallback(qr);
+    return;
   }
   console.log("\nScan this QR code: WhatsApp -> Settings -> Linked Devices -> Link a Device.\n");
-  // biome-ignore lint/suspicious/noExplicitAny: qrcode-terminal ships no types
-  (qrcodeTerminal as any).default.generate(qr, { small: true });
+  try {
+    generate(qr, { small: true });
+  } catch (error) {
+    console.error(`❌ QR render failed: ${(error as Error).message}`);
+    printQrFallback(qr);
+  }
 }
 
 async function start(): Promise<void> {
