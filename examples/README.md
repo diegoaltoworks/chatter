@@ -265,6 +265,24 @@ endpoint.
 cd examples/assistant-ui && bun install && bun run dev
 ```
 
+## Graph frameworks (bring your own agent)
+
+Chatter also has two seams for graph-based agent frameworks such as
+[LangGraph](https://langchain-ai.github.io/langgraphjs/): as Chatter's brain,
+or with Chatter as a node inside a larger graph — see
+[docs/integrations.md](../docs/integrations.md#graph-frameworks-langgraph-and-similar).
+
+### LangGraph
+**Directory:** `langgraph-brain/`
+
+Two runnable scripts, one per direction: a LangGraph agent as Chatter's brain
+via `answerFn`, and Chatter as one node inside a larger LangGraph app via the
+OpenAI-compatible endpoint.
+
+```bash
+cd examples/langgraph-brain && bun install && bun run brain-server
+```
+
 ## Environment Variables Reference
 
 | Variable | Required | Description |

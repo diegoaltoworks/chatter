@@ -1,0 +1,22 @@
+{
+  "name": "chatter-langgraph-brain-example",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "brain-server": "bun run src/brain-server.ts",
+    "graph-node": "bun run src/graph-node.ts"
+  },
+  "dependencies": {
+    "@diegoaltoworks/chatter": "latest",
+    "@langchain/core": "^0.3.0",
+    "@langchain/langgraph": "^0.2.0",
+    "@langchain/openai": "^0.3.0",
+    "zod": "^3.25.76"
+  },
+  "devDependencies": {
+    "bun-types": "latest",
+    "typescript": "^5.6.0"
+  }
+}

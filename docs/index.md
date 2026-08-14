@@ -35,6 +35,7 @@ Welcome to the Chatter documentation! This guide will help you set up and deploy
    - Programmatic RAG pipeline (no HTTP)
    - Per-caller prompt shaping and role-gated retrieval scope
    - Bringing your own brain (`answerFn`)
+   - Graph frameworks (LangGraph, either direction)
    - Deep Chat and assistant-ui sample apps
 
 5. **[Usage Metering](./usage.md)** - Cap what paid features cost per day
