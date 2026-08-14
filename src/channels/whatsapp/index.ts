@@ -70,3 +70,5 @@ export {
   type WaLeaseRow,
   type WaLeaseStore,
 } from "./lease";
+// `./pairing` backs the wa-pair CLI and is deliberately NOT re-exported here:
+// it would become published API this subpath has to keep stable.
