@@ -1,0 +1,149 @@
+/**
+ * Channel-agnostic reply gates — pure and testable, zero imports from the
+ * rest of chatter. A transport (WhatsApp, or any future channel) resolves
+ * its own wire format into a {@link ChannelMessage} and calls
+ * {@link decideChannelAction} to learn whether to answer, stay quiet, or
+ * flip a mute switch. Nothing here knows about jids, Baileys, or any
+ * specific bot's name — mention/reply-to detection is the transport's job;
+ * this module only combines the already-resolved booleans with allowlist,
+ * mute, and rate-limit policy.
+ */
+
+/** The slice of an inbound message every channel can resolve into this shape. */
+export interface ChannelMessage {
+  /** The conversation this message belongs to — a DM thread or a group. */
+  chatId: string;
+  senderId: string;
+  text: string;
+  /** True for a 1:1 conversation; false for a group/channel with other members. */
+  isDirectMessage: boolean;
+  /** Resolved by the caller: does this message @-mention the bot? */
+  mentionsBot: boolean;
+  /** Resolved by the caller: is this message a reply to one of the bot's own messages? */
+  isReplyToBot: boolean;
+  /** True when the bot itself sent this message (including via another session — see {@link isEffectivelyFromSelf}). */
+  fromBot: boolean;
+}
+
+export type ChannelAction = "reply" | "ignore" | "mute" | "unmute";
+
+export interface ChannelGateConfig {
+  /** Chats eligible for a reply. Empty = every chat is eligible (the master allowlist switch). */
+  allowedChats: string[];
+  /** Group chats currently muted — addressed messages there are ignored until unmuted. Has no effect on DMs, which always reply. */
+  mutedChats: Set<string>;
+  /**
+   * Caller-supplied trigger for "go quiet in this group chat". No default:
+   * this module ships no bot name or in-character phrasing, so mute/unmute
+   * are inert unless a host configures a pattern. Never applied to DMs.
+   */
+  muteRegex?: RegExp;
+  unmuteRegex?: RegExp;
+}
+
+/** Tests `text` against `re` without `re`'s `lastIndex` carrying state between calls on a `g`/`y` regex the caller reuses across messages. */
+function matches(re: RegExp, text: string): boolean {
+  return new RegExp(re.source, re.flags.replace(/[gy]/g, "")).test(text);
+}
+
+/**
+ * DMs always reply. In groups, only an allowlisted, unmuted chat gets a
+ * reply, and only when addressed (mentioned or replying to the bot) —
+ * merely mentioning the bot's name in third person is not an invitation.
+ * The unmute check runs before the muted-chat gate so an unmute phrase can
+ * un-silence the bot in the same message, and both run after the allowlist
+ * so a chat the bot isn't eligible for can't toggle its mute state.
+ */
+export function decideChannelAction(msg: ChannelMessage, config: ChannelGateConfig): ChannelAction {
+  if (msg.fromBot || !msg.text.trim()) return "ignore";
+  if (!msg.isDirectMessage) {
+    if (config.allowedChats.length > 0 && !config.allowedChats.includes(msg.chatId)) {
+      return "ignore";
+    }
+    if (config.muteRegex && matches(config.muteRegex, msg.text)) return "mute";
+    if (config.unmuteRegex && matches(config.unmuteRegex, msg.text)) return "unmute";
+    if (config.mutedChats.has(msg.chatId)) return "ignore";
+    return msg.mentionsBot || msg.isReplyToBot ? "reply" : "ignore";
+  }
+  return "reply";
+}
+
+/**
+ * Sliding-window rate limiter (pure, injectable clock): true = allowed and
+ * counted. One instance guards one budget — callers wanting separate DM and
+ * group budgets create two (see {@link underReplyRateLimit}).
+ */
+export function createSlidingWindowRateLimiter(
+  maxPerWindow: number,
+  windowMs: number,
+  now: () => number = Date.now,
+) {
+  const log = new Map<string, number[]>();
+  return function allow(key: string): boolean {
+    const cutoff = now() - windowMs;
+    const entries = (log.get(key) ?? []).filter((t) => t > cutoff);
+    if (entries.length >= maxPerWindow) {
+      if (entries.length > 0) log.set(key, entries);
+      else log.delete(key);
+      return false;
+    }
+    entries.push(now());
+    log.set(key, entries);
+    return true;
+  };
+}
+
+/**
+ * Routes a chat to its DM or group rate limiter so a flood in one can't
+ * spend the other's budget — a DM flood used to be entirely unthrottled
+ * before this split existed. Each limiter is expected to be its own
+ * {@link createSlidingWindowRateLimiter} instance.
+ */
+export function underReplyRateLimit(
+  msg: Pick<ChannelMessage, "chatId" | "isDirectMessage">,
+  limiters: { dm: (chatId: string) => boolean; group: (chatId: string) => boolean },
+): boolean {
+  return msg.isDirectMessage ? limiters.dm(msg.chatId) : limiters.group(msg.chatId);
+}
+
+/**
+ * Every session's own identities ever seen, keyed by session id. A
+ * multi-session deployment (e.g. two linked numbers in one process) gives
+ * each session only its own identity from its transport — a message that
+ * actually came from a *different* session's identity looks like a
+ * stranger, not "us", and the two sessions can ping-pong replies at each
+ * other indefinitely. Callers populate this directly (`registry.set(sessionId, ids)`)
+ * as each session's identities become known, typically on connect and kept
+ * in sync as they change.
+ *
+ * Entries are NOT expected to be removed when a session disconnects: a
+ * session's own identity is still "us" while it reconnects, and losing that
+ * during exactly the disconnect/reconnect window this guard exists for
+ * would defeat it.
+ */
+export type SessionIdentityRegistry = Map<string, string[]>;
+
+/** True when `id` matches an identity of ANY session ever registered, not just the one that received the message. */
+export function isFromAnySession(
+  id: string | undefined,
+  registry: SessionIdentityRegistry,
+): boolean {
+  if (!id) return false;
+  for (const ids of registry.values()) {
+    if (ids.includes(id)) return true;
+  }
+  return false;
+}
+
+/**
+ * The one predicate transports need before deciding fromBot: a message is
+ * effectively from the bot itself if the transport already flagged it so,
+ * or if its sender id matches an identity registered by any session (the
+ * loop-guard case a single session's own flag can't catch).
+ */
+export function isEffectivelyFromSelf(
+  msg: Pick<ChannelMessage, "fromBot" | "senderId">,
+  registry: SessionIdentityRegistry,
+): boolean {
+  return msg.fromBot || isFromAnySession(msg.senderId, registry);
+}
