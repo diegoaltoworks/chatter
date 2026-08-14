@@ -59,6 +59,7 @@ import {
   underReplyRateLimit,
 } from "../gates";
 import type { WhatsAppMessageEvent } from "./channel";
+import type { WhatsAppImageHandler } from "./images";
 
 // --- jid helpers (pure, Baileys-shape only) ---
 
@@ -220,6 +221,14 @@ export interface WhatsAppInboundConfig {
     senderPhone: string;
     text: string;
   }) => string | undefined | Promise<string | undefined>;
+  /**
+   * Optional image-request routing (see `./images`). Consulted right before
+   * the normal chat pipeline; a `true` result means the message was handled
+   * as an image request (successfully or with a mapped error string) and
+   * this handler returns without answering through chat. Inert unless
+   * `./images` is configured.
+   */
+  images?: WhatsAppImageHandler;
   now?: () => number;
 }
 
@@ -316,6 +325,19 @@ export function createWhatsAppInboundHandler(
       }
 
       const senderPhone = await senderPhoneFor(sock, message, chatId);
+
+      if (config.images) {
+        const handled = await config.images({
+          sock,
+          message,
+          chatId,
+          senderId: senderPhone,
+          text,
+          hasPhoto: Boolean(message.message?.imageMessage),
+        });
+        if (handled) return;
+      }
+
       const personaLayer = await resolvePersonaLayer(config, { senderPhone, text });
       const buckets = await resolveBuckets({
         mode: "public",
