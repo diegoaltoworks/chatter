@@ -25,6 +25,7 @@
 - 📱 **Mobile Optimized**: Responsive design with iOS/Android-specific fixes
 - ⚡ **High Performance**: Built on Hono with streaming support
 - 🛡️ **Security First**: Rate limiting, CORS, referrer checking, and input guardrails
+- 💸 **Usage Metering**: Per-caller and global daily caps for paid features, multi-instance safe, via `@diegoaltoworks/chatter/usage` ([guide](./docs/usage.md))
 - 📦 **Framework Agnostic**: Works with any JavaScript framework or vanilla JS
 - 🎯 **TypeScript**: Fully typed for excellent developer experience
 
@@ -71,8 +72,9 @@ Complete guides for setup, deployment, and integration:
 - **[Requirements](./docs/requirements.md)** - OpenAI, Turso, Clerk setup and pricing
 - **[Server Setup](./docs/server.md)** - Configuration, knowledge base, prompts, API keys
 - **[Client Integration](./docs/client.md)** - Widgets, React components, theming
+- **[Usage Metering](./docs/usage.md)** - Daily spend caps for paid features
 - **[Deployment](./docs/deployment.md)** - Google Cloud Run, Fly.io, Railway, VPS
-- **[Testing](./docs/testing.md)** - Comprehensive testing guide (254 tests, 98% coverage)
+- **[Testing](./docs/testing.md)** - Comprehensive testing guide
 - **[Code Quality](./docs/CODE_QUALITY.md)** - Security assessment and architecture review
 - **[FAQs](./docs/faqs.md)** - Troubleshooting and common questions
 
