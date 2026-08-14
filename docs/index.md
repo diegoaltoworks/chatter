@@ -42,7 +42,12 @@ Welcome to the Chatter documentation! This guide will help you set up and deploy
    - Reserve-once semantics and cache-before-spend ordering
    - Multi-instance-safe Turso store, or bring your own
 
-6. **[Deployment](./deployment.md)** - Deploy to production
+6. **[WhatsApp Channel](./channels.md)** - Link a WhatsApp number as a transport
+   - Configuration, pairing (QR and pairing-code modes)
+   - Encrypted, multi-session auth state
+   - Deploy lease and reconnect behaviour
+
+7. **[Deployment](./deployment.md)** - Deploy to production
    - Platform compatibility
    - Docker deployment
    - Google Cloud Run
@@ -51,7 +56,7 @@ Welcome to the Chatter documentation! This guide will help you set up and deploy
    - VPS setup
    - Security best practices
 
-7. **[FAQs](./faqs.md)** - Common questions and troubleshooting
+8. **[FAQs](./faqs.md)** - Common questions and troubleshooting
    - General questions
    - Platform compatibility
    - Knowledge base and RAG
