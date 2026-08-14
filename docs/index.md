@@ -36,7 +36,12 @@ Welcome to the Chatter documentation! This guide will help you set up and deploy
    - Bringing your own brain (`answerFn`)
    - Deep Chat and assistant-ui sample apps
 
-5. **[Deployment](./deployment.md)** - Deploy to production
+5. **[Usage Metering](./usage.md)** - Cap what paid features cost per day
+   - Per-caller and global daily caps
+   - Reserve-once semantics and cache-before-spend ordering
+   - Multi-instance-safe Turso store, or bring your own
+
+6. **[Deployment](./deployment.md)** - Deploy to production
    - Platform compatibility
    - Docker deployment
    - Google Cloud Run
@@ -45,7 +50,7 @@ Welcome to the Chatter documentation! This guide will help you set up and deploy
    - VPS setup
    - Security best practices
 
-6. **[FAQs](./faqs.md)** - Common questions and troubleshooting
+7. **[FAQs](./faqs.md)** - Common questions and troubleshooting
    - General questions
    - Platform compatibility
    - Knowledge base and RAG
