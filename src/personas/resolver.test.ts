@@ -2,6 +2,9 @@ import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { type PipelineMessage, prepareChat } from "../core/pipeline";
+import type { PromptLoader } from "../core/prompts";
+import type { VectorStore } from "../core/retrieval";
 import { createPersonaResolver, type PersonaRegistry } from "./resolver";
 
 let dir: string;
@@ -233,5 +236,29 @@ describe("createPersonaResolver", () => {
     writeFileSync(registryPath, JSON.stringify(registry), "utf-8");
     const resolver = createPersonaResolver({ registryPath });
     expect(resolver.personaLayerFor("default")).toBe("You are the default assistant.");
+  });
+
+  test("a real resolver's output feeds prepareChat's personaLayer, replacing the mode persona", async () => {
+    const resolver = createPersonaResolver({
+      registry: baseRegistry(),
+      promptsDir: dir,
+      vars: { botName: "Chatter" },
+      random: () => 0,
+    });
+
+    const store = {
+      query: async () => ["some context"],
+    } as unknown as VectorStore;
+    const prompts = {
+      baseSystemRules: "rules",
+      publicPersona: "the mode's own persona, never expected in the result",
+    } as unknown as PromptLoader;
+    const messages: PipelineMessage[] = [{ role: "user", content: "hi" }];
+
+    const personaLayer = resolver.resolvePersonaLayer("alice") ?? undefined;
+    const result = await prepareChat({ store, prompts, mode: "public", messages, personaLayer });
+
+    expect(result.system).toContain("You are Chatter, speaking as Alt.");
+    expect(result.system).not.toContain("the mode's own persona");
   });
 });

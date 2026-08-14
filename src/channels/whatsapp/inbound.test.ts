@@ -1,8 +1,12 @@
 import { describe, expect, mock, test } from "bun:test";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import type { WAMessage, WASocket } from "@whiskeysockets/baileys";
 import type OpenAI from "openai";
 import type { PromptLoader } from "../../core/prompts";
 import type { VectorStore } from "../../core/retrieval";
+import { createPersonaResolver } from "../../personas/resolver";
 import type { SessionIdentityRegistry } from "../gates";
 import type { WhatsAppMessageEvent } from "./channel";
 import {
@@ -558,6 +562,36 @@ describe("createWhatsAppInboundHandler", () => {
     await handler(waEvent(sock));
 
     expect(capturedSystem).toContain("you are a pirate");
+  });
+
+  test("a real createPersonaResolver wired as personaResolver reaches prepareChat's system prompt", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "inbound-personas-"));
+    try {
+      writeFileSync(join(dir, "alt.txt"), "you are the registry-configured alt persona", "utf-8");
+      const resolver = createPersonaResolver({
+        promptsDir: dir,
+        registry: {
+          defaultPersona: "alt",
+          personas: { alt: { name: "Alt", prompt: "alt.txt" } },
+        },
+      });
+
+      let capturedSystem = "";
+      const { handler, sock } = createHarness({
+        answerFn: async (input) => {
+          capturedSystem = input.system;
+          return "ok";
+        },
+        personaResolver: ({ senderPhone }) =>
+          resolver.resolvePersonaLayer(senderPhone) ?? undefined,
+      });
+
+      await handler(waEvent(sock));
+
+      expect(capturedSystem).toContain("you are the registry-configured alt persona");
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
   });
 
   test("a throwing personaResolver degrades to no persona instead of failing the reply", async () => {
