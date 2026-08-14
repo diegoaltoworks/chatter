@@ -59,6 +59,11 @@
       "types": "./dist/images/index.d.ts",
       "import": "./dist/images/index.mjs",
       "require": "./dist/images/index.js"
+    },
+    "./scheduler": {
+      "types": "./dist/scheduler/index.d.ts",
+      "import": "./dist/scheduler/index.mjs",
+      "require": "./dist/scheduler/index.js"
     }
   },
   "files": [
@@ -68,7 +73,7 @@
   ],
   "scripts": {
     "dev": "bun --watch src/index.ts",
-    "build": "bun run build:clean && bun run build:types && bun run build:esm && bun run build:cjs && bun run build:mcp && bun run build:usage && bun run build:personas && bun run build:channels && bun run build:whatsapp && bun run build:flows && bun run build:images && bun run build:bin && bun run build:client && bun run build:copy-client",
+    "build": "bun run build:clean && bun run build:types && bun run build:esm && bun run build:cjs && bun run build:mcp && bun run build:usage && bun run build:personas && bun run build:channels && bun run build:whatsapp && bun run build:flows && bun run build:images && bun run build:scheduler && bun run build:bin && bun run build:client && bun run build:copy-client",
     "build:clean": "rm -rf dist",
     "build:types": "tsc --emitDeclarationOnly --outDir dist",
     "build:esm": "esbuild src/index.ts --bundle --format=esm --outfile=dist/index.mjs --external:hono --external:openai --external:@libsql/client --external:jose --platform=node --target=node24",
@@ -80,6 +85,7 @@
     "build:whatsapp": "esbuild src/channels/whatsapp/index.ts --bundle --format=esm --outfile=dist/channels/whatsapp/index.mjs --external:@libsql/client --external:@whiskeysockets/baileys --platform=node --target=node24 && esbuild src/channels/whatsapp/index.ts --bundle --format=cjs --outfile=dist/channels/whatsapp/index.js --external:@libsql/client --external:@whiskeysockets/baileys --platform=node --target=node24",
     "build:flows": "esbuild src/flows/index.ts --bundle --format=esm --outfile=dist/flows/index.mjs --external:@libsql/client --external:openai --platform=node --target=node24 && esbuild src/flows/index.ts --bundle --format=cjs --outfile=dist/flows/index.js --external:@libsql/client --external:openai --platform=node --target=node24",
     "build:images": "esbuild src/images/index.ts --bundle --format=esm --outfile=dist/images/index.mjs --external:@libsql/client --external:openai --platform=node --target=node24 && esbuild src/images/index.ts --bundle --format=cjs --outfile=dist/images/index.js --external:@libsql/client --external:openai --platform=node --target=node24",
+    "build:scheduler": "esbuild src/scheduler/index.ts --bundle --format=esm --outfile=dist/scheduler/index.mjs --external:@libsql/client --external:openai --platform=node --target=node24 && esbuild src/scheduler/index.ts --bundle --format=cjs --outfile=dist/scheduler/index.js --external:@libsql/client --external:openai --platform=node --target=node24",
     "build:bin": "esbuild bin/create-apikey.ts --bundle --format=cjs --outfile=dist/bin/create-apikey.js --external:jose --platform=node --target=node18 --banner:js='#!/usr/bin/env node' && esbuild bin/wa-pair.ts --bundle --format=cjs --outfile=dist/bin/wa-pair.js --external:@libsql/client --external:@whiskeysockets/baileys --external:qrcode-terminal --platform=node --target=node18 --banner:js='#!/usr/bin/env node'",
     "build:client": "cd src/client && bun run build",
     "build:copy-client": "mkdir -p dist/static && cp src/client/dist/chatter.js src/client/dist/chatter.css dist/static/",
