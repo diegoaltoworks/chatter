@@ -18,7 +18,7 @@ export interface PipelineMessage {
 }
 
 export interface PreparedChat {
-  /** Fully assembled system prompt (rules + persona + retrieved context) */
+  /** Fully assembled system prompt (see `prepareChat` for the layer order) */
   system: string;
   /** Conversation messages, unchanged */
   messages: PipelineMessage[];
@@ -32,6 +32,14 @@ const MODE_SETTINGS: Record<PipelineMode, { topK: number; label: string }> = {
 /**
  * Run retrieval for the latest user message and assemble the system prompt.
  *
+ * The assembled system prompt is layered, in order:
+ * base rules → persona → channel hint (optional) → retrieved context.
+ *
+ * `personaLayer` and `channelHint` let a caller shape those middle layers
+ * without hand-rolling its own sandwich around `store`/`prompts`. Both are
+ * optional, and blank (or whitespace-only) values are ignored: omit them and
+ * the prompt is exactly what it has always been.
+ *
  * @throws if the conversation contains no user message
  */
 export async function prepareChat({
@@ -39,11 +47,17 @@ export async function prepareChat({
   prompts,
   mode,
   messages,
+  personaLayer,
+  channelHint,
 }: {
   store: VectorStore;
   prompts: PromptLoader;
   mode: PipelineMode;
   messages: PipelineMessage[];
+  /** Replaces the mode's persona from the loader when provided */
+  personaLayer?: string;
+  /** Extra system-prompt section describing the delivery channel */
+  channelHint?: string;
 }): Promise<PreparedChat> {
   const lastUserMsg = [...messages].reverse().find((m) => m.role === "user");
   if (!lastUserMsg) {
@@ -52,8 +66,15 @@ export async function prepareChat({
 
   const { topK, label } = MODE_SETTINGS[mode];
   const ctx = await store.query(lastUserMsg.content, topK, ["base", mode]);
-  const persona = mode === "private" ? prompts.privatePersona : prompts.publicPersona;
-  const system = [prompts.baseSystemRules, persona, `${label}:\n${ctx.join("\n\n")}`].join("\n\n");
+  const persona =
+    personaLayer?.trim() || (mode === "private" ? prompts.privatePersona : prompts.publicPersona);
+  const hint = channelHint?.trim();
+  const system = [
+    prompts.baseSystemRules,
+    persona,
+    ...(hint ? [hint] : []),
+    `${label}:\n${ctx.join("\n\n")}`,
+  ].join("\n\n");
 
   return { system, messages };
 }
