@@ -14,6 +14,15 @@
  * So a close during pairing is normal, not fatal: reconnect with stored creds,
  * bounded, until `open` confirms the link. Only an explicit logout or running
  * out of attempts ends the run.
+ *
+ * Credentials are persisted by this loop rather than by the caller's socket
+ * wiring, because the saves have to be ordered against the reconnects: the
+ * registration that a 515 interrupts is only useful if it reaches storage
+ * BEFORE the next attempt re-reads the session, and the flag that marks the
+ * session usable (`registered`) is often written by a `creds.update` that
+ * lands around or after `open`. A run therefore ends successfully only once
+ * the caller confirms — by reading storage back — that the stored session is
+ * registered.
  */
 
 /** Baileys' "restart required" — emitted immediately after a QR scan registers the device. */
@@ -25,6 +34,14 @@ export const MAX_PAIRING_RECONNECTS = 12;
 const PAIRING_RECONNECT_DELAY_MS = 2_000;
 const PAIRING_RECONNECT_MAX_DELAY_MS = 8_000;
 const RESTART_REQUIRED_DELAY_MS = 500;
+
+/**
+ * How long to keep the freshly-opened socket alive waiting for the stored
+ * session to read back as registered. Generous: the flag arrives on WhatsApp's
+ * schedule, and giving up early is exactly the bug this window exists to fix.
+ */
+const REGISTERED_CONFIRM_TIMEOUT_MS = 15_000;
+const REGISTERED_CONFIRM_POLL_MS = 500;
 
 /**
  * Backoff between pairing attempts. Deliberately tighter than the transport's
@@ -73,12 +90,26 @@ export function decidePairingClose(input: PairingCloseInput): PairingCloseAction
 /** The slice of a Baileys socket the pairing loop uses. */
 export interface PairingSocket {
   ev: {
-    on: (event: "connection.update", listener: (update: PairingConnectionUpdate) => void) => void;
+    on: (
+      event: "connection.update" | "creds.update",
+      listener: (update: PairingConnectionUpdate) => void,
+    ) => void;
   };
   user?: { id?: string } | null;
   requestPairingCode: (phoneNumber: string) => Promise<string>;
   /** Closes a superseded socket so it stops writing to the session. */
   end?: (error?: Error) => void;
+}
+
+/**
+ * A socket plus the way to persist the credentials it mutates. Returning the
+ * pair (instead of wiring `creds.update` at the call site) lets the loop order
+ * saves against reconnects — see the module comment.
+ */
+export interface PairingAttempt {
+  sock: PairingSocket;
+  /** Writes this attempt's credentials to storage; called on every `creds.update`. */
+  saveCreds?: () => Promise<void>;
 }
 
 /** Baileys rejects with Boom objects; keep whatever the payload says rather than `undefined`. */
@@ -94,16 +125,30 @@ export interface PairingConnectionUpdate {
 
 export type PairingResult =
   | { ok: true; userId?: string }
-  | { ok: false; reason: "loggedOut" | "exhausted" | "error"; message: string };
+  | { ok: false; reason: "loggedOut" | "exhausted" | "error" | "unregistered"; message: string };
 
 export interface PairingRunDeps {
   /**
-   * Opens a socket for `attempt` (0 = first). MUST reuse the stored
+   * Opens a socket for `attempt` (0 = first). MUST re-read the stored
    * credentials — a reconnect that starts from blank creds shows a fresh QR
    * instead of finishing the link the phone is waiting on.
    */
-  connect: (attempt: number) => PairingSocket | Promise<PairingSocket>;
+  connect: (
+    attempt: number,
+  ) => PairingSocket | PairingAttempt | Promise<PairingSocket | PairingAttempt>;
   loggedOutCode: number;
+  /**
+   * Reads the STORED session back and answers whether it is registered — i.e.
+   * whether the server would find a usable session. Polled after `open` while
+   * late `creds.update` events are still being persisted; a run that never
+   * sees `true` fails with reason `unregistered` rather than claiming success
+   * over a session nothing can use. Omit to skip the check.
+   */
+  verifyRegistered?: () => boolean | Promise<boolean>;
+  /** How long to wait for the stored session to read back registered. */
+  registeredTimeoutMs?: number;
+  /** Gap between those reads. */
+  registeredPollMs?: number;
   /** Digits-only number for pairing-code mode; omit for QR mode. */
   phoneNumber?: string;
   maxAttempts?: number;
@@ -145,6 +190,56 @@ export function runPairing(deps: PairingRunDeps): Promise<PairingResult> {
 
     const status = (message: string) => deps.onStatus?.(message);
 
+    const wait = (ms: number) =>
+      new Promise<void>((resolve) => {
+        schedule(() => resolve(), ms);
+      });
+
+    // Saves are chained rather than fired in parallel: they all write the same
+    // session row, so the last writer wins and out-of-order writes lose the
+    // registration.
+    let saves: Promise<void> = Promise.resolve();
+
+    const queueSave = (saveCreds: () => Promise<void>) => {
+      saves = saves.then(saveCreds).catch((error) => {
+        status(`Failed to save the session credentials: ${describeError(error)}`);
+      });
+    };
+
+    /** Resolves once every save requested so far — including any queued while waiting — has landed. */
+    const flushSaves = async (): Promise<void> => {
+      let awaited: Promise<void> | undefined;
+      while (awaited !== saves) {
+        awaited = saves;
+        await awaited;
+      }
+    };
+
+    /**
+     * Holds the open socket until storage confirms the session is registered,
+     * flushing between reads so a `creds.update` that lands after `open` is
+     * both persisted and seen.
+     */
+    const confirmRegistered = async (): Promise<boolean> => {
+      await flushSaves();
+      const verify = deps.verifyRegistered;
+      if (!verify) return true;
+      const pollMs = deps.registeredPollMs ?? REGISTERED_CONFIRM_POLL_MS;
+      const polls = Math.max(
+        1,
+        Math.ceil((deps.registeredTimeoutMs ?? REGISTERED_CONFIRM_TIMEOUT_MS) / pollMs),
+      );
+      for (let poll = 0; poll < polls; poll++) {
+        if (await verify()) return true;
+        if (poll === polls - 1) break;
+        if (poll === 0)
+          status("Link is open — waiting for the session to be saved as registered...");
+        await wait(pollMs);
+        await flushSaves();
+      }
+      return false;
+    };
+
     const requestCode = async (sock: PairingSocket) => {
       if (settled || codeRequested || !deps.phoneNumber) return;
       try {
@@ -174,7 +269,17 @@ export function runPairing(deps: PairingRunDeps): Promise<PairingResult> {
       }
 
       if (connection === "open") {
-        settle({ ok: true, userId: sock.user?.id });
+        if (await confirmRegistered()) {
+          settle({ ok: true, userId: sock.user?.id });
+        } else {
+          settle({
+            ok: false,
+            reason: "unregistered",
+            message:
+              "The link opened but the stored session never read back as registered, so the server " +
+              "would not find it. Run wa-pair again (add --reset to pair from scratch).",
+          });
+        }
         return;
       }
 
@@ -227,12 +332,35 @@ export function runPairing(deps: PairingRunDeps): Promise<PairingResult> {
       if (settled) return;
       const mine = generation;
       const attempt = attempts;
+      // `connect` re-reads the stored session, so everything the superseded
+      // socket wrote has to be in storage first — above all the registration
+      // that the 515 close interrupts.
+      await flushSaves();
+      if (settled) return;
       let sock: PairingSocket;
+      let saveCreds: (() => Promise<void>) | undefined;
       try {
-        sock = await deps.connect(attempt);
+        const opened = await deps.connect(attempt);
+        if ("sock" in opened) {
+          sock = opened.sock;
+          saveCreds = opened.saveCreds;
+        } else {
+          sock = opened;
+        }
       } catch (error) {
         settle({ ok: false, reason: "error", message: describeError(error) });
         return;
+      }
+
+      if (saveCreds) {
+        const save = saveCreds;
+        sock.ev.on("creds.update", () => {
+          // A superseded socket must not write its own (older) credentials
+          // over the live socket's — that is how a registered session gets
+          // stamped back down to unregistered.
+          if (settled || mine !== generation) return;
+          queueSave(save);
+        });
       }
 
       sock.ev.on("connection.update", (update) => {

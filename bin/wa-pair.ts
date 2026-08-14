@@ -18,7 +18,10 @@
  * registers the device, and again while a pairing code is being typed. The
  * link only completes if the client comes straight back with the same stored
  * credentials, so this script reconnects automatically (bounded) until the
- * connection reports "open". See src/channels/whatsapp/pairing.ts.
+ * connection reports "open". Credentials keep being saved across that window,
+ * and success is only reported once the stored session reads back as
+ * registered — an open socket alone does not mean the server will find a
+ * usable session. See src/channels/whatsapp/pairing.ts.
  *
  * ToS note: Baileys is an unofficial WhatsApp client. A linked number can be
  * banned - use one you can afford to lose.
@@ -32,7 +35,11 @@
 import { createClient } from "@libsql/client";
 import { type AuthStateRuntime, useTursoAuthState } from "../src/channels/whatsapp/authState";
 import { loadBaileys } from "../src/channels/whatsapp/baileys";
-import { type PairingSocket, runPairing } from "../src/channels/whatsapp/pairing";
+import {
+  type PairingAttempt,
+  type PairingSocket,
+  runPairing,
+} from "../src/channels/whatsapp/pairing";
 import { resolveQrGenerate } from "../src/channels/whatsapp/qr";
 
 const args = process.argv.slice(2);
@@ -155,7 +162,7 @@ async function start(): Promise<void> {
 
   // Every attempt re-reads the stored session: a reconnect after a 515 MUST
   // carry the credentials the scan just registered, never a blank state.
-  const connect = async (attempt: number): Promise<PairingSocket> => {
+  const connect = async (attempt: number): Promise<PairingAttempt> => {
     const { state, saveCreds } = await useTursoAuthState(
       db,
       sessionSecret as string,
@@ -194,12 +201,21 @@ async function start(): Promise<void> {
       markOnlineOnConnect: false,
     });
 
-    sock.ev.on("creds.update", saveCreds);
-    return sock as unknown as PairingSocket;
+    // `creds.update` is wired by runPairing, which orders the saves against
+    // the reconnects — see src/channels/whatsapp/pairing.ts.
+    return { sock: sock as unknown as PairingSocket, saveCreds };
+  };
+
+  // The success line must mean "the server will find this session", so it is
+  // gated on reading the stored row back, not on the socket reporting open.
+  const storedIsRegistered = async (): Promise<boolean> => {
+    const { state } = await useTursoAuthState(db, sessionSecret as string, sessionId, runtime);
+    return state.creds.registered === true;
   };
 
   const result = await runPairing({
     connect,
+    verifyRegistered: storedIsRegistered,
     loggedOutCode: baileys.DisconnectReason.loggedOut,
     phoneNumber,
     onQr: renderQr,
@@ -219,7 +235,9 @@ async function start(): Promise<void> {
     process.exit(1);
   }
 
-  console.log(`\n✅ Paired session "${sessionId}" as ${result.userId}. Session saved (encrypted).`);
+  console.log(
+    `\n✅ Paired session "${sessionId}" as ${result.userId}. Session saved (encrypted) and verified registered.`,
+  );
   console.log("The running server will pick this session up on its next connect.");
   process.exit(0);
 }

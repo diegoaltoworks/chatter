@@ -60,26 +60,72 @@ describe("decidePairingClose", () => {
   });
 });
 
-/** A socket whose `connection.update` listener the test drives by hand. */
+/** A socket whose `connection.update` and `creds.update` listeners the test drives by hand. */
 function fakeSocket(overrides: Partial<PairingSocket> = {}) {
-  const listeners: ((update: PairingConnectionUpdate) => void)[] = [];
+  const listeners: Record<string, ((update: PairingConnectionUpdate) => void)[]> = {};
   const ended: true[] = [];
   const sock: PairingSocket = {
-    ev: { on: (_event, listener) => listeners.push(listener) },
+    ev: {
+      on: (event, listener) => {
+        const registered = listeners[event] ?? [];
+        registered.push(listener);
+        listeners[event] = registered;
+      },
+    },
     user: { id: "44700000000:1@s.whatsapp.net" },
     requestPairingCode: async () => "ABCD-EFGH",
     end: () => ended.push(true),
     ...overrides,
+  };
+  const fire = (event: string, update: PairingConnectionUpdate) => {
+    for (const listener of [...(listeners[event] ?? [])]) listener(update);
   };
   return {
     sock,
     get ended() {
       return ended.length > 0;
     },
-    emit: (update: PairingConnectionUpdate) => {
-      for (const listener of [...listeners]) listener(update);
+    emit: (update: PairingConnectionUpdate) => fire("connection.update", update),
+    /** Baileys mutates the creds in place and then just says "they changed". */
+    emitCreds: () => fire("creds.update", {}),
+  };
+}
+
+/**
+ * The stored (encrypted) session row plus the per-socket credentials Baileys
+ * mutates — the shape `useTursoAuthState` hands the CLI. Writes are not
+ * instant, which is the whole point: a reconnect that re-reads too early sees
+ * a session that is not registered yet.
+ */
+function fakeSession() {
+  const stored = { creds: { registered: false } };
+  return {
+    stored,
+    /** What a fresh `useTursoAuthState` gives an attempt: a snapshot plus its saver. */
+    open() {
+      const creds = { ...stored.creds };
+      return {
+        creds,
+        saveCreds: async () => {
+          await tick();
+          stored.creds = { ...creds };
+        },
+      };
     },
   };
+}
+
+/** Real timers (so ordering matches production) with the waiting compressed away. */
+const fastScheduler = (fn: () => void, ms: number) => {
+  setTimeout(fn, Math.min(ms, 1));
+};
+
+async function until(condition: () => boolean, label: string): Promise<void> {
+  for (let i = 0; i < 500; i++) {
+    if (condition()) return;
+    await tick();
+  }
+  throw new Error(`timed out waiting for ${label}`);
 }
 
 /** Runs scheduled callbacks immediately, recording the delays that were asked for. */
@@ -370,5 +416,162 @@ describe("runPairing", () => {
 
     expect(result).toMatchObject({ ok: false, reason: "exhausted" });
     expect(connects).toBe(MAX_PAIRING_RECONNECTS + 1);
+  });
+});
+
+describe("runPairing credential persistence", () => {
+  test("the registration written during the 515 window reaches storage before the reconnect re-reads it", async () => {
+    const session = fakeSession();
+    const sockets = [fakeSocket(), fakeSocket()];
+    const opened: { registered: boolean }[] = [];
+
+    const result = runPairing({
+      connect: (attempt) => {
+        const { creds, saveCreds } = session.open();
+        opened.push(creds);
+        return { sock: sockets[attempt].sock, saveCreds };
+      },
+      loggedOutCode: LOGGED_OUT,
+      verifyRegistered: () => session.stored.creds.registered,
+      registeredPollMs: 5,
+      registeredTimeoutMs: 2_000,
+      schedule: fastScheduler,
+    });
+
+    await tick();
+    // The scan registers the device: Baileys flips the flag on the socket's
+    // creds and announces it, and WhatsApp bounces the socket with 515 before
+    // the write has landed.
+    opened[0].registered = true;
+    sockets[0].emitCreds();
+    sockets[0].emit(closedWith(RESTART_REQUIRED_STATUS));
+
+    await until(() => opened.length === 2, "the reconnect");
+    expect(opened[1].registered).toBe(true);
+
+    sockets[1].emit({ connection: "open" });
+    expect(await result).toEqual({ ok: true, userId: "44700000000:1@s.whatsapp.net" });
+    expect(session.stored.creds.registered).toBe(true);
+  });
+
+  test("success waits for a creds.update that only lands after the connection opens", async () => {
+    const session = fakeSession();
+    const sockets = [fakeSocket(), fakeSocket()];
+    const opened: { registered: boolean }[] = [];
+    const statuses: string[] = [];
+
+    const result = runPairing({
+      connect: (attempt) => {
+        const { creds, saveCreds } = session.open();
+        opened.push(creds);
+        return { sock: sockets[attempt].sock, saveCreds };
+      },
+      loggedOutCode: LOGGED_OUT,
+      verifyRegistered: () => session.stored.creds.registered,
+      registeredPollMs: 5,
+      registeredTimeoutMs: 2_000,
+      schedule: fastScheduler,
+      onStatus: (message) => statuses.push(message),
+    });
+
+    await tick();
+    sockets[0].emit(closedWith(RESTART_REQUIRED_STATUS));
+    await until(() => opened.length === 2, "the reconnect");
+
+    sockets[1].emit({ connection: "open" });
+    await tick();
+    // Nothing usable is stored yet, so the run must still be waiting.
+    expect(session.stored.creds.registered).toBe(false);
+
+    opened[1].registered = true;
+    sockets[1].emitCreds();
+
+    expect(await result).toMatchObject({ ok: true });
+    expect(session.stored.creds.registered).toBe(true);
+    expect(statuses.some((s) => s.includes("waiting for the session"))).toBe(true);
+  });
+
+  test("a link that never registers fails loudly instead of reporting a session the server cannot use", async () => {
+    const session = fakeSession();
+    const socket = fakeSocket();
+
+    const result = runPairing({
+      connect: () => {
+        const { saveCreds } = session.open();
+        return { sock: socket.sock, saveCreds };
+      },
+      loggedOutCode: LOGGED_OUT,
+      verifyRegistered: () => session.stored.creds.registered,
+      registeredPollMs: 5,
+      registeredTimeoutMs: 30,
+      schedule: fastScheduler,
+    });
+
+    await tick();
+    socket.emit({ connection: "open" });
+
+    expect(await result).toMatchObject({ ok: false, reason: "unregistered" });
+    expect((await result) as { message: string }).toMatchObject({
+      message: expect.stringContaining("never read back as registered"),
+    });
+  });
+
+  test("a superseded socket's creds.update cannot stamp the live session back down", async () => {
+    const session = fakeSession();
+    const sockets = [fakeSocket(), fakeSocket()];
+    const opened: { registered: boolean }[] = [];
+
+    const result = runPairing({
+      connect: (attempt) => {
+        const { creds, saveCreds } = session.open();
+        opened.push(creds);
+        return { sock: sockets[attempt].sock, saveCreds };
+      },
+      loggedOutCode: LOGGED_OUT,
+      verifyRegistered: () => session.stored.creds.registered,
+      registeredPollMs: 5,
+      registeredTimeoutMs: 50,
+      schedule: fastScheduler,
+    });
+
+    await tick();
+    sockets[0].emit(closedWith(RESTART_REQUIRED_STATUS));
+    await until(() => opened.length === 2, "the reconnect");
+
+    opened[1].registered = true;
+    sockets[1].emitCreds();
+    // The dying socket announces its own (pre-registration) creds afterwards.
+    sockets[0].emitCreds();
+    sockets[1].emit({ connection: "open" });
+
+    expect(await result).toMatchObject({ ok: true });
+    expect(session.stored.creds.registered).toBe(true);
+  });
+
+  test("a failing save is reported and does not crash the run", async () => {
+    const socket = fakeSocket();
+    const statuses: string[] = [];
+
+    const result = runPairing({
+      connect: () => ({
+        sock: socket.sock,
+        saveCreds: async () => {
+          throw new Error("turso unreachable");
+        },
+      }),
+      loggedOutCode: LOGGED_OUT,
+      verifyRegistered: () => false,
+      registeredPollMs: 5,
+      registeredTimeoutMs: 30,
+      schedule: fastScheduler,
+      onStatus: (message) => statuses.push(message),
+    });
+
+    await tick();
+    socket.emitCreds();
+    socket.emit({ connection: "open" });
+
+    expect(await result).toMatchObject({ ok: false, reason: "unregistered" });
+    expect(statuses.some((s) => s.includes("turso unreachable"))).toBe(true);
   });
 });
