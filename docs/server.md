@@ -182,6 +182,30 @@ Passing `databaseUrl` / `databaseAuthToken` instead makes the store open its
 own connection; either way the client it ends up using is available as
 `store.db`.
 
+#### Async mounting
+
+`customRoutes` may be async, and `createServer` awaits it. Set-up the routes
+depend on — schema migrations, plugin registries, connecting to a transport —
+can therefore be done inline, and the app is only handed back once it has
+finished. There is no need for a readiness flag that handlers re-check on every
+request:
+
+```typescript
+{
+  customRoutes: async (app, deps) => {
+    await deps.db.execute("CREATE TABLE IF NOT EXISTS my_plugin_state (...)");
+    const registry = await loadPluginRegistry(deps);
+
+    app.get("/my-route", (c) => c.json(registry.summary()));
+  }
+}
+```
+
+Synchronous functions keep working unchanged, including expression-bodied ones
+that return the app for chaining. If the mount throws or rejects, `createServer`
+rejects with that error rather than returning a half-mounted app, so a failed
+migration fails start-up instead of surfacing later as broken routes.
+
 ### Authentication
 
 #### API Key Secret (Required for Public Chat)

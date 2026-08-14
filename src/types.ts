@@ -176,9 +176,28 @@ export interface ChatterConfig {
   answerFn?: AnswerFn;
 
   // Custom routes (advanced)
-  /** Custom route handler for advanced use cases */
-  customRoutes?: (app: Hono, deps: ServerDependencies) => void;
+  /** Custom route handler for advanced use cases. May be async — see {@link CustomRoutes} */
+  customRoutes?: CustomRoutes;
 }
+
+/**
+ * Mounts additional routes on the server's Hono app.
+ *
+ * May be synchronous or return a promise; `createServer` awaits it, so
+ * asynchronous set-up (database migrations, plugin registries, anything the
+ * routes depend on) is guaranteed to have finished before the server is handed
+ * back and starts serving requests. A rejection fails startup rather than
+ * leaving the app half-mounted.
+ *
+ * Declared as a union of two function types rather than one returning
+ * `void | Promise<void>`: TypeScript only ignores a callback's return value
+ * when the expected return type is exactly `void`, so the union keeps
+ * expression-bodied mounts like `(app) => app.get(...)` — which return the
+ * Hono app for chaining — assignable.
+ */
+export type CustomRoutes =
+  | ((app: Hono, deps: ServerDependencies) => void)
+  | ((app: Hono, deps: ServerDependencies) => Promise<void>);
 
 /**
  * Dependencies passed to route factories and middleware

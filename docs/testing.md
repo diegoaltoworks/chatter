@@ -23,11 +23,16 @@ bun test --coverage
 
 ## Test Suite Overview
 
-**Total Tests:** 254 tests across 17 files
-- **Unit Tests:** 178 tests (co-located with source code)
-- **Integration Tests:** 55 tests (in `test/integration/`)
-- **Client Tests:** 21 tests (mobile chat widget)
-- **Pass Rate:** 99.2% (252 passing, 2 skipped)
+- **Unit tests** live beside the code they cover (`src/**/*.test.ts`) and need
+  no credentials or network — external clients are faked and databases are
+  in-memory.
+- **Integration tests** live in `test/integration/` and skip themselves unless
+  `OPENAI_API_KEY` and `TURSO_URL` are set, so `bun test` is green on a clean
+  checkout.
+- **Client tests** cover the widget in `src/client/`.
+
+Run `bun test` for the current counts; `bun run check` additionally typechecks,
+lints and audits.
 
 ## Test Structure
 
@@ -35,42 +40,43 @@ bun test --coverage
 chatter/
 ├── src/
 │   ├── auth/
-│   │   ├── apikeys.ts
-│   │   └── apikeys.test.ts           ✅ 25 tests
+│   │   └── apikeys.test.ts           API key issue/verify
 │   ├── core/
-│   │   ├── guardrails.ts
-│   │   ├── guardrails.test.ts        ✅ 21 tests
-│   │   ├── loaders.ts
-│   │   ├── loaders.test.ts           ✅ 17 tests
-│   │   ├── prompts.ts
-│   │   ├── prompts.test.ts           ✅ 18 tests
-│   │   ├── session.ts
-│   │   ├── session.test.ts           ✅ 26 tests
-│   │   └── widgets.ts
-│   │       └── widgets.test.ts       ✅ 16 tests
+│   │   ├── answer.test.ts            answerFn hook + completion fallback
+│   │   ├── guardrails.test.ts        output scrubbing, leakage detection
+│   │   ├── loaders.test.ts           knowledge loading
+│   │   ├── pipeline.test.ts          prompt assembly, persona layering
+│   │   ├── prompts.test.ts           prompt loader
+│   │   ├── retrieval.test.ts         vector store connection wiring
+│   │   ├── session.test.ts           session lifecycle
+│   │   └── widgets.test.ts           static asset resolution
 │   ├── middleware/
-│   │   ├── auth.test.ts              ✅ 12 tests
-│   │   ├── cors.test.ts              ✅ 13 tests
-│   │   ├── jwt.test.ts               ✅ 14 tests
-│   │   ├── ratelimit.test.ts         ✅ 16 tests
-│   │   ├── referrer.test.ts          ✅ 13 tests
-│   │   └── session.test.ts           ✅ 11 tests
+│   │   ├── auth.test.ts
+│   │   ├── cors.test.ts
+│   │   ├── jwt.test.ts
+│   │   ├── ratelimit.test.ts
+│   │   ├── referrer.test.ts
+│   │   └── session.test.ts
+│   ├── routes/
+│   │   ├── chat.test.ts              chat route behaviour
+│   │   └── openai.test.ts            OpenAI-compatible endpoints
+│   ├── server.test.ts                custom-route mounting (sync + async)
 │   └── client/
 │       └── __tests__/
-│           └── mobile-chat.test.ts   ✅ 27 tests
+│           └── mobile-chat.test.ts   widget
 └── test/
     └── integration/
-        ├── public-routes.test.ts     ✅ 15 tests
-        ├── private-routes.test.ts    ✅ 13 tests
-        ├── demo-routes.test.ts       ✅ 13 tests
-        └── server.test.ts            ✅ 14 tests
+        ├── public-routes.test.ts
+        ├── private-routes.test.ts
+        ├── demo-routes.test.ts
+        └── server.test.ts
 ```
 
 ## Module Coverage
 
-### Authentication & Security (100% Coverage)
+### Authentication & Security
 
-#### auth/apikeys.test.ts (25 tests)
+#### auth/apikeys.test.ts
 Tests JWT-based API key management:
 - ✅ Key creation with custom options (name, expiration, claims)
 - ✅ JWT verification (valid/invalid/expired/wrong signature)
@@ -80,7 +86,7 @@ Tests JWT-based API key management:
 
 **Security validated:** API key integrity, expiration enforcement, signature verification
 
-#### middleware/auth.test.ts (12 tests)
+#### middleware/auth.test.ts
 Tests authentication middleware:
 - ✅ API key validation (JWT and session keys)
 - ✅ Expired token rejection
@@ -90,7 +96,7 @@ Tests authentication middleware:
 
 **Security validated:** Request authentication, key verification flow
 
-#### middleware/jwt.test.ts (14 tests)
+#### middleware/jwt.test.ts
 Tests JWT authentication for private endpoints:
 - ✅ PEM public key verification
 - ✅ Issuer and audience validation
@@ -100,9 +106,9 @@ Tests JWT authentication for private endpoints:
 
 **Security validated:** JWT verification, claim validation, cryptographic signatures
 
-### Core Security (100% Coverage)
+### Core Security
 
-#### core/guardrails.test.ts (21 tests)
+#### core/guardrails.test.ts
 Tests security guardrails:
 - ✅ Prompt injection detection (system prompt leakage, hidden instructions)
 - ✅ Secret scrubbing (OpenAI keys, Google API keys, generic patterns)
@@ -111,7 +117,7 @@ Tests security guardrails:
 
 **Security validated:** Prompt injection prevention, secret exposure prevention
 
-#### middleware/referrer.test.ts (13 tests)
+#### middleware/referrer.test.ts
 Tests origin validation:
 - ✅ Referer checking for session/demo keys
 - ✅ Subdomain attack prevention (e.g., `example.com.evil.com`)
@@ -120,9 +126,9 @@ Tests origin validation:
 
 **Security validated:** CSRF protection, origin validation, subdomain attacks blocked
 
-### Session & Rate Limiting (100% Coverage)
+### Session & Rate Limiting
 
-#### core/session.test.ts (26 tests)
+#### core/session.test.ts
 Tests session management:
 - ✅ Session creation with custom TTL and quotas
 - ✅ Request counting and quota enforcement
@@ -132,7 +138,7 @@ Tests session management:
 
 **Performance validated:** Session lifecycle, quota enforcement, cleanup
 
-#### middleware/session.test.ts (11 tests)
+#### middleware/session.test.ts
 Tests session validation middleware:
 - ✅ Valid session key acceptance
 - ✅ Expired session rejection
@@ -141,7 +147,7 @@ Tests session validation middleware:
 
 **Performance validated:** Request throttling, session validation
 
-#### middleware/ratelimit.test.ts (16 tests)
+#### middleware/ratelimit.test.ts
 Tests rate limiting:
 - ✅ Public endpoint limits (IP-based)
 - ✅ Private endpoint limits (JWT subject-based)
@@ -151,9 +157,9 @@ Tests rate limiting:
 
 **Performance validated:** Rate limiting enforcement, DDoS protection
 
-### Request Handling (100% Coverage)
+### Request Handling
 
-#### middleware/cors.test.ts (13 tests)
+#### middleware/cors.test.ts
 Tests CORS middleware:
 - ✅ CORS headers on GET/POST requests
 - ✅ OPTIONS preflight handling
@@ -162,7 +168,7 @@ Tests CORS middleware:
 
 **Compatibility validated:** Cross-origin requests, browser compatibility
 
-#### core/prompts.test.ts (18 tests)
+#### core/prompts.test.ts
 Tests prompt templating:
 - ✅ Variable interpolation ({{botName}}, {{personName}}, {{personFirstName}})
 - ✅ Multi-word name extraction
@@ -171,7 +177,7 @@ Tests prompt templating:
 
 **Functionality validated:** Dynamic prompt generation, variable substitution
 
-#### core/loaders.test.ts (17 tests)
+#### core/loaders.test.ts
 Tests knowledge base loading:
 - ✅ Markdown file loading from all buckets (base, public, private)
 - ✅ Nested directory handling
@@ -181,7 +187,7 @@ Tests knowledge base loading:
 
 **Functionality validated:** Knowledge base initialization, file organization
 
-#### core/widgets.test.ts (16 tests)
+#### core/widgets.test.ts
 Tests static asset resolution:
 - ✅ Auto-detection of static directories
 - ✅ Explicit path configuration
@@ -190,9 +196,19 @@ Tests static asset resolution:
 
 **Deployment validated:** Asset serving, path resolution
 
-### Integration Tests (55 tests)
+#### server.test.ts
+Tests custom-route mounting through `createServer`, against an in-memory
+database and an empty knowledge directory so no paid API is reachable:
+- ✅ Async `customRoutes` fully awaited before the app is returned
+- ✅ Synchronous mounts, including expression-bodied ones returning the app
+- ✅ Database set-up done during the mount is visible to the first request
+- ✅ A rejecting mount fails start-up instead of yielding a half-built app
 
-#### test/integration/public-routes.test.ts (15 tests)
+**Plugin contract validated:** Async plugin mounting completes before readiness
+
+### Integration Tests
+
+#### test/integration/public-routes.test.ts
 Tests public chat API:
 - ✅ Full authentication flow
 - ✅ Request validation (single/array messages)
@@ -202,7 +218,7 @@ Tests public chat API:
 
 **End-to-end validated:** Public API flow, authentication, RAG
 
-#### test/integration/private-routes.test.ts (13 tests)
+#### test/integration/private-routes.test.ts
 Tests private chat API:
 - ✅ JWT authentication flow
 - ✅ Single message and conversation history
@@ -212,7 +228,7 @@ Tests private chat API:
 
 **End-to-end validated:** Private API flow, JWT auth, streaming
 
-#### test/integration/demo-routes.test.ts (13 tests)
+#### test/integration/demo-routes.test.ts
 Tests demo functionality:
 - ✅ Session creation
 - ✅ Demo chat without API key
@@ -221,7 +237,7 @@ Tests demo functionality:
 
 **End-to-end validated:** Demo mode, session management
 
-#### test/integration/server.test.ts (14 tests)
+#### test/integration/server.test.ts
 Tests server configuration:
 - ✅ Minimal configuration
 - ✅ Health and config endpoints
@@ -232,9 +248,9 @@ Tests server configuration:
 
 **Configuration validated:** Server setup, feature flags, customization
 
-### Client Tests (27 tests)
+### Client Tests
 
-#### src/client/__tests__/mobile-chat.test.ts (27 tests)
+#### src/client/__tests__/mobile-chat.test.ts
 Tests mobile chat widget:
 - ✅ Viewport detection (mobile vs desktop)
 - ✅ Mobile CSS styles (fullscreen, safe areas)
@@ -251,7 +267,7 @@ Tests mobile chat widget:
 ### Unit Tests
 - ✅ **No external dependencies**
 - ✅ All tests use mocks/fakes for I/O
-- ✅ Fast execution (< 5 seconds for 178 tests)
+- ✅ Fast execution (whole unit suite runs in seconds)
 - ✅ Run in CI/CD without configuration
 
 ### Integration Tests

@@ -74,6 +74,7 @@ export type {
   BotChatConfig,
   BotIdentity,
   ChatterConfig,
+  CustomRoutes,
   EmbeddingChunk,
   KnowledgeDocument,
   ServerDependencies,
