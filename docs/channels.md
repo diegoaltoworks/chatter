@@ -41,6 +41,8 @@ const whatsapp = createWhatsAppChannel({
     // Interpret the raw Baileys message and decide how to respond. Pair this
     // with `./channels`' decideChannelAction, isEffectivelyFromSelf, and the
     // reply-decision gates — this channel does no interpretation of its own.
+    // `createWhatsAppInboundHandler` (below) is the built-in implementation
+    // of this callback.
   },
 });
 
@@ -60,6 +62,78 @@ await createServer({ ..., channels: [whatsapp] });
 - **`onMessage`** receives every raw inbound message on every session. A
   throwing or rejecting handler is caught and logged — it never crashes the
   socket's event loop.
+
+## Answering messages
+
+`createWhatsAppInboundHandler` is the built-in `onMessage` implementation:
+it turns a raw Baileys message into a `ChannelMessage`, runs it through
+`./channels`' `decideChannelAction` (allowlist, mute/unmute, DM/group rate
+limits) and cross-session loop guard, then answers through the same
+`prepareChat`/`answerOnce` seam every other surface uses — so the WhatsApp
+channel automatically honours a configured `answerFn` and `bucketsFor`.
+
+It needs the same `client`/`store`/`prompts` `createServer` builds into
+`ServerDependencies`, which only exist once `createServer` runs — after the
+`channels` array (and therefore `onMessage`) must already be configured.
+Wire it up from `customRoutes`, which receives the same deps and runs
+before channels start:
+
+```ts
+import {
+  createWhatsAppChannel,
+  createWhatsAppInboundHandler,
+  type WhatsAppMessageEvent,
+} from "@diegoaltoworks/chatter/whatsapp";
+
+let handleInbound: ((event: WhatsAppMessageEvent) => Promise<void>) | undefined;
+
+const whatsapp = createWhatsAppChannel({
+  sessionSecret: process.env.WA_SESSION_SECRET as string,
+  onMessage: (event) => handleInbound?.(event),
+});
+
+await createServer({
+  ...,
+  channels: [whatsapp],
+  customRoutes: async (app, deps) => {
+    handleInbound = createWhatsAppInboundHandler({
+      client: deps.client,
+      store: deps.store,
+      prompts: deps.prompts,
+      answerFn: deps.config.answerFn,
+      bucketsFor: deps.config.bucketsFor,
+      // Share ONE registry across every WhatsApp channel instance in this
+      // process — it's how the loop guard recognises another linked
+      // number's own traffic as "us" rather than a stranger.
+      registry: new Map(),
+      allowedChats: (process.env.WA_CHAT_ALLOWLIST ?? "").split(",").filter(Boolean),
+      channelHint: "Channel: WhatsApp.",
+    });
+  },
+});
+```
+
+Configuration:
+
+- **`registry`** — a `SessionIdentityRegistry` (see `./channels`), shared
+  across every session this handler serves. Populated automatically from
+  each message's `sock.user`; never cleared, so a reconnecting session is
+  still recognised as itself.
+- **`allowedChats`** — group chats eligible for a reply. Empty (default) =
+  every group; has no effect on DMs, which always reply.
+- **`muteRegex`/`unmuteRegex`** and **`muteReply`/`unmuteReply`** — no
+  defaults are shipped (this module carries no bot personality); an unset
+  reply string means the mute/unmute state still flips, silently.
+- **`dmRateLimit`/`groupRateLimit`** — `{ max, windowMs }` sliding-window
+  budgets, each with a generous per-hour default (see
+  `WhatsAppInboundConfig`) — tune for your own traffic.
+- **`personaResolver`**  — optional `({ senderPhone, text }) => string |
+  undefined`, plugged into `prepareChat`'s `personaLayer`. The resolution
+  mechanism (a contact registry, windowed probability rolls, ...) is a
+  separate concern; this only wires the result through. A throwing/rejecting
+  resolver degrades to no persona for that turn rather than failing the
+  reply.
+- **`channelHint`** — passed straight through to `prepareChat`.
 
 ## Auth state
 

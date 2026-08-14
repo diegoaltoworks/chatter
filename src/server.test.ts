@@ -267,7 +267,7 @@ describe("createServer channels", () => {
     };
 
     const app1 = await createServer({ ...baseConfig(), channels: [channel1] });
-    const app2 = await createServer({ ...baseConfig(), channels: [channel2] });
+    await createServer({ ...baseConfig(), channels: [channel2] });
 
     await app1.stopChannels();
 

@@ -41,6 +41,17 @@ export {
 } from "./channel";
 export { decrypt, encrypt } from "./crypto";
 export {
+  createWhatsAppInboundHandler,
+  extractText,
+  isGroupJid,
+  jidsMatch,
+  jidToPhoneNumber,
+  messageContext,
+  senderPhoneFor,
+  type WaMessageContext,
+  type WhatsAppInboundConfig,
+} from "./inbound";
+export {
   canAcquireLease,
   createTursoWaLeaseStore,
   LEASE_HEARTBEAT_MS,
