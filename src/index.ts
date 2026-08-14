@@ -24,7 +24,16 @@ export type {
 } from "./client";
 // Client library (re-export from client subpackage)
 export { Chat, ChatBot, ChatButton } from "./client";
-export { detectLeakage, scrubOutput } from "./core/guardrails";
+export type {
+  AnswerFn,
+  AnswerFnInput,
+  AnswerFnResult,
+  AnswerOptions,
+  AnswerUsage,
+} from "./core/answer";
+// Brain hook (answerFn-aware completion used by every chat surface)
+export { answerOnce, answerStream } from "./core/answer";
+export { detectLeakage, guardOutput, scrubOutput } from "./core/guardrails";
 export { completeOnce, completeStream, DEFAULT_MODEL } from "./core/llm";
 export { loadKnowledge } from "./core/loaders";
 export type { PipelineMessage, PipelineMode, PreparedChat } from "./core/pipeline";

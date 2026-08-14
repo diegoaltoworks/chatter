@@ -4,7 +4,9 @@
  * This is the single place where a conversation is turned into a
  * retrieval-augmented completion request. Every surface (widget routes,
  * OpenAI-compatible routes, MCP, programmatic use) should go through here
- * so behaviour stays identical regardless of how the chat is consumed.
+ * so behaviour stays identical regardless of how the chat is consumed, and
+ * then ask for the answer via `answerOnce`/`answerStream` (see ./answer.ts)
+ * so a caller-supplied brain is honoured.
  */
 
 import type { PromptLoader } from "./prompts";

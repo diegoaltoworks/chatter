@@ -120,6 +120,26 @@ Set requests per minute limits:
 }
 ```
 
+### Brain
+
+Replace the completion call on every chat surface with your own answer
+function — an agent framework, a graph runtime, a remote service — while
+Chatter keeps retrieval, prompt assembly, auth, rate limiting, transports and
+output guardrails:
+
+```typescript
+{
+  answerFn: async ({ system, messages, mode, sender }) => {
+    const answer = await myAgent.invoke({ system, messages });
+    return answer;   // string, or { content, usage }
+  }
+}
+```
+
+Omit it to use the built-in OpenAI completion. See
+[integrations.md](./integrations.md) for the streaming behaviour and the
+programmatic equivalents.
+
 ### Authentication
 
 #### API Key Secret (Required for Public Chat)

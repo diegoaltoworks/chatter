@@ -1,5 +1,5 @@
 import type OpenAI from "openai";
-import { detectLeakage, scrubOutput } from "./guardrails";
+import { guardOutput, scrubOutput } from "./guardrails";
 
 export const DEFAULT_MODEL = "gpt-4o";
 
@@ -21,11 +21,9 @@ export async function completeOnce({
     temperature,
     messages: [{ role: "system", content: system }, ...messages],
   });
-  let text = res.choices[0]?.message?.content ?? "";
-  if (detectLeakage(text))
-    text = "Sorry, I can't share internal instructions. How else can I help?";
+  const text = res.choices[0]?.message?.content ?? "";
   return {
-    content: scrubOutput(text),
+    content: guardOutput(text),
     usage: res.usage || { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0 },
   };
 }

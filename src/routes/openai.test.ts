@@ -250,6 +250,76 @@ describe("POST /api/private/v1/chat/completions", () => {
   });
 });
 
+describe("answerFn brain hook", () => {
+  test("replaces the completion and receives the assembled prompt", async () => {
+    const { deps, requestedModels } = createFakeDeps();
+    const seen: { system: string; mode: string; messages: unknown }[] = [];
+    deps.config.answerFn = async ({ system, mode, messages }) => {
+      seen.push({ system, mode, messages });
+      return "answer from the brain";
+    };
+
+    const app = openaiRoutes(deps);
+    const res = await app.fetch(
+      completionsRequest({ messages: [{ role: "user", content: "hi" }] }, AUTH),
+    );
+
+    expect(res.status).toBe(200);
+    const json = (await res.json()) as {
+      choices: { message: { content: string } }[];
+      usage: { total_tokens: number };
+    };
+    expect(json.choices[0].message.content).toBe("answer from the brain");
+    expect(json.usage.total_tokens).toBe(0);
+    expect(seen).toEqual([
+      {
+        system: "rules\n\npublic persona\n\nContext:\nsome context",
+        mode: "public",
+        messages: [{ role: "user", content: "hi" }],
+      },
+    ]);
+    // No upstream completion was requested.
+    expect(requestedModels).toEqual([]);
+  });
+
+  test("reports usage from the brain when it supplies any", async () => {
+    const { deps } = createFakeDeps();
+    deps.config.answerFn = async () => ({
+      content: "counted",
+      usage: { prompt_tokens: 5, completion_tokens: 6, total_tokens: 11 },
+    });
+
+    const app = openaiRoutes(deps);
+    const res = await app.fetch(
+      completionsRequest({ messages: [{ role: "user", content: "hi" }] }, AUTH),
+    );
+
+    const json = (await res.json()) as { usage: { total_tokens: number } };
+    expect(json.usage.total_tokens).toBe(11);
+  });
+
+  test("keeps the streaming wire format with a non-streaming brain", async () => {
+    const { deps } = createFakeDeps();
+    deps.config.answerFn = async () => "one shot answer";
+
+    const app = openaiRoutes(deps);
+    const res = await app.fetch(
+      completionsRequest({ stream: true, messages: [{ role: "user", content: "hi" }] }, AUTH),
+    );
+
+    expect(res.status).toBe(200);
+    const events = (await res.text())
+      .split("\n\n")
+      .filter((line) => line.startsWith("data: "))
+      .map((line) => line.slice("data: ".length));
+
+    expect(events[events.length - 1]).toBe("[DONE]");
+    const chunks = events.slice(0, -1).map((e) => JSON.parse(e));
+    expect(chunks.map((c) => c.choices[0].delta.content ?? "").join("")).toBe("one shot answer");
+    expect(chunks[chunks.length - 1].choices[0].finish_reason).toBe("stop");
+  });
+});
+
 describe("feature flags", () => {
   test("public v1 route is absent when public chat is disabled", async () => {
     const { deps } = createFakeDeps();
