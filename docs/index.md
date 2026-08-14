@@ -57,16 +57,21 @@ Welcome to the Chatter documentation! This guide will help you set up and deploy
    - Hybrid keyword + LLM intent matching
    - Multi-instance-safe session state via a Turso-backed store
 
-9. **[Deployment](./deployment.md)** - Deploy to production
-   - Platform compatibility
-   - Docker deployment
-   - Google Cloud Run
-   - Fly.io
-   - Railway
-   - VPS setup
-   - Security best practices
+9. **[Images](./images.md)** - Generate and cache images on demand
+   - OpenAI edit/generate with caller-composed prompts
+   - Cache-before-spend ordering, optional Cloudinary upload
+   - Optional caption helper with pool + LLM compose fallback
 
-10. **[FAQs](./faqs.md)** - Common questions and troubleshooting
+10. **[Deployment](./deployment.md)** - Deploy to production
+    - Platform compatibility
+    - Docker deployment
+    - Google Cloud Run
+    - Fly.io
+    - Railway
+    - VPS setup
+    - Security best practices
+
+11. **[FAQs](./faqs.md)** - Common questions and troubleshooting
     - General questions
     - Platform compatibility
     - Knowledge base and RAG
