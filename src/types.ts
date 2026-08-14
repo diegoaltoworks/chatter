@@ -8,6 +8,7 @@
 import type { Client as LibsqlClient } from "@libsql/client";
 import type { Hono } from "hono";
 import type OpenAI from "openai";
+import type { Channel, ChannelSenderRegistry } from "./channels";
 import type { AnswerFn } from "./core/answer";
 import type { BucketsFor } from "./core/buckets";
 import type { PromptLoader } from "./core/prompts";
@@ -196,6 +197,17 @@ export interface ChatterConfig {
   // Custom routes (advanced)
   /** Custom route handler for advanced use cases. May be async — see {@link CustomRoutes} */
   customRoutes?: CustomRoutes;
+
+  // Channels (advanced)
+  /**
+   * Transports (WhatsApp, or any future channel) to start alongside the
+   * server. Each is started after routes are mounted with the same
+   * {@link ServerDependencies} route factories receive; a channel that fails
+   * to start is logged and skipped rather than crashing the server. See the
+   * `./channels` subpath for the {@link Channel} SPI, the reply-decision
+   * gates, and the sender registry channels register into.
+   */
+  channels?: Channel[];
 }
 
 /**
@@ -239,6 +251,13 @@ export interface ServerDependencies {
   apiKeyManager?: {
     verify: (token: string) => Promise<{ valid: boolean; payload?: unknown; error?: string }>;
   };
+  /**
+   * The channel sender registry every configured channel is started with.
+   * A channel registers itself here (`deps.senders.register(channel.name, sender)`)
+   * so custom routes and other channels can send outbound messages by
+   * channel name without importing the transport.
+   */
+  senders: ChannelSenderRegistry;
 }
 
 /**

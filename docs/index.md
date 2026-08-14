@@ -19,6 +19,7 @@ Welcome to the Chatter documentation! This guide will help you set up and deploy
    - Knowledge base setup
    - System prompts
    - API key management
+   - Channels (transport SPI, reply gates, sender registry)
    - Running locally
 
 3. **[Client Setup](./client.md)** - Integrate chat widgets into your website

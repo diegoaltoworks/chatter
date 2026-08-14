@@ -14,6 +14,10 @@
 export type { ApiKeyOptions, ApiKeyPayload, VerifyResult } from "./auth";
 // Auth utilities
 export { ApiKeyManager } from "./auth";
+// Channel SPI (the type ChatterConfig.channels is built from — the full
+// toolkit, incl. gates and the sender registry, lives at the `./channels`
+// subpath).
+export type { Channel } from "./channels";
 export type {
   ChatBotConfig,
   ChatButtonConfig,
@@ -69,6 +73,7 @@ export { openaiRoutes } from "./routes/openai";
 export { privateRoutes } from "./routes/private";
 // Route factories (for custom setup)
 export { publicRoutes } from "./routes/public";
+export type { ChatterApp } from "./server";
 // Main server factory
 export { createServer } from "./server";
 // Types
