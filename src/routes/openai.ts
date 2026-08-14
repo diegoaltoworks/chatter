@@ -26,9 +26,10 @@ import type { Context, Next } from "hono";
 import { Hono } from "hono";
 import { stream } from "hono/streaming";
 import { answerOnce, answerStream } from "../core/answer";
+import { resolveBuckets } from "../core/buckets";
 import { DEFAULT_MODEL } from "../core/llm";
 import { type PipelineMessage, type PipelineMode, prepareChat } from "../core/pipeline";
-import { createJWTMiddleware } from "../middleware/jwt";
+import { createJWTMiddleware, jwtSubject } from "../middleware/jwt";
 import { createRateLimiter } from "../middleware/ratelimit";
 import type { ServerDependencies } from "../types";
 
@@ -130,9 +131,17 @@ export function openaiRoutes(deps: ServerDependencies) {
         ? Math.min(Math.max(rawTemperature, 0), 2)
         : undefined;
 
+    // Only the private route carries a per-user identity; the public one is
+    // API-key gated, so it stays anonymous and is clamped accordingly.
+    const buckets = await resolveBuckets({
+      mode,
+      sender: jwtSubject(c),
+      bucketsFor: config.bucketsFor,
+    });
+
     let system: string;
     try {
-      ({ system } = await prepareChat({ store, prompts, mode, messages }));
+      ({ system } = await prepareChat({ store, prompts, mode, messages, buckets }));
     } catch {
       return errorJson(c, 400, "Conversation must contain at least one user message");
     }

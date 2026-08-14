@@ -6,14 +6,20 @@
  */
 
 import { describe, expect, test } from "bun:test";
-import type { ServerDependencies } from "../types";
+import { exportSPKI, generateKeyPair, SignJWT } from "jose";
+import type { ChatterConfig, ServerDependencies } from "../types";
 import { normalizeMessages, openaiRoutes } from "./openai";
 
-function createFakeDeps(overrides?: Partial<ServerDependencies>): {
+function createFakeDeps(
+  overrides?: Partial<ServerDependencies>,
+  configOverrides?: Partial<ChatterConfig>,
+): {
   deps: ServerDependencies;
   requestedModels: string[];
+  retrievedBuckets: string[][];
 } {
   const requestedModels: string[] = [];
+  const retrievedBuckets: string[][] = [];
 
   const client = {
     chat: {
@@ -35,7 +41,12 @@ function createFakeDeps(overrides?: Partial<ServerDependencies>): {
     },
   };
 
-  const store = { query: async () => ["some context"] };
+  const store = {
+    query: async (_q: string, _k: number, buckets: string[]) => {
+      retrievedBuckets.push(buckets);
+      return ["some context"];
+    },
+  };
 
   const prompts = {
     baseSystemRules: "rules",
@@ -56,6 +67,7 @@ function createFakeDeps(overrides?: Partial<ServerDependencies>): {
     },
     openai: { apiKey: "sk-test", model: "gpt-4o-mini" },
     database: { url: "libsql://test", authToken: "" },
+    ...configOverrides,
   };
 
   const deps = {
@@ -67,7 +79,7 @@ function createFakeDeps(overrides?: Partial<ServerDependencies>): {
     ...overrides,
   } as unknown as ServerDependencies;
 
-  return { deps, requestedModels };
+  return { deps, requestedModels, retrievedBuckets };
 }
 
 function completionsRequest(body: unknown, headers: Record<string, string> = {}) {
@@ -329,5 +341,66 @@ describe("feature flags", () => {
       completionsRequest({ messages: [{ role: "user", content: "hi" }] }, AUTH),
     );
     expect(res.status).toBe(404);
+  });
+});
+
+describe("bucketsFor on the OpenAI-compatible route", () => {
+  test("retrieves the mode defaults when no hook is configured", async () => {
+    const { deps, retrievedBuckets } = createFakeDeps();
+    const app = openaiRoutes(deps);
+
+    await app.fetch(completionsRequest({ messages: [{ role: "user", content: "hi" }] }, AUTH));
+
+    expect(retrievedBuckets).toEqual([["base", "public"]]);
+  });
+
+  test("the API-key surface stays anonymous and cannot reach private knowledge", async () => {
+    const seen: unknown[] = [];
+    const { deps, retrievedBuckets } = createFakeDeps(undefined, {
+      bucketsFor: (ctx) => {
+        seen.push(ctx);
+        return ["base", "public", "private"];
+      },
+    });
+    const app = openaiRoutes(deps);
+
+    // An API key names the calling application, not a user - so the hook is
+    // consulted without a sender and its request for `private` is dropped.
+    await app.fetch(completionsRequest({ messages: [{ role: "user", content: "hi" }] }, AUTH));
+
+    expect(seen).toEqual([{ mode: "public" }]);
+    expect(retrievedBuckets).toEqual([["base", "public"]]);
+  });
+
+  test("the private v1 route supplies the JWT subject and honours the hook", async () => {
+    const { publicKey, privateKey } = await generateKeyPair("RS256");
+    const publicKeyPem = await exportSPKI(publicKey);
+    const token = await new SignJWT({ sub: "staff-1" })
+      .setProtectedHeader({ alg: "RS256" })
+      .setIssuedAt()
+      .setExpirationTime("5m")
+      .sign(privateKey);
+
+    const seen: unknown[] = [];
+    const { deps, retrievedBuckets } = createFakeDeps(undefined, {
+      auth: { jwt: { publicKeyPem } },
+      bucketsFor: (ctx) => {
+        seen.push(ctx);
+        return ["base", "private", "finance"];
+      },
+    });
+    const app = openaiRoutes(deps);
+
+    const res = await app.fetch(
+      new Request("http://localhost/api/private/v1/chat/completions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ messages: [{ role: "user", content: "hi" }] }),
+      }),
+    );
+
+    expect(res.status).toBe(200);
+    expect(seen).toEqual([{ mode: "private", sender: "staff-1" }]);
+    expect(retrievedBuckets).toEqual([["base", "private", "finance"]]);
   });
 });

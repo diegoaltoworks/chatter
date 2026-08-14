@@ -2,6 +2,7 @@ import type { Context } from "hono";
 import { Hono } from "hono";
 import { stream } from "hono/streaming";
 import { answerOnce, answerStream } from "../core/answer";
+import { resolveBuckets } from "../core/buckets";
 import { prepareChat } from "../core/pipeline";
 import { createAuthMiddleware } from "../middleware/auth";
 import { createRateLimiter } from "../middleware/ratelimit";
@@ -55,9 +56,13 @@ export function publicRoutes(deps: ServerDependencies) {
       return c.json({ error: "either 'message' or 'messages' required" }, 400);
     }
 
+    // Anonymous surface: no sender identity, so `resolveBuckets` will not let
+    // the hook reach past the public defaults.
+    const buckets = await resolveBuckets({ mode: "public", bucketsFor: config.bucketsFor });
+
     let system: string;
     try {
-      ({ system } = await prepareChat({ store, prompts, mode: "public", messages }));
+      ({ system } = await prepareChat({ store, prompts, mode: "public", messages, buckets }));
     } catch {
       return c.json({ error: "no user message found in conversation" }, 400);
     }

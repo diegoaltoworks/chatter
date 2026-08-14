@@ -210,8 +210,20 @@ export class VectorStore {
     return dot / (Math.sqrt(na) * Math.sqrt(nb));
   }
 
-  // Retrieve top-k across allowed buckets; compute similarity in app (simple & portable).
-  async query(q: string, k = 6, allowed: Bucket[] = ["base"]): Promise<string[]> {
+  /**
+   * Retrieve top-k across allowed buckets; compute similarity in app (simple
+   * & portable).
+   *
+   * `allowed` is a bucket-name list rather than the {@link Bucket} union: the
+   * `chunks` table constrains nothing, so a deployment that ingests its own
+   * buckets can query them (`build` only writes and prunes the three the
+   * knowledge loader walks). Names are bound as query parameters, never
+   * interpolated. An empty list retrieves nothing, and short-circuits before
+   * the embedding call.
+   */
+  async query(q: string, k = 6, allowed: string[] = ["base"]): Promise<string[]> {
+    if (allowed.length === 0) return [];
+
     const qv = (await this.client.embeddings.create({ model: EMB_MODEL, input: [q] })).data[0]
       .embedding as number[];
 

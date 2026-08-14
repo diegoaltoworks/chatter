@@ -10,6 +10,7 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import OpenAI from "openai";
 import { z } from "zod";
 import { answerOnce } from "./core/answer";
+import { defaultBuckets, resolveBuckets } from "./core/buckets";
 import { PromptLoader } from "./core/prompts";
 import { VectorStore } from "./core/retrieval";
 import { getOrGenerateConversationId } from "./mcp-server/conversation-id";
@@ -165,8 +166,12 @@ export async function createMCPServer(config: MCPServerOptions) {
           throw new Error("No user message found in conversation");
         }
 
-        // Retrieve context from knowledge base
-        const ctx = await store.query(lastUserMsg.content, 6, ["base", "public"]);
+        // Retrieve context from knowledge base. MCP tools carry no per-user
+        // identity, so the hook may narrow the scope but not widen it.
+        const buckets =
+          (await resolveBuckets({ mode: "public", bucketsFor: config.bucketsFor })) ??
+          defaultBuckets("public");
+        const ctx = await store.query(lastUserMsg.content, 6, buckets);
         const system = [
           prompts.baseSystemRules,
           prompts.publicPersona,
@@ -281,7 +286,10 @@ export async function createMCPServer(config: MCPServerOptions) {
         }
 
         // Retrieve context from knowledge base (using private knowledge)
-        const ctx = await store.query(lastUserMsg.content, 8, ["base", "private"]);
+        const buckets =
+          (await resolveBuckets({ mode: "private", bucketsFor: config.bucketsFor })) ??
+          defaultBuckets("private");
+        const ctx = await store.query(lastUserMsg.content, 8, buckets);
         const system = [
           prompts.baseSystemRules,
           prompts.privatePersona,

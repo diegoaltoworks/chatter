@@ -119,6 +119,62 @@ inserted as its own section after the persona and before the retrieved
 context, and is omitted entirely when blank. With neither set the prompt is
 unchanged, so existing callers need no updates.
 
+### Scoping retrieval per caller (`bucketsFor`)
+
+Knowledge is ingested into named buckets, and a chat turn retrieves from `base`
+plus the bucket matching its mode. Role-gated deployments need finer control:
+an entitlement is only knowable per request. `bucketsFor` is that seam.
+
+```ts
+const server = await createServer({
+  // ...
+  bucketsFor: async ({ mode, sender }) => {
+    if (!sender) return undefined;                 // keep the mode defaults
+    const roles = await lookupRoles(sender);
+    return roles.includes("staff") ? ["base", "private"] : ["base", "public"];
+  },
+});
+```
+
+The hook is consulted by the widget chat routes, the OpenAI-compatible
+endpoints, the MCP chat tools and the demo route. It receives the pipeline
+`mode` plus, where the surface knows one, a `sender` identity — the private
+routes supply the verified JWT subject; the API-key, MCP and demo surfaces have
+no per-user identity, so they leave it unset. Return `undefined` to leave the
+mode defaults in place, or a list of buckets to use instead. An empty list
+retrieves nothing. A rejection propagates as a request error rather than
+falling back to the defaults: a failed policy lookup must not decide scope.
+
+**A hook can never widen retrieval for a caller the surface could not
+identify.** Without a sender, its answer is filtered down to the buckets the
+mode would have retrieved anyway, so a hook asking for `private` from the
+public chat route, from the API-key-gated `/v1` endpoint, or from an MCP public
+tool has it dropped. Narrowing is always honoured. The buckets a surface
+retrieves by default are unchanged, so private knowledge stays where it was:
+out of reach of the public pipeline.
+
+Note the granularity this operates at. `base`, `public` and `private` are the
+buckets `config/knowledge` ingests, and those are the ones a stock deployment
+can gate. Additional bucket names resolve and query fine, but nothing ingests
+them — the knowledge builder only walks the three directories, and prunes rows
+it did not write — so a custom bucket needs its own ingestion and its own
+pruning strategy before it holds anything.
+
+The same resolution is exported for channels and custom routes, which should
+use it rather than hand-rolling the check — it is the single place the ceiling
+is enforced:
+
+```ts
+import { resolveBuckets, prepareChat } from "@diegoaltoworks/chatter";
+
+const buckets = await resolveBuckets({ mode: "public", sender, bucketsFor: config.bucketsFor });
+const { system, messages } = await prepareChat({ store, prompts, mode: "public", messages: turns, buckets });
+```
+
+`prepareChat`'s own `buckets` parameter is the low-level primitive and takes
+whatever it is given, so anything derived from request input belongs on the
+`resolveBuckets` path first.
+
 ## Bringing your own brain (`answerFn`)
 
 Prompt shaping stops at the completion call. `answerFn` replaces the call
@@ -140,8 +196,9 @@ const server = await createServer({
 `answerFn` is consulted by every chat surface: the widget chat routes, the
 OpenAI-compatible endpoints, and the MCP chat tools. It receives the system
 prompt exactly as `prepareChat` assembled it, the conversation, the pipeline
-`mode`, and — where the surface knows one — a `sender` identity (the HTTP
-surfaces have no sender concept, so it is left unset there).
+`mode`, and — where the surface knows one — a `sender` identity (the built-in
+HTTP surfaces do not pass one, even on the private routes, whose JWT subject is
+currently used only for retrieval scope).
 
 Return a string, or an object with `content` and optional `usage` for the
 surfaces that report token counts (a plain string reports zero usage). A

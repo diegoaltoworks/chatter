@@ -28,6 +28,7 @@ async function createPrivateJWT() {
 
 function createFakeDeps(config: Partial<ChatterConfig> = {}) {
   const requestedModels: string[] = [];
+  const retrievedBuckets: string[][] = [];
 
   const client = {
     chat: {
@@ -50,7 +51,12 @@ function createFakeDeps(config: Partial<ChatterConfig> = {}) {
 
   const deps = {
     client,
-    store: { query: async () => ["some context"] },
+    store: {
+      query: async (_q: string, _k: number, buckets: string[]) => {
+        retrievedBuckets.push(buckets);
+        return ["some context"];
+      },
+    },
     prompts: {
       baseSystemRules: "rules",
       publicPersona: "public persona",
@@ -73,7 +79,7 @@ function createFakeDeps(config: Partial<ChatterConfig> = {}) {
     },
   } as unknown as ServerDependencies;
 
-  return { deps, requestedModels };
+  return { deps, requestedModels, retrievedBuckets };
 }
 
 function chatRequest(path: string, body: unknown, headers: Record<string, string>) {
@@ -176,5 +182,64 @@ describe("POST /api/private/chat", () => {
     expect(res.status).toBe(200);
     expect(await res.json()).toEqual({ reply: "built-in reply" });
     expect(requestedModels).toEqual(["gpt-4o-mini"]);
+  });
+});
+
+describe("bucketsFor on the chat routes", () => {
+  test("public chat retrieves the mode defaults when no hook is configured", async () => {
+    const { deps, retrievedBuckets } = createFakeDeps();
+    const app = publicRoutes(deps);
+
+    await app.fetch(chatRequest("/api/public/chat", message, { "x-api-key": PUBLIC_KEY }));
+
+    expect(retrievedBuckets).toEqual([["base", "public"]]);
+  });
+
+  test("public chat lets the hook narrow retrieval", async () => {
+    const { deps, retrievedBuckets } = createFakeDeps({ bucketsFor: () => ["base"] });
+    const app = publicRoutes(deps);
+
+    await app.fetch(chatRequest("/api/public/chat", message, { "x-api-key": PUBLIC_KEY }));
+
+    expect(retrievedBuckets).toEqual([["base"]]);
+  });
+
+  test("public chat cannot be widened to private knowledge", async () => {
+    const seen: unknown[] = [];
+    const { deps, retrievedBuckets } = createFakeDeps({
+      bucketsFor: (ctx) => {
+        seen.push(ctx);
+        return ["base", "public", "private"];
+      },
+    });
+    const app = publicRoutes(deps);
+
+    await app.fetch(chatRequest("/api/public/chat", message, { "x-api-key": PUBLIC_KEY }));
+
+    // The hook asked for the private bucket from an anonymous surface; the
+    // ceiling drops it before retrieval ever runs.
+    expect(seen).toEqual([{ mode: "public" }]);
+    expect(retrievedBuckets).toEqual([["base", "public"]]);
+  });
+
+  test("private chat passes the JWT subject and honours the hook's answer", async () => {
+    const { publicKeyPem, token } = await createPrivateJWT();
+    const seen: unknown[] = [];
+    const { deps, retrievedBuckets } = createFakeDeps({
+      auth: { jwt: { publicKeyPem } },
+      bucketsFor: (ctx) => {
+        seen.push(ctx);
+        return ["base", "private", "finance"];
+      },
+    });
+    const app = privateRoutes(deps);
+
+    const res = await app.fetch(
+      chatRequest("/api/private/chat", message, { Authorization: `Bearer ${token}` }),
+    );
+
+    expect(res.status).toBe(200);
+    expect(seen).toEqual([{ mode: "private", sender: "staff-1" }]);
+    expect(retrievedBuckets).toEqual([["base", "private", "finance"]]);
   });
 });

@@ -43,6 +43,7 @@ chatter/
 │   │   └── apikeys.test.ts           API key issue/verify
 │   ├── core/
 │   │   ├── answer.test.ts            answerFn hook + completion fallback
+│   │   ├── buckets.test.ts           retrieval scope + the anonymous ceiling
 │   │   ├── guardrails.test.ts        output scrubbing, leakage detection
 │   │   ├── loaders.test.ts           knowledge loading
 │   │   ├── pipeline.test.ts          prompt assembly, persona layering
