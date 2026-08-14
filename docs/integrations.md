@@ -225,6 +225,41 @@ const { system, messages } = await prepareChat({ store, prompts, mode: "public",
 const { content } = await answerOnce({ answerFn, client, system, messages, mode: "public" });
 ```
 
+## Graph frameworks (LangGraph and similar)
+
+`answerFn` and the OpenAI-compatible endpoint are also the seams for
+combining Chatter with a graph-based agent framework such as
+[LangGraph](https://langchain-ai.github.io/langgraphjs/), in either
+direction:
+
+- **A graph as Chatter's brain.** Wire the graph's `invoke` call into
+  `answerFn` (see above). Chatter keeps retrieval, prompt assembly, auth,
+  rate limiting and output guardrails; the graph only produces the answer
+  text from the assembled system prompt and conversation.
+- **Chatter as a node inside a graph.** Point the graph's chat model at
+  Chatter's `/v1/chat/completions` endpoint (`baseURL` + API key, same as any
+  OpenAI-compatible client). Chatter contributes one RAG-grounded,
+  guardrailed step; the rest of the graph is free to add other models, tools
+  or formatting around it.
+
+Both directions are runnable in
+[`examples/langgraph-brain`](../examples/langgraph-brain/).
+
+### When does a graph fit?
+
+Chatter's built-in pipeline is deliberately linear: retrieve, assemble a
+prompt, answer once. That is enough for most chat surfaces, including
+multi-turn structured interactions handled by [flows](./flows.md)
+(Chatter's own designated home for schema-driven, multi-turn slot filling).
+
+Reach for a graph framework instead when a single turn needs multiple
+LLM or tool-calling steps that don't reduce to "retrieve, then answer" — a
+research agent that plans and re-plans, a turn that fans out to several
+tools before composing a reply, or orchestration shared with other
+graph-based systems you already run. Chatter's core stays framework-free
+either way: no graph library is a dependency or peer dependency of the
+package, so choosing one costs nothing for deployments that don't.
+
 ## Third-party chat UIs
 
 Two runnable sample apps live in `examples/`:
