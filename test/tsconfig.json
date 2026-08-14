@@ -1,0 +1,14 @@
+{
+  // Scoped to test/api-surface.test.ts only (plus the src/ it imports,
+  // pulled in transitively) — NOT test/integration/**, which predates the
+  // current ChatterConfig/createServer shape and does not typecheck clean.
+  // Widening this to the whole test/ tree is not currently safe.
+  "extends": "../tsconfig.json",
+  "compilerOptions": {
+    "rootDir": "..",
+    "noEmit": true,
+    "declaration": false,
+    "declarationMap": false
+  },
+  "include": ["*.test.ts"]
+}

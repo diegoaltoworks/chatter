@@ -1,0 +1,12 @@
+{
+  "defaultPersona": "assistant",
+  "personaProbability": 0.5,
+  "personaWindowMinutes": 10,
+  "contacts": {
+    "+15551234567": { "name": "Sam", "role": "admin", "persona": "formal", "probability": 1 }
+  },
+  "personas": {
+    "assistant": { "name": "Assistant", "prompt": "assistant.md" },
+    "formal": { "name": "Formal", "prompt": "formal.md" }
+  }
+}

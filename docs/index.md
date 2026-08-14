@@ -52,6 +52,7 @@ Welcome to the Chatter documentation! This guide will help you set up and deploy
    - Configuration, pairing (QR and pairing-code modes)
    - Encrypted, multi-session auth state
    - Deploy lease and reconnect behaviour
+   - Full wiring: [`examples/full-bot`](../examples/full-bot/)
 
 8. **[Flows](./flows.md)** - Multi-turn, schema-driven slot-filling flows
    - Directory-loaded flow contract (flow.json/handler.ts/instructions.md)
