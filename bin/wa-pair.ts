@@ -13,9 +13,12 @@
  *                                          from; enter the printed code on
  *                                          the phone instead.
  *
- * Pairing-code flow quirk: after the code is entered, WhatsApp CLOSES the
- * socket and expects an immediate reconnect to complete registration - this
- * script reconnects automatically while a code is outstanding.
+ * Reconnect quirk (BOTH modes): WhatsApp closes the socket mid-pairing as a
+ * matter of course - always with 515 "restart required" the moment a QR scan
+ * registers the device, and again while a pairing code is being typed. The
+ * link only completes if the client comes straight back with the same stored
+ * credentials, so this script reconnects automatically (bounded) until the
+ * connection reports "open". See src/channels/whatsapp/pairing.ts.
  *
  * ToS note: Baileys is an unofficial WhatsApp client. A linked number can be
  * banned - use one you can afford to lose.
@@ -29,6 +32,7 @@
 import { createClient } from "@libsql/client";
 import { type AuthStateRuntime, useTursoAuthState } from "../src/channels/whatsapp/authState";
 import { loadBaileys } from "../src/channels/whatsapp/baileys";
+import { type PairingSocket, runPairing } from "../src/channels/whatsapp/pairing";
 
 const args = process.argv.slice(2);
 
@@ -84,10 +88,19 @@ const db = createClient({
   authToken: process.env.TURSO_AUTH_TOKEN || "",
 });
 
-const MAX_RECONNECTS = 12; // patient: survives repeated socket bounces while a pairing code is entered
-let codeRequested = false;
-let reconnects = 0;
-let didReset = false;
+async function renderQr(qr: string): Promise<void> {
+  const qrcodeTerminal = await import("qrcode-terminal").catch(() => undefined);
+  if (!qrcodeTerminal) {
+    console.error(
+      "❌ QR mode requires the optional peer dependency 'qrcode-terminal'. Install it with " +
+        "`bun add qrcode-terminal`, or re-run with --code <phoneNumber> for pairing-code mode instead.",
+    );
+    process.exit(1);
+  }
+  console.log("\nScan this QR code: WhatsApp -> Settings -> Linked Devices -> Link a Device.\n");
+  // biome-ignore lint/suspicious/noExplicitAny: qrcode-terminal ships no types
+  (qrcodeTerminal as any).default.generate(qr, { small: true });
+}
 
 async function start(): Promise<void> {
   const baileys = await loadBaileys().catch((error) => {
@@ -100,122 +113,84 @@ async function start(): Promise<void> {
     appStateSyncKeyFromObject: (value) =>
       baileys.proto.Message.AppStateSyncKeyData.fromObject(value),
   };
-  const { state, saveCreds, clear } = await useTursoAuthState(
-    db,
-    sessionSecret as string,
-    sessionId,
-    runtime,
-  );
 
-  if (reset && !didReset) {
-    didReset = true;
+  if (reset) {
+    const { clear } = await useTursoAuthState(db, sessionSecret as string, sessionId, runtime);
     await clear();
     console.log(`Session "${sessionId}" wiped. Pairing fresh...`);
-    return start();
-  }
-
-  if (state.creds.registered && !codeRequested) {
-    console.log(
-      `Already paired. Session "${sessionId}" is connected-ready. Run with --reset to re-pair.`,
-    );
-    process.exit(0);
   }
 
   const { version } = await baileys.fetchLatestBaileysVersion();
-  const noop = () => undefined;
-  const logger: Record<string, unknown> = {
-    level: "silent",
-    trace: noop,
-    debug: noop,
-    info: noop,
-    warn: noop,
-    error: noop,
-    fatal: noop,
-  };
-  logger.child = () => logger;
 
-  const sock = baileys.makeWASocket({
-    version,
-    auth: {
-      creds: state.creds,
-      // biome-ignore lint/suspicious/noExplicitAny: structural pino-compatible logger
-      keys: baileys.makeCacheableSignalKeyStore(state.keys, logger as any),
-    },
-    // biome-ignore lint/suspicious/noExplicitAny: structural pino-compatible logger
-    logger: logger as any,
-    markOnlineOnConnect: false,
-  });
+  // Every attempt re-reads the stored session: a reconnect after a 515 MUST
+  // carry the credentials the scan just registered, never a blank state.
+  const connect = async (attempt: number): Promise<PairingSocket> => {
+    const { state, saveCreds } = await useTursoAuthState(
+      db,
+      sessionSecret as string,
+      sessionId,
+      runtime,
+    );
 
-  sock.ev.on("creds.update", saveCreds);
-
-  sock.ev.on("connection.update", async (update) => {
-    const { connection, lastDisconnect, qr } = update;
-
-    if (qr && !phoneNumber) {
-      const qrcodeTerminal = await import("qrcode-terminal").catch(() => undefined);
-      if (!qrcodeTerminal) {
-        console.error(
-          "❌ QR mode requires the optional peer dependency 'qrcode-terminal'. Install it with " +
-            "`bun add qrcode-terminal`, or re-run with --code <phoneNumber> for pairing-code mode instead.",
-        );
-        process.exit(1);
-      }
+    if (attempt === 0 && state.creds.registered) {
       console.log(
-        "\nScan this QR code: WhatsApp -> Settings -> Linked Devices -> Link a Device.\n",
+        `Already paired. Session "${sessionId}" is connected-ready. Run with --reset to re-pair.`,
       );
-      // biome-ignore lint/suspicious/noExplicitAny: qrcode-terminal ships no types
-      (qrcodeTerminal as any).default.generate(qr, { small: true });
-    }
-
-    if (connection === "open") {
-      console.log(
-        `\n✅ Paired session "${sessionId}" as ${sock.user?.id}. Session saved (encrypted).`,
-      );
-      console.log("The running server will pick this session up on its next connect.");
       process.exit(0);
     }
 
-    if (connection === "close") {
-      const statusCode = (lastDisconnect?.error as { output?: { statusCode?: number } })?.output
-        ?.statusCode;
+    const noop = () => undefined;
+    const logger: Record<string, unknown> = {
+      level: "silent",
+      trace: noop,
+      debug: noop,
+      info: noop,
+      warn: noop,
+      error: noop,
+      fatal: noop,
+    };
+    logger.child = () => logger;
 
-      // Expected during pairing-code flow: WhatsApp restarts the socket
-      // after the code is entered. Reconnect to complete registration.
-      if (codeRequested && reconnects < MAX_RECONNECTS) {
-        reconnects++;
-        console.log(
-          `Connection closed (${statusCode ?? "?"}) - reconnecting (code STILL VALID, keep going on the phone) (${reconnects}/${MAX_RECONNECTS})...`,
-        );
-        setTimeout(() => void start(), 2000);
-        return;
-      }
+    const sock = baileys.makeWASocket({
+      version,
+      auth: {
+        creds: state.creds,
+        // biome-ignore lint/suspicious/noExplicitAny: structural pino-compatible logger
+        keys: baileys.makeCacheableSignalKeyStore(state.keys, logger as any),
+      },
+      // biome-ignore lint/suspicious/noExplicitAny: structural pino-compatible logger
+      logger: logger as any,
+      markOnlineOnConnect: false,
+    });
 
-      if (statusCode === baileys.DisconnectReason.loggedOut) {
-        console.error("❌ Pairing rejected (logged out). Run wa-pair again for a fresh code.");
-      } else {
-        console.error(`❌ Connection closed (${statusCode ?? "?"}). Run wa-pair again.`);
-      }
-      process.exit(1);
-    }
+    sock.ev.on("creds.update", saveCreds);
+    return sock as unknown as PairingSocket;
+  };
+
+  const result = await runPairing({
+    connect,
+    loggedOutCode: baileys.DisconnectReason.loggedOut,
+    phoneNumber,
+    onQr: renderQr,
+    onPairingCode: (code) => {
+      console.log("\n==============================================");
+      console.log(`  Pairing code for +${phoneNumber}:  ${code}`);
+      console.log("==============================================");
+      console.log("On the phone: WhatsApp -> Settings -> Linked Devices ->");
+      console.log("Link a Device -> 'Link with phone number instead' -> enter the code.");
+      console.log("Waiting for confirmation (leave this running)...");
+    },
+    onStatus: (message) => console.log(message),
   });
 
-  if (phoneNumber && !codeRequested && !state.creds.registered) {
-    setTimeout(async () => {
-      try {
-        const code = await sock.requestPairingCode(phoneNumber);
-        codeRequested = true;
-        console.log("\n==============================================");
-        console.log(`  Pairing code for +${phoneNumber}:  ${code}`);
-        console.log("==============================================");
-        console.log("On the phone: WhatsApp -> Settings -> Linked Devices ->");
-        console.log("Link a Device -> 'Link with phone number instead' -> enter the code.");
-        console.log("Waiting for confirmation (leave this running)...");
-      } catch (error) {
-        console.error("❌ Failed to request pairing code:", error);
-        process.exit(1);
-      }
-    }, 3000);
+  if (!result.ok) {
+    console.error(`❌ ${result.message}`);
+    process.exit(1);
   }
+
+  console.log(`\n✅ Paired session "${sessionId}" as ${result.userId}. Session saved (encrypted).`);
+  console.log("The running server will pick this session up on its next connect.");
+  process.exit(0);
 }
 
 start().catch((error) => {

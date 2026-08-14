@@ -211,6 +211,15 @@ bun run wa-pair [sessionId] --reset
 QR mode additionally needs the optional peer dependency `qrcode-terminal`
 (`bun add qrcode-terminal`); pairing-code mode does not.
 
+Expect the connection to close mid-pairing — WhatsApp always asks for a
+restart (status 515) the instant a QR scan registers the device, and bounces
+the socket again while a pairing code is being typed. The CLI treats those as
+normal: it reconnects with the *stored* session (never a fresh one, which
+would show a new QR and leave the phone stuck on "linking") until the
+connection reports open, printing each attempt. Only an explicit logout or
+running out of attempts ends the run, so one invocation completes a link — no
+shell loop around `wa-pair` needed.
+
 Pairing a session for the **first time** needs no restart: an unpaired
 session re-checks its auth state every 60 seconds, so the running server
 picks it up on its next check. Re-pairing **after a logout** (see
@@ -245,8 +254,10 @@ process.on("SIGTERM", async () => {
 
 ## Reconnection
 
-A closed connection reconnects with exponential backoff (5s, 10s, 20s, ...
-capped at 10 minutes) — hammering WhatsApp during an outage or a ban
+This applies to an established connection; pairing has its own, much tighter
+policy (above), because a human is holding a phone whose link attempt times
+out. A closed connection reconnects with exponential backoff (5s, 10s, 20s,
+... capped at 10 minutes) — hammering WhatsApp during an outage or a ban
 aggravates ban scoring. A session that WhatsApp explicitly logs out does
 **not** reconnect — retrying with the same, now-revoked credentials would
 just get logged out again on a tight loop, the exact behaviour the backoff
