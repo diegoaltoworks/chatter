@@ -17,10 +17,12 @@
  */
 
 import { spawnSync } from "node:child_process";
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import {
+  BUNDLE_BUDGETS,
+  bundleSizeViolations,
   collectExportEntries,
   type ExportEntry,
   type ExportsValue,
@@ -156,6 +158,20 @@ if (entries.length === 0) throw new Error("package.json declares no exports to v
 
 console.log(`Building ${pkg.name} and packing a tarball...`);
 run("bun", ["run", "build"], repoRoot);
+
+const sizes = new Map(
+  BUNDLE_BUDGETS.map(({ path }) => [path, statSync(join(repoRoot, path)).size]),
+);
+const oversized = bundleSizeViolations(BUNDLE_BUDGETS, sizes);
+if (oversized.length > 0) {
+  const lines = oversized.map(
+    (v) => `${v.path}: ${v.actualBytes} bytes exceeds budget of ${v.maxBytes} bytes`,
+  );
+  throw new Error(`root bundle exceeds its size budget:\n  ${lines.join("\n  ")}`);
+}
+console.log(
+  `Root bundle within budget: ${[...sizes].map(([path, size]) => `${path} (${size}b)`).join(", ")}`,
+);
 
 const workspace = mkdtempSync(join(tmpdir(), "chatter-pack-"));
 try {

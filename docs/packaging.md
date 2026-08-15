@@ -87,6 +87,14 @@ must exit on its own after importing. A module-scope `setInterval` without
 `unref` holds the host's event loop open forever, and `test:pack` fails on the
 hang rather than waiting it out.
 
+Before any of that, the same run asserts a size budget (`BUNDLE_BUDGETS` in
+`scripts/pack-exports.ts`) on the root entry's built `.mjs`/`.js` files. The
+root bundle is every consumer's install size regardless of which subpaths they
+touch, so a peer or the widget creeping back into a static import there is a
+regression none of the other gates would catch — typecheck, lint and the test
+suite all pass whether the root entry is lean or drags in every optional
+integration.
+
 ## The release chain
 
 Publishing is automated end to end, which makes the chain from an upstream
