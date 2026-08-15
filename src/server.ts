@@ -4,15 +4,16 @@
  * Creates a configured Hono server instance with all routes and middleware.
  */
 
+import { relative } from "node:path";
 import { createClient } from "@libsql/client";
 import { Hono } from "hono";
-import { serveStatic } from "hono/bun";
 import OpenAI from "openai";
 import { ApiKeyManager } from "./auth/apikeys";
 import type { Channel } from "./channels";
 import { createSenderRegistry } from "./channels";
 import { PromptLoader } from "./core/prompts";
 import { VectorStore } from "./core/retrieval";
+import { loadServeStatic, type ServeStaticFn } from "./core/serve-static";
 import { resolveStatic } from "./core/widgets";
 import { cors } from "./middleware/cors";
 import { demoRoutes } from "./routes/demo";
@@ -119,15 +120,28 @@ export async function createServer(config: ChatterConfig): Promise<ChatterApp> {
     }),
   );
 
+  // Static files need a runtime-specific adapter (see ./core/serve-static), so
+  // it is resolved once here and only when something will actually be served.
+  // A runtime missing its adapter loses the static routes, not the whole
+  // server — the API is what a headless-capable host is really booting.
+  let serveStatic: ServeStaticFn | null = null;
+  if (!headless && (staticDir || publicDir)) {
+    try {
+      serveStatic = await loadServeStatic();
+    } catch (error) {
+      console.error(`❌ Static assets disabled: ${(error as Error).message}`);
+    }
+  }
+
   // Serve static assets (chatter.js, chatter.css)
-  if (!headless && staticDir) {
-    const relativePath = require("node:path").relative(process.cwd(), staticDir);
+  if (serveStatic && staticDir) {
+    const relativePath = relative(process.cwd(), staticDir);
     app.get("/chatter.js", serveStatic({ path: `${relativePath}/chatter.js` }));
     app.get("/chatter.css", serveStatic({ path: `${relativePath}/chatter.css` }));
   }
 
   // Serve static files from public directory
-  if (!headless && publicDir) {
+  if (serveStatic && publicDir) {
     app.get("/", serveStatic({ path: `${publicDir}/index.html` }));
     app.get("/chat", serveStatic({ path: `${publicDir}/chat.html` }));
     app.get("/private", serveStatic({ path: `${publicDir}/private.html` }));

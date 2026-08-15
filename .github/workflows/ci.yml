@@ -7,20 +7,16 @@ on:
     branches: [main, develop]
 
 jobs:
-  test:
+  # The gates, exactly as they run locally. Bun is the development runtime, so
+  # one leg is the honest number of legs: the old Node matrix ran every version
+  # through `bun`, making four identical jobs that proved nothing about Node.
+  check:
+    name: Gates (Bun)
     runs-on: ubuntu-latest
-
-    strategy:
-      matrix:
-        node-version: [18.x, 20.x, 22.x, 24.x]
 
     steps:
       - name: Checkout code
         uses: actions/checkout@v7
-      - name: Setup Node.js
-        uses: actions/setup-node@v7
-        with:
-          node-version: ${{ matrix.node-version }}
 
       - name: Setup Bun
         uses: oven-sh/setup-bun@v1
@@ -30,20 +26,48 @@ jobs:
       - name: Install dependencies
         run: bun install
 
-      - name: Run linter
-        run: bun run lint
-
-      - name: Run type check
-        run: bun run typecheck
-
-      - name: Run security audit
-        run: bun run security:check
-
-      - name: Run tests
-        run: bun test
+      # typecheck + api-surface compile + lint + test + audit. Running the
+      # steps individually let the api-surface compile test drift out of CI.
+      - name: Run gates
+        run: bun run check
 
       - name: Build package
         run: bun run build
+
+  # What Node consumers actually get. `engines.node` is the floor tested here.
+  node-runtime:
+    name: Built package (Node ${{ matrix.node-version }})
+    runs-on: ubuntu-latest
+
+    strategy:
+      matrix:
+        node-version: [24.x]
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v7
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v1
+        with:
+          bun-version: latest
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: ${{ matrix.node-version }}
+
+      - name: Install dependencies
+        run: bun install
+
+      - name: Build package
+        run: bun run build
+
+      # Loads dist/ the way a Node host does and boots a server from it. Every
+      # test above this runs under Bun, where a `Bun` global exists and
+      # require() works inside ESM — neither is true here.
+      - name: Verify the built package under Node
+        run: bun run test:node
 
   package-contract:
     name: Package contract (packed tarball)
@@ -66,3 +90,16 @@ jobs:
       # no build step produces — `types` resolves, so tsc stays green.
       - name: Verify published exports resolve
         run: bun run test:pack
+
+  docker:
+    name: Docker image builds
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v7
+
+      # The Dockerfile referenced a build script that did not exist, so it had
+      # never been built by anything.
+      - name: Build image
+        run: docker build -t chatter:ci .

@@ -4,7 +4,11 @@ This guide covers deploying Chatter to production on various platforms.
 
 ## Platform Requirements
 
-**Chatter requires Bun runtime and long-running server processes.**
+**Chatter requires Bun >= 1.2 or Node >= 24, and long-running server
+processes.** The examples below use Bun; on Node, `serve()` from
+`@hono/node-server` (an optional peer dependency) replaces `Bun.serve` and the
+base image becomes a Node one. See the runtime section of
+[Requirements](./requirements.md).
 
 ### ✅ Compatible Platforms
 
@@ -18,7 +22,7 @@ This guide covers deploying Chatter to production on various platforms.
 
 ### ❌ NOT Compatible
 
-- **Vercel, Netlify** - No Bun runtime support
+- **Vercel, Netlify** - No long-running processes
 - **AWS Lambda, Cloudflare Workers** - Serverless, not designed for long-running processes
 
 **Why**: Chatter needs persistent processes for RAG embeddings, session state, and streaming responses.
@@ -26,6 +30,11 @@ This guide covers deploying Chatter to production on various platforms.
 ## Docker Deployment
 
 ### Dockerfile
+
+Chatter is a library — it ships a server *factory*, not a runnable bot — so the
+`Dockerfile` in this repository only builds the package and its production
+dependencies as a base image. Your app supplies the entry point that calls
+`createServer` and the `CMD` that runs it.
 
 Create a `Dockerfile`:
 

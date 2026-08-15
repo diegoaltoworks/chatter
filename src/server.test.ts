@@ -7,7 +7,7 @@
  */
 
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { Channel } from "./channels";
@@ -272,5 +272,35 @@ describe("createServer channels", () => {
     await app1.stopChannels();
 
     expect(stopped).toEqual(["one"]);
+  });
+});
+
+describe("createServer static assets", () => {
+  test("serves the widget assets through the runtime's adapter", async () => {
+    const staticDir = await mkdtemp(join(tmpdir(), "chatter-server-static-"));
+    await writeFile(join(staticDir, "chatter.js"), "widget");
+    await writeFile(join(staticDir, "chatter.css"), "styles");
+
+    const app = await createServer({
+      ...baseConfig(),
+      features: { headless: false },
+      staticDir,
+      publicDir: staticDir,
+    });
+
+    const script = await app.request("/chatter.js");
+    expect(script.status).toBe(200);
+    expect(await script.text()).toBe("widget");
+    expect((await app.request("/chatter.css")).status).toBe(200);
+
+    await rm(staticDir, { recursive: true, force: true });
+  });
+
+  test("headless mounts no static routes and loads no adapter", async () => {
+    const app = await createServer({ ...baseConfig(), staticDir: knowledgeDir });
+
+    expect((await app.request("/chatter.js")).status).toBe(404);
+    // The API is still there — headless drops files, not routes.
+    expect((await app.request("/healthz")).status).toBe(200);
   });
 });

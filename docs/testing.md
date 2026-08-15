@@ -37,6 +37,12 @@ bun test --coverage
   separately as `bun run test:pack` (see [Packaging](./packaging.md)), because
   no test that imports from `src/` can see a broken subpath.
 
+- **Node runtime tests** cover the other runtime the package supports. Every
+  test above runs under Bun, where a `Bun` global exists and `require()` works
+  inside ESM, so `bun run build && bun run test:node` loads `dist/` under plain
+  Node and boots a server from it. That is where a Bun-only import or a
+  `require()` left in an ESM bundle shows up.
+
 Run `bun test` for the current counts; `bun run check` additionally typechecks,
 lints and audits.
 
@@ -424,22 +430,17 @@ Tests run automatically on:
 
 ### GitHub Actions Workflow
 
-```yaml
-name: CI
-on: [push, pull_request]
-jobs:
-  test:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v3
-      - uses: oven-sh/setup-bun@v1
-      - run: bun install
-      - run: bun test
-        env:
-          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
-          TURSO_URL: ${{ secrets.TURSO_URL }}
-          TURSO_AUTH_TOKEN: ${{ secrets.TURSO_AUTH_TOKEN }}
-```
+`.github/workflows/ci.yml` runs four jobs on every push and pull request:
+
+| Job | What it proves |
+| --- | --- |
+| `check` | The gates — `bun run check` (typecheck, api-surface compile, lint, tests, audit) and a full build |
+| `node-runtime` | The built bundles load and serve under plain Node (`bun run test:node`) |
+| `package-contract` | Every `exports` subpath resolves from a packed tarball (`bun run test:pack`) |
+| `docker` | The image builds |
+
+The gates run through the single `check` script rather than as separate steps,
+so a check added locally cannot be missing from CI.
 
 ## Contributing Tests
 
