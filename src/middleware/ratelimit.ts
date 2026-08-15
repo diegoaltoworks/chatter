@@ -1,21 +1,11 @@
 import type { Context, Next } from "hono";
 
 import type { ChatterConfig } from "../types";
+import { clientRateLimitKey } from "./clientKey";
+import { createWindowBucketLimiter } from "./windowBucket";
 
 interface ContextWithJWT extends Context {
   jwtSub?: string;
-}
-
-type BucketState = { count: number; windowStart: number };
-
-// Demo API keys that get stricter rate limits
-const DEMO_KEYS = ["chatter-api-key-here"];
-
-function getKeyFromIP(c: Context) {
-  const h = c.req.header("x-forwarded-for");
-  if (h) return h.split(",")[0].trim();
-  // Bun/Hono: remote address not directly exposed; you can append a reverse proxy that sets XFF.
-  return "unknown-ip";
 }
 
 /**
@@ -23,23 +13,12 @@ function getKeyFromIP(c: Context) {
  * Returns an object with limitPublic and limitPrivate middleware functions
  */
 export function createRateLimiter(config: ChatterConfig) {
-  const buckets = new Map<string, BucketState>();
-  const WINDOW_MS = 60_000;
+  const limiter = createWindowBucketLimiter(60_000);
 
   const publicLimit = config.rateLimit?.public || 60;
   const privateLimit = config.rateLimit?.private || 120;
-
-  function allow(key: string, limit: number) {
-    const now = Date.now();
-    const b = buckets.get(key) ?? { count: 0, windowStart: now };
-    if (now - b.windowStart >= WINDOW_MS) {
-      b.count = 0;
-      b.windowStart = now;
-    }
-    b.count += 1;
-    buckets.set(key, b);
-    return b.count <= limit;
-  }
+  const trustProxy = config.rateLimit?.trustProxy ?? true;
+  const demoApiKeys = config.rateLimit?.demoApiKeys ?? [];
 
   return {
     // Public: key is IP only
@@ -47,14 +26,14 @@ export function createRateLimiter(config: ChatterConfig) {
     limitPublic() {
       return async (c: Context, next: Next) => {
         const apiKey = c.req.header("x-api-key");
-        const isDemoKey = apiKey ? DEMO_KEYS.includes(apiKey) : false;
+        const isDemoKey = apiKey ? demoApiKeys.includes(apiKey) : false;
 
-        const key = `pub:${getKeyFromIP(c)}`;
+        const key = `pub:${clientRateLimitKey(c, trustProxy)}`;
         const limit = isDemoKey
           ? Math.floor(publicLimit / 10) // Demo: 10x stricter
           : publicLimit;
 
-        if (!allow(key, limit)) {
+        if (!limiter.hit(key, limit)) {
           return c.json(
             {
               error: isDemoKey
@@ -73,14 +52,9 @@ export function createRateLimiter(config: ChatterConfig) {
       return async (c: Context, next: Next) => {
         const sub = (c as ContextWithJWT).jwtSub;
         const key = `private:${sub ?? "no-sub"}`;
-        if (!allow(key, privateLimit)) return c.json({ error: "Rate limit" }, 429);
+        if (!limiter.hit(key, privateLimit)) return c.json({ error: "Rate limit" }, 429);
         await next();
       };
     },
   };
 }
-
-// Backward compatibility exports (will be removed when routes are updated)
-const defaultLimiter = createRateLimiter({} as ChatterConfig);
-export const limitPublic = defaultLimiter.limitPublic;
-export const limitPrivate = defaultLimiter.limitPrivate;

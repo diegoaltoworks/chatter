@@ -63,6 +63,3 @@ export function createJWTMiddleware(config: ChatterConfig) {
     }
   };
 }
-
-// Backward compatibility export (will be removed when routes are updated)
-export const requirePrivateJWT = createJWTMiddleware({} as ChatterConfig);

@@ -35,7 +35,8 @@ export function publicRoutes(deps: ServerDependencies) {
   // Security middleware stack
   app.use("/api/public/*", validateSessionKey()); // Validate session keys first
   app.use("/api/public/*", requirePublicKey); // Then check API key
-  app.use("/api/public/*", requireReferrer(referrerOrigins)); // Referrer checking for demo keys
+  // Referrer checking for demo keys
+  app.use("/api/public/*", requireReferrer(referrerOrigins, config.rateLimit?.demoApiKeys ?? []));
   app.use("/api/public/*", limitPublic()); // Rate limiting (stricter for demo keys)
 
   app.post("/api/public/chat", async (c) => {

@@ -120,6 +120,52 @@ Set requests per minute limits:
 }
 ```
 
+Public/demo rate limits and the demo-key referer check key on the caller's IP,
+read from `X-Forwarded-For`. That header is client-suppliable, so it's only
+trustworthy when a reverse proxy in front of Chatter (nginx, Cloudflare, a
+cloud load balancer) overwrites it with the real socket address. Set
+`trustProxy: false` when Chatter is reachable directly — every caller then
+shares one bucket per limiter, which is coarse but not bypassable by rotating
+a fake header:
+
+```typescript
+{
+  rateLimit: {
+    trustProxy: false // Default: true (assumes a trusted proxy sets XFF)
+  }
+}
+```
+
+If you ship a fixed, low-privilege API key baked into a public demo page,
+list it in `demoApiKeys` so it gets the stricter public rate limit and the
+referer/origin check instead of the normal per-key limit:
+
+```typescript
+{
+  rateLimit: {
+    demoApiKeys: ["your-public-demo-key"]
+  }
+}
+```
+
+Demo routes (`/api/demo/*`) restrict access to `server.allowedOrigins` via the
+`Origin`/`Referer` headers — never `Host`, which a direct (non-browser)
+client can set to anything. For local development against a restricted
+`allowedOrigins`, opt in to an any-port localhost allowance explicitly:
+
+```typescript
+{
+  server: {
+    allowedOrigins: ["https://your-app.com"],
+    allowLocalhostDemo: true // Default: false
+  }
+}
+```
+
+`Origin`/`Referer` are themselves only browser-enforced, so this — like
+`allowedOrigins` on the demo routes generally — is a convenience against
+browser-driven abuse, not a substitute for authentication.
+
 ### Brain
 
 Replace the completion call on every chat surface with your own answer
