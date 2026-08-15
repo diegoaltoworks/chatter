@@ -32,3 +32,16 @@ updates:
       - "github-actions"
     commit-message:
       prefix: "chore(actions)"
+
+  # The Dockerfile pins Bun to an exact base-image tag; without this ecosystem
+  # that pin would only ever move when someone remembered to move it.
+  - package-ecosystem: "docker"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    labels:
+      - "dependencies"
+      - "docker"
+    commit-message:
+      prefix: "chore(docker)"

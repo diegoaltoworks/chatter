@@ -1,8 +1,10 @@
 # Packaging & the published contract
 
 What a consumer can import from `@diegoaltoworks/chatter`, and how that promise
-is kept honest between releases. Every merge to `main` publishes, so the
-contract has to be verified before the merge rather than discovered downstream.
+is kept honest between releases. Every human-authored merge to `main` publishes,
+so the contract has to be verified before the merge rather than discovered
+downstream. (Dependency bumps are the exception — see
+[the release chain](#the-release-chain) below.)
 
 ## The subpath contract
 
@@ -84,3 +86,61 @@ One consequence worth knowing when writing library code: the consumer process
 must exit on its own after importing. A module-scope `setInterval` without
 `unref` holds the host's event loop open forever, and `test:pack` fails on the
 hang rather than waiting it out.
+
+## The release chain
+
+Publishing is automated end to end, which makes the chain from an upstream
+dependency to the registry worth stating explicitly:
+
+```
+merge to main → CI (the gates, plus the build/runtime/tarball/image jobs)
+              → publish workflow re-runs the gates, bumps the minor, tags,
+                `npm publish --provenance`
+              → the tag push publishes the GitHub release and its notes
+```
+
+Nobody types a version number: the publish workflow derives the next minor from
+the highest `v*` tag and commits the bump itself, which is why its own
+`chore(release): v…` commit is excluded from re-triggering it.
+
+### The human gate
+
+Dependabot opens dependency PRs, a workflow approves and auto-merges the minor
+and patch ones, and CI goes green — so without a gate, an upstream maintainer's
+code would reach npm under our name with no human having read it.
+
+Two guards close that path, because a bump can reach a release two ways:
+
+- The publish job declines to run when dependabot authored the commit that
+  triggered it. That is the auto-merge case, and it costs nothing to check.
+- Before publishing anything, the job scans every commit since the last release
+  tag and fails if dependabot authored any of them. Without this, a bump merged
+  on Monday ships inside somebody else's Wednesday release — the first guard
+  looks at one commit, and the bump is not it.
+
+Both are skipped for `workflow_dispatch`. That is the point: a maintainer
+reviewing the bump and running **Publish to NPM** from the Actions tab *is* the
+approval, and the release it cuts moves the tag past the bump so ordinary
+merges publish again.
+
+### What "CI was green" is allowed to mean
+
+A green run only certifies the release if the run itself is reproducible, so
+the whole toolchain is pinned:
+
+- **Actions by commit SHA**, never by tag — a tag is a mutable pointer, and
+  these workflows hold `id-token` and `contents: write`. Each pin carries a
+  `# vX.Y.Z` comment, which is both how a reader knows what it is and how
+  Dependabot knows what to offer.
+- **Bun by one exact version**, shared by every workflow step and the
+  Dockerfile's base images, so the toolchain that ran the gates is the
+  toolchain that builds the tarball. They are checked against each other, since
+  the ecosystems that update them are separate and would otherwise drift.
+- **`bun install --frozen-lockfile`** everywhere, so CI resolves the committed
+  lockfile instead of whatever the registry serves that minute.
+
+Each of these is a line or two that nothing else would notice going missing, so
+`scripts/supply-chain.test.ts` audits every workflow in the repo, plus the
+Dockerfile, for all four properties — ignoring commented-out lines, so a guard
+cannot pass the audit as a corpse. Adding a workflow, or pasting a step into an
+existing one, fails the gates rather than silently reopening the path.
