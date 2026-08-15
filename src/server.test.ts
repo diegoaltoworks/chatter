@@ -6,10 +6,11 @@
  * the vector store build never calls OpenAI.
  */
 
-import { afterAll, beforeAll, describe, expect, test } from "bun:test";
+import { afterAll, afterEach, beforeAll, describe, expect, test } from "bun:test";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { ApiKeyManager } from "./auth/apikeys";
 import type { Channel } from "./channels";
 import { createSenderRegistry } from "./channels";
 import { createServer } from "./server";
@@ -272,6 +273,42 @@ describe("createServer channels", () => {
     await app1.stopChannels();
 
     expect(stopped).toEqual(["one"]);
+  });
+});
+
+describe("createServer auth secret precedence", () => {
+  const originalChatterSecret = process.env.CHATTER_SECRET;
+
+  afterEach(() => {
+    if (originalChatterSecret === undefined) {
+      delete process.env.CHATTER_SECRET;
+    } else {
+      process.env.CHATTER_SECRET = originalChatterSecret;
+    }
+  });
+
+  test("config.auth.secret wins over the CHATTER_SECRET env var", async () => {
+    process.env.CHATTER_SECRET = "env-provided-secret-value-here";
+    const configSecret = "config-provided-secret-value-here";
+    const app = await createServer({ ...baseConfig(), auth: { secret: configSecret } });
+
+    const configKey = await new ApiKeyManager(configSecret).create();
+    const envKey = await new ApiKeyManager(process.env.CHATTER_SECRET).create();
+
+    const request = (apiKey: string) =>
+      app.fetch(
+        new Request("http://localhost/v1/chat/completions", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", "x-api-key": apiKey },
+          body: "{}",
+        }),
+      );
+
+    // Bad body ("messages" missing) fails validation with 400 only once auth
+    // passes, so this proves the config secret was the one used to verify.
+    expect((await request(configKey)).status).toBe(400);
+    // The env secret must not verify once a config secret is set.
+    expect((await request(envKey)).status).toBe(401);
   });
 });
 

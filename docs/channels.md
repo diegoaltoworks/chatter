@@ -49,12 +49,11 @@ const whatsapp = createWhatsAppChannel({
 await createServer({ ..., channels: [whatsapp] });
 ```
 
-- **`sessionSecret`** (required) encrypts the stored session at rest
-  (AES-256-GCM). Keep it stable across restarts and deploys — losing it
-  means every linked session must be re-paired. Generate one with, e.g.,
-  `openssl rand -base64 32` — the key derives from it directly (a single
-  SHA-256 pass, no salt or stretching), so a high-entropy value matters more
-  here than for a typical human-chosen password.
+- **`sessionSecret`** (required, at least 16 characters — a shorter or empty
+  value throws at channel creation) encrypts the stored session at rest
+  (AES-256-GCM, key derived via scrypt with a fresh salt per row). Keep it
+  stable across restarts and deploys — losing it means every linked session
+  must be re-paired. Generate one with, e.g., `openssl rand -base64 32`.
 - **`sessionIds`** — one Baileys connection per id, each a separate WhatsApp
   number. Defaults to `["default"]`. The `"default"` session's stored rows
   are unprefixed, so a single-number deployment introduced before

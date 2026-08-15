@@ -380,6 +380,11 @@ Set a secret for signing/verifying JWT-based API keys:
 }
 ```
 
+`auth.secret` takes precedence over the `CHATTER_SECRET` env var when both are
+set. Either way the secret must be at least 16 characters (32+ recommended,
+as above) — a shorter or empty value throws at startup instead of silently
+signing with a weak key.
+
 #### Clerk (Optional, for Private Chat)
 
 Configure Clerk authentication:

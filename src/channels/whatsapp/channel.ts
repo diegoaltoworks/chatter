@@ -18,6 +18,7 @@
 
 import type { Client } from "@libsql/client";
 import type { WAMessage, WASocket } from "@whiskeysockets/baileys";
+import { assertStrongSecret } from "../../auth/secretStrength";
 import type { Channel } from "../index";
 import type { ChannelSender } from "../senders";
 import type { AuthStateRuntime } from "./authState";
@@ -197,6 +198,7 @@ export function senderNameFor(channelName: string, sessionId: string): string {
 }
 
 export function createWhatsAppChannel(config: WhatsAppChannelConfig): Channel {
+  assertStrongSecret(config.sessionSecret, "WhatsApp sessionSecret (e.g. WA_SESSION_SECRET)");
   const channelName = "whatsapp";
   const sessionIds =
     config.sessionIds && config.sessionIds.length > 0 ? config.sessionIds : ["default"];

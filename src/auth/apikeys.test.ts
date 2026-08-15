@@ -11,7 +11,11 @@ describe("ApiKeyManager", () => {
 
   describe("constructor", () => {
     it("should throw error if secret is not provided", () => {
-      expect(() => new ApiKeyManager("")).toThrow("API key secret is required");
+      expect(() => new ApiKeyManager("")).toThrow("is required and cannot be empty");
+    });
+
+    it("should throw error if secret is too short", () => {
+      expect(() => new ApiKeyManager("too-short")).toThrow("too weak");
     });
 
     it("should create instance with valid secret", () => {
@@ -160,7 +164,7 @@ describe("ApiKeyManager", () => {
 
     it("should decode without verifying signature", async () => {
       // Create key with different manager
-      const otherManager = new ApiKeyManager("other-secret");
+      const otherManager = new ApiKeyManager("other-secret-value");
       const key = await otherManager.create({ name: "other-key" });
 
       // Should decode successfully even though signature doesn't match

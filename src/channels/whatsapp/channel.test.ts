@@ -12,6 +12,18 @@ import {
 } from "./channel";
 import { createTursoWaLeaseStore } from "./lease";
 
+describe("createWhatsAppChannel", () => {
+  test("throws immediately on a weak sessionSecret, before any connection attempt", () => {
+    expect(() => createWhatsAppChannel({ sessionSecret: "too-short" })).toThrow("too weak");
+  });
+
+  test("throws immediately on an empty sessionSecret", () => {
+    expect(() => createWhatsAppChannel({ sessionSecret: "" })).toThrow(
+      "is required and cannot be empty",
+    );
+  });
+});
+
 describe("reconnectDelayMs", () => {
   test("doubles each attempt, starting at 5s", () => {
     expect(reconnectDelayMs(0)).toBe(5_000);
@@ -282,7 +294,7 @@ describe("createWhatsAppChannel", () => {
     const sockets: FakeSocket[] = [];
     const schedule = mock(() => undefined);
     const channel = createWhatsAppChannel({
-      sessionSecret: "secret",
+      sessionSecret: "test-session-secret-value",
       loadBaileys: async () => fakeBaileysModule({ registered: false, sockets }),
       schedule,
     });
@@ -299,7 +311,7 @@ describe("createWhatsAppChannel", () => {
   test("a paired default session connects and registers its sender unprefixed", async () => {
     const sockets: FakeSocket[] = [];
     const channel = createWhatsAppChannel({
-      sessionSecret: "secret",
+      sessionSecret: "test-session-secret-value",
       loadBaileys: async () => fakeBaileysModule({ registered: true, sockets }),
       schedule: () => undefined,
     });
@@ -328,7 +340,7 @@ describe("createWhatsAppChannel", () => {
     // Seed the DB exactly the way a completed `wa-pair` run would — through
     // the real useTursoAuthState, not a shortcut — with a marker only a
     // stored-and-reloaded row would carry.
-    const seeded = await useTursoAuthState(db, "secret", "default", runtime);
+    const seeded = await useTursoAuthState(db, "test-session-secret-value", "default", runtime);
     // Mutate the existing creds object in place, not `seeded.state.creds =`
     // — saveCreds() closes over the original object identity, so replacing
     // the reference would silently persist the wrong (unregistered) creds.
@@ -336,14 +348,16 @@ describe("createWhatsAppChannel", () => {
     await seeded.saveCreds();
 
     const channel = createWhatsAppChannel({
-      sessionSecret: "secret",
+      sessionSecret: "test-session-secret-value",
       loadBaileys: async () => fakeBaileysModule({ registered: false, sockets, socketOptions }),
       schedule: () => undefined,
     });
     const { deps } = testDeps(db);
 
     await channel.start(deps);
-    await flush();
+    // Real scrypt-backed decrypt() runs inside connect(), not just the sha256
+    // it replaced — give it real time to finish before asserting.
+    await flush(300);
 
     expect(sockets).toHaveLength(1);
     expect(socketOptions[0]?.auth.creds).toEqual({
@@ -355,7 +369,7 @@ describe("createWhatsAppChannel", () => {
   test("multiple sessions register under distinct, session-prefixed names", async () => {
     const sockets: FakeSocket[] = [];
     const channel = createWhatsAppChannel({
-      sessionSecret: "secret",
+      sessionSecret: "test-session-secret-value",
       sessionIds: ["default", "second"],
       loadBaileys: async () => fakeBaileysModule({ registered: true, sockets }),
       schedule: () => undefined,
@@ -374,7 +388,7 @@ describe("createWhatsAppChannel", () => {
     const sockets: FakeSocket[] = [];
     const received: unknown[] = [];
     const channel = createWhatsAppChannel({
-      sessionSecret: "secret",
+      sessionSecret: "test-session-secret-value",
       loadBaileys: async () => fakeBaileysModule({ registered: true, sockets }),
       schedule: () => undefined,
       onMessage: (event) => {
@@ -394,7 +408,7 @@ describe("createWhatsAppChannel", () => {
   test("a throwing onMessage handler is caught and logged, not left to crash the socket", async () => {
     const sockets: FakeSocket[] = [];
     const channel = createWhatsAppChannel({
-      sessionSecret: "secret",
+      sessionSecret: "test-session-secret-value",
       loadBaileys: async () => fakeBaileysModule({ registered: true, sockets }),
       schedule: () => undefined,
       onMessage: () => {
@@ -415,7 +429,7 @@ describe("createWhatsAppChannel", () => {
     const sockets: FakeSocket[] = [];
     const schedule = mock(() => undefined);
     const channel = createWhatsAppChannel({
-      sessionSecret: "secret",
+      sessionSecret: "test-session-secret-value",
       loadBaileys: async () => fakeBaileysModule({ registered: true, sockets }),
       schedule,
     });
@@ -444,7 +458,7 @@ describe("createWhatsAppChannel", () => {
       scheduled.push([fn, ms]);
     });
     const channel = createWhatsAppChannel({
-      sessionSecret: "secret",
+      sessionSecret: "test-session-secret-value",
       loadBaileys: async () => fakeBaileysModule({ registered: true, sockets }),
       schedule,
     });
@@ -497,7 +511,7 @@ describe("createWhatsAppChannel", () => {
       if (ms === 5_000) reconnect = fn;
     });
     const channel = createWhatsAppChannel({
-      sessionSecret: "secret",
+      sessionSecret: "test-session-secret-value",
       loadBaileys: async () => fakeBaileysModule({ registered: true, sockets }),
       schedule,
     });
@@ -525,7 +539,7 @@ describe("createWhatsAppChannel", () => {
   test("stop() unregisters every sender and ends every socket", async () => {
     const sockets: FakeSocket[] = [];
     const channel = createWhatsAppChannel({
-      sessionSecret: "secret",
+      sessionSecret: "test-session-secret-value",
       sessionIds: ["default", "second"],
       loadBaileys: async () => fakeBaileysModule({ registered: true, sockets }),
       schedule: () => undefined,

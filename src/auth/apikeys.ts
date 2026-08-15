@@ -7,6 +7,7 @@
 
 import { randomUUID } from "node:crypto";
 import { jwtVerify, SignJWT } from "jose";
+import { assertStrongSecret } from "./secretStrength";
 
 export interface ApiKeyOptions {
   /** Name/label for the API key */
@@ -51,9 +52,7 @@ export class ApiKeyManager {
   private secretBytes: Uint8Array;
 
   constructor(secret: string) {
-    if (!secret) {
-      throw new Error("API key secret is required");
-    }
+    assertStrongSecret(secret, "API key secret (CHATTER_SECRET / config.auth.secret)");
     this.secretBytes = new TextEncoder().encode(secret);
   }
 
