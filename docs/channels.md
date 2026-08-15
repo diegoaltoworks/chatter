@@ -135,6 +135,27 @@ Configuration:
   reply.
 - **`channelHint`** — passed straight through to `prepareChat`.
 
+### Mentions in the message text
+
+WhatsApp writes an @mention into the raw text as the literal token
+`@<digits>` — the mentioned jid's number — and only resolves it to a jid on
+`contextInfo`. The handler removes the bot's *own* mention tokens before the
+text reaches the gates, image routing or the model (`stripOwnMentions`, also
+exported from `./whatsapp` for hosts writing their own `onMessage`), so a
+group message addressed to the bot arrives as the sentence a human would read
+rather than as a bare number the model has to guess at. Other participants'
+mentions are left as-is: those are real context, and the rest of the message
+is untouched down to its indentation.
+
+Two consequences worth knowing when you configure the handler:
+
+- `muteRegex`/`unmuteRegex` are matched against the cleaned text, so an
+  anchored pattern like `/^go quiet$/i` still fires on a mention-prefixed
+  command.
+- A mention-only message (`@bot` and nothing else) keeps its original text.
+  Emptying it would make the reply gates read it as blank and drop it, and
+  going silent on being addressed is the worse failure.
+
 ## Image requests
 
 `createWhatsAppImageHandler` (see `./whatsapp`) plugs `./images` into the

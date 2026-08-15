@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { WAMessage, WASocket } from "@whiskeysockets/baileys";
 import type OpenAI from "openai";
+import type { AnswerFnInput } from "../../core/answer";
 import type { PromptLoader } from "../../core/prompts";
 import type { VectorStore } from "../../core/retrieval";
 import { createPersonaResolver } from "../../personas/resolver";
@@ -17,6 +18,7 @@ import {
   jidToPhoneNumber,
   messageContext,
   senderPhoneFor,
+  stripOwnMentions,
   type WhatsAppInboundConfig,
 } from "./inbound";
 
@@ -248,6 +250,79 @@ describe("messageContext", () => {
   });
 });
 
+describe("stripOwnMentions", () => {
+  const own = ["447700900000@s.whatsapp.net"];
+
+  test("the bot's own mention token is removed", () => {
+    expect(stripOwnMentions("@447700900000 say hello", own)).toBe("say hello");
+  });
+
+  test("another participant's mention is left alone", () => {
+    expect(stripOwnMentions("@447700900999 are you there?", own)).toBe(
+      "@447700900999 are you there?",
+    );
+  });
+
+  test("only the bot's token goes when both are mentioned", () => {
+    expect(stripOwnMentions("@447700900000 tell @447700900999 I'm late", own)).toBe(
+      "tell @447700900999 I'm late",
+    );
+  });
+
+  test("text with no mentions passes through unchanged", () => {
+    expect(stripOwnMentions("what's the weather like?", own)).toBe("what's the weather like?");
+  });
+
+  test("a device-suffixed or LID own id still matches its token", () => {
+    expect(stripOwnMentions("@447700900000 hi", ["447700900000:17@s.whatsapp.net"])).toBe("hi");
+    expect(stripOwnMentions("@259841343885518 hi", ["259841343885518@lid"])).toBe("hi");
+  });
+
+  test("a token in the middle of a sentence collapses its surrounding spaces", () => {
+    expect(stripOwnMentions("hey @447700900000 what's up", own)).toBe("hey what's up");
+  });
+
+  // The strip must not double as a formatter: everything but the bot's own
+  // token comes through byte-for-byte, or a pasted code snippet loses its
+  // indentation on the way to the model.
+  test("indentation and blank lines around the mention survive", () => {
+    expect(
+      stripOwnMentions("@447700900000 review this:\n\n    def foo():\n        return 1", own),
+    ).toBe("review this:\n\n    def foo():\n        return 1");
+  });
+
+  test("a message with no own mention is returned byte-identical", () => {
+    const text = "  spaced   out\n\tand indented  ";
+    expect(stripOwnMentions(text, own)).toBe(text);
+  });
+
+  test("an address that merely contains the bot's digits is not a mention", () => {
+    expect(stripOwnMentions("mail me at bob@447700900000.com", own)).toBe(
+      "mail me at bob@447700900000.com",
+    );
+  });
+
+  test("a mention on its own line keeps the following lines", () => {
+    expect(stripOwnMentions("@447700900000\nsummarise this:\n- one", own)).toBe(
+      "summarise this:\n- one",
+    );
+  });
+
+  // An empty user message fails retrieval instead of producing a reply, so a
+  // mention-only message keeps its original text rather than becoming "".
+  test("a mention-only message is returned unchanged", () => {
+    expect(stripOwnMentions("@447700900000", own)).toBe("@447700900000");
+  });
+
+  test("no own ids known -> nothing is stripped", () => {
+    expect(stripOwnMentions("@447700900000 hi", [])).toBe("@447700900000 hi");
+  });
+
+  test("a longer number that merely starts with the bot's digits is not a match", () => {
+    expect(stripOwnMentions("@4477009000001 hi", own)).toBe("@4477009000001 hi");
+  });
+});
+
 // --- createWhatsAppInboundHandler ---
 
 interface Harness {
@@ -359,6 +434,122 @@ describe("createWhatsAppInboundHandler", () => {
     );
 
     expect(answerCalls).toHaveLength(1);
+  });
+
+  // Regression (exact field shape from the reported case): the bot was
+  // correctly detected as mentioned, then handed the literal mention token as
+  // the user's message and answered by asking what "@259841343885518" meant.
+  test("the bot's own mention token never reaches the model", async () => {
+    const sock = fakeSocket({
+      user: { id: "259841343885518:12@s.whatsapp.net" },
+    } as unknown as Partial<WASocket>) as WASocket & { sendMessage: ReturnType<typeof mock> };
+    const answerCalls: AnswerFnInput[] = [];
+    const handler = createWhatsAppInboundHandler({
+      client: {} as unknown as OpenAI,
+      store: { query: async () => ["some context"] } as unknown as VectorStore,
+      prompts: {
+        baseSystemRules: "rules",
+        publicPersona: "persona",
+        privatePersona: "private persona",
+      } as unknown as PromptLoader,
+      registry: new Map(),
+      answerFn: async (input) => {
+        answerCalls.push(input);
+        return "a reply";
+      },
+    });
+
+    await handler(
+      waEvent(sock, {
+        key: { remoteJid: "group@g.us", participant: "447700900999@s.whatsapp.net", fromMe: false },
+        message: {
+          extendedTextMessage: {
+            text: "@259841343885518 say hello",
+            contextInfo: { mentionedJid: ["259841343885518@s.whatsapp.net"] },
+          },
+        },
+      }),
+    );
+
+    expect(answerCalls).toHaveLength(1);
+    expect(answerCalls[0]?.messages).toEqual([{ role: "user", content: "say hello" }]);
+  });
+
+  test("another participant's mention survives into the model's message", async () => {
+    const { handler, sock, answerCalls } = createHarness();
+
+    await handler(
+      waEvent(sock, {
+        key: { remoteJid: "group@g.us", participant: "447700900999@s.whatsapp.net", fromMe: false },
+        message: {
+          extendedTextMessage: {
+            text: "@447700900000 tell @447700900888 I'm late",
+            contextInfo: {
+              mentionedJid: ["447700900000@s.whatsapp.net", "447700900888@s.whatsapp.net"],
+            },
+          },
+        },
+      }),
+    );
+
+    expect((answerCalls[0] as AnswerFnInput | undefined)?.messages).toEqual([
+      { role: "user", content: "tell @447700900888 I'm late" },
+    ]);
+  });
+
+  // The cleaned text is what the gates see too, so a host's anchored mute
+  // pattern fires on an addressed command instead of missing it.
+  test("an anchored mute regex matches a mention-prefixed command", async () => {
+    const { handler, sock, answerCalls } = createHarness({
+      muteRegex: /^go quiet$/i,
+      muteReply: "ok",
+    });
+
+    await handler(
+      waEvent(sock, {
+        key: { remoteJid: "group@g.us", participant: "447700900999@s.whatsapp.net", fromMe: false },
+        message: {
+          extendedTextMessage: {
+            text: "@447700900000 go quiet",
+            contextInfo: { mentionedJid: ["447700900000@s.whatsapp.net"] },
+          },
+        },
+      }),
+    );
+
+    expect(sock.sendMessage).toHaveBeenCalledWith("group@g.us", { text: "ok" });
+    expect(answerCalls).toHaveLength(0);
+  });
+
+  // Stripping a mention-only message to "" would make the gates drop it as
+  // blank; being addressed and going silent is worse than answering a bare
+  // ping, so the original text stands.
+  test("a mention-only message is still answered", async () => {
+    const { handler, sock, answerCalls } = createHarness();
+
+    await handler(
+      waEvent(sock, {
+        key: { remoteJid: "group@g.us", participant: "447700900999@s.whatsapp.net", fromMe: false },
+        message: {
+          extendedTextMessage: {
+            text: "@447700900000",
+            contextInfo: { mentionedJid: ["447700900000@s.whatsapp.net"] },
+          },
+        },
+      }),
+    );
+
+    expect(answerCalls).toHaveLength(1);
+  });
+
+  test("a DM with no mentions reaches the model unchanged", async () => {
+    const { handler, sock, answerCalls } = createHarness();
+
+    await handler(waEvent(sock));
+
+    expect((answerCalls[0] as AnswerFnInput | undefined)?.messages).toEqual([
+      { role: "user", content: "hello there" },
+    ]);
   });
 
   test("mute/unmute regexes flip the group's mute state without answering", async () => {

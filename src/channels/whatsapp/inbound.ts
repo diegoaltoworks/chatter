@@ -67,15 +67,19 @@ export function isGroupJid(jid: string): boolean {
   return jid.endsWith("@g.us");
 }
 
+/** The user part of a jid, without device suffix or domain: "447700900123:17@s.whatsapp.net" -> "447700900123". */
+function bareUser(jid: string): string {
+  return jid.split("@")[0]?.split(":")[0] ?? "";
+}
+
 /** "447700900123:17@s.whatsapp.net" (device-suffixed) and "447700900123@s.whatsapp.net" match. */
 export function jidsMatch(a: string | undefined, b: string | undefined): boolean {
   if (!a || !b) return false;
-  const bare = (jid: string) => jid.split("@")[0]?.split(":")[0] ?? jid;
-  return bare(a) === bare(b);
+  return bareUser(a) === bareUser(b);
 }
 
 export function jidToPhoneNumber(jid: string): string {
-  const bare = jid.split("@")[0]?.split(":")[0] ?? "";
+  const bare = bareUser(jid);
   return bare.startsWith("+") ? bare : `+${bare}`;
 }
 
@@ -88,8 +92,8 @@ export function jidToPhoneNumber(jid: string): string {
  */
 function normalizeJid(jid: string): string {
   const [user = "", domain] = jid.split("@");
-  const bareUser = user.split(":")[0] ?? user;
-  return domain ? `${bareUser}@${domain}` : bareUser;
+  const withoutDevice = user.split(":")[0] ?? user;
+  return domain ? `${withoutDevice}@${domain}` : withoutDevice;
 }
 
 /**
@@ -182,6 +186,47 @@ export function extractText(message: WAMessage): string {
   );
 }
 
+/**
+ * Removes the bot's OWN @mention tokens from a message's text.
+ *
+ * WhatsApp puts a mention in the raw text as the literal token `@<digits>` —
+ * the mentioned jid's user part — and only resolves it to a jid separately,
+ * on `contextInfo.mentionedJid`. Handed to a model untouched, the bot's own
+ * mention reads as a meaningless number, and the answer derails into asking
+ * the sender what `@<botDigits>` means instead of doing what the rest of the
+ * message asked.
+ *
+ * Only the bot's own tokens go: another participant's mention is real
+ * context ("tell @<someoneElse> I'm late"), and the numeral is all the model
+ * gets of them. Matching is on the digits alone, so both the phone-number and
+ * the LID form of the bot's own identity are covered.
+ *
+ * Everything else in the message is left byte-for-byte alone — indentation
+ * and blank lines in a pasted snippet included.
+ *
+ * A mention-only message ("@bot" and nothing else) keeps its original text:
+ * emptying it would make the reply gates read it as blank and drop it, so the
+ * bot would go silent on being addressed rather than answer.
+ */
+export function stripOwnMentions(text: string, ownIds: string[]): string {
+  const ownUsers = new Set(ownIds.map(bareUser).filter(Boolean));
+  if (!text || ownUsers.size === 0) return text;
+
+  let struck = false;
+  // A token starts a word ("bob@447700900123.com" is an address, not a
+  // mention) and takes the horizontal whitespace after it — but never a
+  // newline, so a mention on its own line leaves the following lines whole.
+  const stripped = text.replace(/(?<!\S)@(\d+)[^\S\n]*/g, (token, digits: string) => {
+    if (!ownUsers.has(digits)) return token;
+    struck = true;
+    return "";
+  });
+  if (!struck) return text;
+
+  const cleaned = stripped.trim();
+  return cleaned ? cleaned : text;
+}
+
 // --- inbound handler ---
 
 export interface WhatsAppInboundConfig {
@@ -268,7 +313,7 @@ export function createWhatsAppInboundHandler(
       const chatId = message.key.remoteJid ?? "";
       if (!chatId || chatId === "status@broadcast") return;
 
-      const text = extractText(message);
+      const rawText = extractText(message);
       const context = messageContext(message);
       const senderId = message.key.participant ?? chatId;
 
@@ -285,6 +330,15 @@ export function createWhatsAppInboundHandler(
         .filter((id): id is string => Boolean(id))
         .map(normalizeJid);
       config.registry.set(sessionId, ownIds);
+
+      // Everything downstream — gates, image routing, persona resolution, the
+      // model itself — works on the text a human would read, with the bot's
+      // own mention token removed. That includes the mute/unmute patterns: a
+      // host's anchored regex sees "shut up", not "@<botDigits> shut up",
+      // which is what an addressed command actually looks like to a reader.
+      // A non-empty message never strips to empty (see stripOwnMentions), so
+      // nothing newly falls through the gates' blank-text check.
+      const text = stripOwnMentions(rawText, ownIds);
 
       const fromBot = isEffectivelyFromSelf(
         { fromBot: message.key.fromMe ?? false, senderId: normalizeJid(senderId) },
