@@ -1,4 +1,4 @@
-import { describe, expect, mock, test } from "bun:test";
+import { describe, expect, mock, spyOn, test } from "bun:test";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -687,6 +687,108 @@ describe("createWhatsAppInboundHandler", () => {
     await handler(waEvent(sock));
 
     expect(answerCalls).toHaveLength(1);
+  });
+
+  /** An addressed group message, for allowlist-logging tests below. */
+  const addressedGroupMsg = (sock: WASocket, chatId: string) =>
+    waEvent(sock, {
+      key: { remoteJid: chatId, participant: "447700900999@s.whatsapp.net", fromMe: false },
+      message: {
+        extendedTextMessage: {
+          text: "@bot hi",
+          contextInfo: { mentionedJid: ["447700900000@s.whatsapp.net"] },
+        },
+      },
+    });
+
+  test("a group rejected by allowedChats logs its jid, without changing the ignore decision", async () => {
+    const { handler, sock, answerCalls } = createHarness({ allowedChats: ["allowed@g.us"] });
+    const logSpy = spyOn(console, "log").mockImplementation(() => {});
+    try {
+      await handler(addressedGroupMsg(sock, "unlisted@g.us"));
+
+      expect(answerCalls).toHaveLength(0);
+      expect(logSpy).toHaveBeenCalledTimes(1);
+      expect(logSpy.mock.calls[0]?.[0]).toContain("unlisted@g.us");
+      expect(logSpy.mock.calls[0]?.[0]).toContain("not in allowedChats");
+    } finally {
+      logSpy.mockRestore();
+    }
+  });
+
+  test("DMs and allowlisted groups log nothing new", async () => {
+    const { handler, sock } = createHarness({ allowedChats: ["allowed@g.us"] });
+    const logSpy = spyOn(console, "log").mockImplementation(() => {});
+    try {
+      await handler(waEvent(sock)); // DM
+      await handler(addressedGroupMsg(sock, "allowed@g.us"));
+
+      expect(logSpy).not.toHaveBeenCalled();
+    } finally {
+      logSpy.mockRestore();
+    }
+  });
+
+  test("an unaddressed group with no allowlist configured logs nothing (ignored for a different reason)", async () => {
+    const { handler, sock } = createHarness();
+    const logSpy = spyOn(console, "log").mockImplementation(() => {});
+    try {
+      await handler(
+        waEvent(sock, {
+          key: {
+            remoteJid: "any-group@g.us",
+            participant: "447700900999@s.whatsapp.net",
+            fromMe: false,
+          },
+          message: { conversation: "just chatting" },
+        }),
+      );
+
+      expect(logSpy).not.toHaveBeenCalled();
+    } finally {
+      logSpy.mockRestore();
+    }
+  });
+
+  test("a muted allowlisted group logs nothing (ignored for a different reason)", async () => {
+    const { handler, sock } = createHarness({
+      allowedChats: ["allowed@g.us"],
+      muteRegex: /shush/i,
+    });
+    const logSpy = spyOn(console, "log").mockImplementation(() => {});
+    try {
+      await handler(
+        waEvent(sock, {
+          key: {
+            remoteJid: "allowed@g.us",
+            participant: "447700900999@s.whatsapp.net",
+            fromMe: false,
+          },
+          message: { extendedTextMessage: { text: "shush", contextInfo: {} } },
+        }),
+      );
+      logSpy.mockClear();
+
+      await handler(addressedGroupMsg(sock, "allowed@g.us"));
+
+      expect(logSpy).not.toHaveBeenCalled();
+    } finally {
+      logSpy.mockRestore();
+    }
+  });
+
+  test("repeated messages from the same rejected chat log only once", async () => {
+    const { handler, sock } = createHarness({ allowedChats: ["allowed@g.us"] });
+    const logSpy = spyOn(console, "log").mockImplementation(() => {});
+    try {
+      await handler(addressedGroupMsg(sock, "unlisted@g.us"));
+      await handler(addressedGroupMsg(sock, "unlisted@g.us"));
+      await handler(addressedGroupMsg(sock, "unlisted@g.us"));
+
+      expect(logSpy).toHaveBeenCalledTimes(1);
+    } finally {
+      logSpy.mockRestore();
+    }
   });
 
   test("group rate limiting is tracked separately from the DM budget", async () => {
