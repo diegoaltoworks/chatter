@@ -78,9 +78,9 @@
     "build": "bun run build:clean && bun run build:types && bun run build:esm && bun run build:cjs && bun run build:server && bun run build:mcp && bun run build:usage && bun run build:personas && bun run build:channels && bun run build:whatsapp && bun run build:flows && bun run build:images && bun run build:scheduler && bun run build:bin && bun run build:client && bun run build:copy-client",
     "build:clean": "rm -rf dist",
     "build:types": "tsc -p tsconfig.build.json --emitDeclarationOnly --outDir dist",
-    "build:esm": "esbuild src/index.ts --bundle --format=esm --outfile=dist/index.mjs --external:hono --external:openai --external:@libsql/client --external:jose --platform=node --target=node24",
-    "build:cjs": "esbuild src/index.ts --bundle --format=cjs --outfile=dist/index.js --external:hono --external:openai --external:@libsql/client --external:jose --platform=node --target=node24",
-    "build:server": "esbuild src/server.ts --bundle --format=esm --outfile=dist/server.mjs --external:hono --external:openai --external:@libsql/client --external:jose --platform=node --target=node24 && esbuild src/server.ts --bundle --format=cjs --outfile=dist/server.js --external:hono --external:openai --external:@libsql/client --external:jose --platform=node --target=node24",
+    "build:esm": "esbuild src/index.ts --bundle --format=esm --outfile=dist/index.mjs --external:@hono/node-server --external:hono --external:openai --external:@libsql/client --external:jose --platform=node --target=node24",
+    "build:cjs": "esbuild src/index.ts --bundle --format=cjs --outfile=dist/index.js --external:@hono/node-server --external:hono --external:openai --external:@libsql/client --external:jose --platform=node --target=node24",
+    "build:server": "esbuild src/server.ts --bundle --format=esm --outfile=dist/server.mjs --external:@hono/node-server --external:hono --external:openai --external:@libsql/client --external:jose --platform=node --target=node24 && esbuild src/server.ts --bundle --format=cjs --outfile=dist/server.js --external:@hono/node-server --external:hono --external:openai --external:@libsql/client --external:jose --platform=node --target=node24",
     "build:mcp": "esbuild src/mcp-server.ts --bundle --format=esm --outfile=dist/mcp-server.mjs --external:@modelcontextprotocol/sdk --external:openai --external:@libsql/client --external:zod --platform=node --target=node24 && esbuild src/mcp-server.ts --bundle --format=cjs --outfile=dist/mcp-server.js --external:@modelcontextprotocol/sdk --external:openai --external:@libsql/client --external:zod --platform=node --target=node24",
     "build:usage": "esbuild src/usage/index.ts --bundle --format=esm --outfile=dist/usage/index.mjs --external:@libsql/client --platform=node --target=node24 && esbuild src/usage/index.ts --bundle --format=cjs --outfile=dist/usage/index.js --external:@libsql/client --platform=node --target=node24",
     "build:personas": "esbuild src/personas/index.ts --bundle --format=esm --outfile=dist/personas/index.mjs --platform=node --target=node24 && esbuild src/personas/index.ts --bundle --format=cjs --outfile=dist/personas/index.js --platform=node --target=node24",
@@ -96,6 +96,7 @@
     "test:unit": "bun test src/**/*.test.ts",
     "test:integration": "bun test test/integration/**/*.test.ts",
     "test:pack": "bun scripts/verify-pack.ts",
+    "test:node": "node scripts/verify-node.mjs",
     "test:watch": "bun test --watch",
     "test:coverage": "bun test --coverage",
     "typecheck": "tsc --noEmit",
@@ -139,9 +140,11 @@
   },
   "homepage": "https://github.com/diegoaltoworks/chatter#readme",
   "engines": {
-    "node": ">=24.0.0"
+    "node": ">=24.0.0",
+    "bun": ">=1.2.0"
   },
   "peerDependencies": {
+    "@hono/node-server": "^2.0.5",
     "@libsql/client": "^0.17.2",
     "@modelcontextprotocol/sdk": "^1.30.0",
     "@whiskeysockets/baileys": "^7.0.0-rc14",
@@ -151,6 +154,9 @@
     "zod": "^3.25.76 || ^4.4.3"
   },
   "peerDependenciesMeta": {
+    "@hono/node-server": {
+      "optional": true
+    },
     "@whiskeysockets/baileys": {
       "optional": true
     },
@@ -163,6 +169,7 @@
   },
   "devDependencies": {
     "@biomejs/biome": "2.5.7",
+    "@hono/node-server": "2.0.12",
     "@libsql/client": "0.17.4",
     "@modelcontextprotocol/sdk": "1.30.0",
     "@types/bun": "1.3.14",
@@ -188,7 +195,6 @@
   "overrides": {
     "qs": "^6.15.3",
     "ws": "^8.21.1",
-    "@hono/node-server": "^2.0.5",
     "fast-uri": "^3.1.3",
     "ip-address": "^10.4.0"
   }

@@ -49,16 +49,10 @@ jobs:
       - name: Install dependencies
         run: bun install
 
-      - name: Run linting
-        run: bun run lint
-
-      - name: Run type check
-        run: bun run typecheck
-      - name: Run security audit
-        run: bun run security:check
-
-      - name: Run tests
-        run: bun test
+      # The same gates as CI, through the same entry point, so the publish path
+      # cannot quietly run a smaller set than a PR does.
+      - name: Run gates
+        run: bun run check
 
       - name: Build package
         run: bun run build

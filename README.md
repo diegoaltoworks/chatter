@@ -53,7 +53,22 @@ Bun.serve({ port: 8181, fetch: app.fetch });
 npx chatter create-apikey --name "my-app" --expires-in 365d
 ```
 
-**Requirements:** OpenAI API key, Turso database, Bun runtime. See [Requirements Guide](./docs/requirements.md) for setup instructions.
+**Requirements:** OpenAI API key, Turso database, and Bun >= 1.2 or Node >= 24. See [Requirements Guide](./docs/requirements.md) for setup instructions.
+
+### Runtime
+
+The package runs on **Bun or Node** (>= 24 — it is built and published for both,
+and CI loads the built bundles under each). Two things differ:
+
+- **Serving the app** — `Bun.serve({ port: 8181, fetch: app.fetch })` on Bun;
+  `serve({ port: 8181, fetch: app.fetch })` from [`@hono/node-server`](https://github.com/honojs/node-server) on Node.
+- **Static assets** — serving the widget files (`/chatter.js`, `/chatter.css`)
+  and a `publicDir` needs a runtime adapter, picked automatically. On Node that
+  adapter is `@hono/node-server`, an optional peer dependency: install it, or
+  run with `features: { headless: true }` if the server serves no files.
+
+Everything else — the chat pipeline, RAG, channels, the OpenAI-compatible API —
+is runtime-neutral. Development and the quality gates run on Bun.
 
 ## Examples
 

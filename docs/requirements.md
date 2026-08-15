@@ -84,22 +84,48 @@ Chatter requires a few external services to function. This guide walks through w
 
 ## Runtime Requirements
 
-### Bun
+Chatter runs on **Bun >= 1.2** or **Node >= 24**. Both are built, published and
+exercised in CI; pick whichever your host already runs.
 
-**Purpose**: JavaScript runtime (required to run Chatter)
+### Bun
 
 **Installation**:
 ```bash
 curl -fsSL https://bun.sh/install | bash
 ```
 
-**Version**: 1.0 or higher
-
 **Why Bun?**:
 - Fast startup and execution
 - Native TypeScript support
 - Built-in test runner
-- Compatible with Node.js packages
+- The runtime Chatter itself is developed and tested on
+
+Serve the app with the built-in server:
+```ts
+Bun.serve({ port: 8181, fetch: app.fetch });
+```
+
+### Node
+
+**Version**: 24 or higher (`engines.node`).
+
+Node needs one extra package — [`@hono/node-server`](https://github.com/honojs/node-server),
+an optional peer dependency — for both serving the app and serving static
+files:
+
+```bash
+npm install @hono/node-server
+```
+
+```ts
+import { serve } from "@hono/node-server";
+serve({ port: 8181, fetch: app.fetch });
+```
+
+Chatter picks the matching static-file adapter from the runtime it finds itself
+in, so no configuration is needed. A Node server started with
+`features: { headless: true }` serves no files and needs no adapter — in that
+mode `@hono/node-server` is only required for `serve()` itself.
 
 ### Platform Requirements
 
