@@ -44,3 +44,25 @@ jobs:
 
       - name: Build package
         run: bun run build
+
+  package-contract:
+    name: Package contract (packed tarball)
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v7
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v1
+        with:
+          bun-version: latest
+
+      - name: Install dependencies
+        run: bun install
+
+      # Packs the real tarball and resolves every `exports` key under both
+      # import and require. Nothing else catches a subpath whose runtime file
+      # no build step produces — `types` resolves, so tsc stays green.
+      - name: Verify published exports resolve
+        run: bun run test:pack

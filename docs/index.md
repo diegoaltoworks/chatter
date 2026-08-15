@@ -78,7 +78,12 @@ Welcome to the Chatter documentation! This guide will help you set up and deploy
     - VPS setup
     - Security best practices
 
-12. **[FAQs](./faqs.md)** - Common questions and troubleshooting
+12. **[Packaging](./packaging.md)** - What the published package exposes
+    - The subpath contract and what each one gives you
+    - Adding a subpath without breaking consumers
+    - The packed-tarball check that verifies it before release
+
+13. **[FAQs](./faqs.md)** - Common questions and troubleshooting
     - General questions
     - Platform compatibility
     - Knowledge base and RAG

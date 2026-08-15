@@ -13,9 +13,11 @@
     "declaration": true,
     "declarationMap": true,
     "outDir": "./dist",
-    "rootDir": "./src",
     "types": ["bun-types"]
   },
-  "include": ["src/**/*"],
+  // Typecheck scope: everything we author, including tests and build scripts.
+  // Declaration emit uses the narrower tsconfig.build.json instead, so nothing
+  // here leaks into the published `dist`.
+  "include": ["src/**/*", "scripts/**/*"],
   "exclude": ["node_modules", "dist", "src/client/dist", "src/client/node_modules"]
 }

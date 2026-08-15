@@ -31,6 +31,12 @@ bun test --coverage
   checkout.
 - **Client tests** cover the widget in `src/client/`.
 
+- **Packaging tests** cover the published contract. The pure half — what the
+  `exports` map demands, and which parts of it a tarball fails — is unit-tested
+  in `scripts/`; the half that must actually build, pack and install runs
+  separately as `bun run test:pack` (see [Packaging](./packaging.md)), because
+  no test that imports from `src/` can see a broken subpath.
+
 Run `bun test` for the current counts; `bun run check` additionally typechecks,
 lints and audits.
 
