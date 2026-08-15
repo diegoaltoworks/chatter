@@ -49,7 +49,7 @@ describe("useTursoAuthState", () => {
     // A plaintext or weakly-encoded leak would contain this field name
     // directly; only decrypting with the right secret should reveal it.
     expect(storedValue).not.toContain("noiseKey");
-    expect(decrypt(storedValue, "secret")).toContain("noiseKey");
+    expect(await decrypt(storedValue, "secret")).toContain("noiseKey");
 
     // Same plaintext saved twice must not produce identical ciphertext
     // (rules out a deterministic, IV-less encoding).

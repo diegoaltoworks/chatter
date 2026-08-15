@@ -87,7 +87,7 @@ export async function createServer(config: ChatterConfig): Promise<ChatterApp> {
 
   // Initialize API key manager if configured
   let apiKeyManager: ApiKeyManager | undefined;
-  const secret = process.env.CHATTER_SECRET || config.auth?.secret;
+  const secret = config.auth?.secret || process.env.CHATTER_SECRET;
   if (secret) {
     apiKeyManager = new ApiKeyManager(secret);
     console.log("✅ API key manager initialized");

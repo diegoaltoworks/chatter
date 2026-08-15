@@ -7,6 +7,7 @@
  */
 
 import { ApiKeyManager } from "../src/auth/apikeys";
+import { assertStrongSecret } from "../src/auth/secretStrength";
 
 async function main() {
   // Parse command line arguments
@@ -52,6 +53,13 @@ Examples:
     console.error("   export CHATTER_SECRET=your-secret-key-here");
     console.error("\n   Or prefix the command:");
     console.error("   CHATTER_SECRET=your-secret npx chatter create-apikey\n");
+    process.exit(1);
+  }
+
+  try {
+    assertStrongSecret(secret, "CHATTER_SECRET");
+  } catch (error) {
+    console.error(`❌ ${(error as Error).message}`);
     process.exit(1);
   }
 

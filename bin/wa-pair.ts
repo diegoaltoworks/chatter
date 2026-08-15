@@ -33,6 +33,7 @@
  */
 
 import { createClient } from "@libsql/client";
+import { assertStrongSecret } from "../src/auth/secretStrength";
 import { type AuthStateRuntime, useTursoAuthState } from "../src/channels/whatsapp/authState";
 import { loadBaileys } from "../src/channels/whatsapp/baileys";
 import {
@@ -82,8 +83,10 @@ const phoneNumber = flagValue("--code")?.replace(/[^0-9]/g, "");
 const reset = args.includes("--reset");
 
 const sessionSecret = process.env.WA_SESSION_SECRET;
-if (!sessionSecret) {
-  console.error("❌ WA_SESSION_SECRET is required (any strong passphrase; keep it stable).");
+try {
+  assertStrongSecret(sessionSecret, "WA_SESSION_SECRET");
+} catch (error) {
+  console.error(`❌ ${(error as Error).message}`);
   process.exit(1);
 }
 if (!process.env.TURSO_URL) {

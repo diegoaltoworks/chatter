@@ -80,11 +80,11 @@ export async function useTursoAuthState(
     });
     const row = result.rows[0];
     if (!row) return null;
-    return JSON.parse(decrypt(row.value as string, secret), runtime.bufferJSON.reviver);
+    return JSON.parse(await decrypt(row.value as string, secret), runtime.bufferJSON.reviver);
   }
 
   async function write(id: string, value: unknown): Promise<void> {
-    const payload = encrypt(JSON.stringify(value, runtime.bufferJSON.replacer), secret);
+    const payload = await encrypt(JSON.stringify(value, runtime.bufferJSON.replacer), secret);
     await db.execute({
       sql: "INSERT OR REPLACE INTO wa_auth (id, value) VALUES (?, ?)",
       args: [rowId(id), payload],
