@@ -134,16 +134,28 @@ chatter/
 
 ## Release Process
 
-Releases are automated via GitHub Actions:
+Releases are automated. Merging a PR to `main` runs CI; when CI is green the
+publish workflow re-runs the gates, builds, bumps the minor version, tags, and
+publishes to npm with provenance. The tag push then publishes the GitHub
+release notes. Do not bump `package.json` by hand — the workflow owns the
+version.
 
-1. Update version in `package.json`
-2. Update `CHANGELOG.md`
-3. Push to `main` branch
-4. GitHub Actions will:
-   - Run all tests and checks
-   - Publish to NPM
-   - Create GitHub release
-   - Generate release notes
+One thing is deliberately **not** automatic: nothing authored by
+`dependabot[bot]` publishes itself. Dependency PRs are opened, approved and
+merged by bots, so releasing off one would ship an upstream change nobody read.
+The publish job declines when dependabot authored the triggering commit, *and*
+fails outright if dependabot authored anything since the last release tag — so
+a bump cannot ride along inside a later release either. To ship a reviewed
+bump, run the **Publish to NPM** workflow from the Actions tab; dispatching it
+is the approval.
+
+The rest of the chain is pinned so that "CI was green" means something
+specific: every third-party action is referenced by commit SHA (with a `# vX.Y.Z`
+comment so Dependabot can still offer updates), Bun is pinned to one exact
+version shared by the workflows and the Dockerfile, and every install runs
+`--frozen-lockfile`. `scripts/supply-chain.test.ts` audits all of that, so a
+new workflow or a copy-pasted step fails the gates rather than quietly opening
+the path back up. See [Packaging](docs/packaging.md) for the full chain.
 
 ## Questions?
 

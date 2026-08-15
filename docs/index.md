@@ -82,6 +82,7 @@ Welcome to the Chatter documentation! This guide will help you set up and deploy
     - The subpath contract and what each one gives you
     - Adding a subpath without breaking consumers
     - The packed-tarball check that verifies it before release
+    - The release chain, its human gate, and how the toolchain is pinned
 
 13. **[FAQs](./faqs.md)** - Common questions and troubleshooting
     - General questions

@@ -37,6 +37,15 @@ bun test --coverage
   separately as `bun run test:pack` (see [Packaging](./packaging.md)), because
   no test that imports from `src/` can see a broken subpath.
 
+- **Supply-chain tests** cover the CI configuration itself, not the code it
+  runs. `scripts/supply-chain.test.ts` reads every workflow in
+  `.github/workflows/` plus the Dockerfile, and fails if an action is
+  referenced by a mutable tag, Bun floats or drifts between the two, an install
+  skips `--frozen-lockfile`, or a workflow that publishes loses its dependabot
+  gate (see [Packaging](./packaging.md)). These are the properties that keep a
+  green CI run meaningful, and each is a line or two that nothing else would
+  notice going missing.
+
 - **Node runtime tests** cover the other runtime the package supports. Every
   test above runs under Bun, where a `Bun` global exists and `require()` works
   inside ESM, so `bun run build && bun run test:node` loads `dist/` under plain
