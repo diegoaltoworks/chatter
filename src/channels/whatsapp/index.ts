@@ -58,6 +58,7 @@ export {
   jidToPhoneNumber,
   messageContext,
   senderPhoneFor,
+  stripOwnMentions,
   type WaMessageContext,
   type WhatsAppInboundConfig,
 } from "./inbound";
