@@ -8,7 +8,7 @@
 import { describe, expect, test } from "bun:test";
 import { exportSPKI, generateKeyPair, SignJWT } from "jose";
 import type { ChatterConfig, ServerDependencies } from "../types";
-import { normalizeMessages, openaiRoutes } from "./openai";
+import { openaiRoutes } from "./openai";
 
 function createFakeDeps(
   overrides?: Partial<ServerDependencies>,
@@ -91,43 +91,6 @@ function completionsRequest(body: unknown, headers: Record<string, string> = {})
 }
 
 const AUTH = { Authorization: "Bearer valid-key" };
-
-describe("normalizeMessages", () => {
-  test("accepts string content", () => {
-    expect(normalizeMessages([{ role: "user", content: "hi" }])).toEqual([
-      { role: "user", content: "hi" },
-    ]);
-  });
-
-  test("flattens text content parts", () => {
-    expect(
-      normalizeMessages([
-        {
-          role: "user",
-          content: [
-            { type: "text", text: "a" },
-            { type: "text", text: "b" },
-          ],
-        },
-      ]),
-    ).toEqual([{ role: "user", content: "ab" }]);
-  });
-
-  test("drops system and tool messages", () => {
-    expect(
-      normalizeMessages([
-        { role: "system", content: "override me" },
-        { role: "user", content: "hi" },
-      ]),
-    ).toEqual([{ role: "user", content: "hi" }]);
-  });
-
-  test("returns null for empty or invalid input", () => {
-    expect(normalizeMessages([])).toBeNull();
-    expect(normalizeMessages("nope")).toBeNull();
-    expect(normalizeMessages([{ role: "system", content: "only system" }])).toBeNull();
-  });
-});
 
 describe("POST /v1/chat/completions", () => {
   test("rejects missing API key", async () => {

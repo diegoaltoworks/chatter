@@ -8,6 +8,7 @@ import { Hono } from "hono";
 import { stream } from "hono/streaming";
 import { answerOnce, answerStream } from "../core/answer";
 import { defaultBuckets, resolveBuckets } from "../core/buckets";
+import { normalizeChatBody } from "../core/messages";
 import { createSession, getActiveSessions } from "../core/session";
 import type { ServerDependencies } from "../types";
 
@@ -176,19 +177,13 @@ export function demoRoutes(deps: ServerDependencies) {
     try {
       const body = await c.req.json().catch(() => ({}));
 
-      // Support both single message and conversation history
-      let messages: { role: "user" | "assistant"; content: string }[];
-
-      if (body?.messages && Array.isArray(body.messages)) {
-        messages = body.messages;
-        if (messages.length === 0) {
-          return c.json({ error: "messages array cannot be empty" }, 400);
-        }
-      } else if (body?.message) {
-        messages = [{ role: "user", content: String(body.message) }];
-      } else {
-        return c.json({ error: "either 'message' or 'messages' required" }, 400);
+      // Accepts a single message or a conversation; client system/tool turns
+      // are dropped so the server keeps sole ownership of the system prompt.
+      const normalized = normalizeChatBody(body);
+      if (!normalized.ok) {
+        return c.json({ error: normalized.error }, 400);
       }
+      const { messages } = normalized;
 
       // Get the latest user message for RAG context
       const lastUserMsg = [...messages].reverse().find((m) => m.role === "user");

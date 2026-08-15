@@ -4,6 +4,15 @@ Chatter's value lives on the server: RAG retrieval, guardrails, auth, and rate
 limiting. The built-in widget is optional — any chat UI that speaks the OpenAI
 chat-completions wire format can be the front end.
 
+**The server owns the system prompt on every chat surface.** Whatever a client
+sends is normalized before it reaches the pipeline: only `user` and `assistant`
+turns survive (`system`, `developer` and `tool` messages are dropped), and
+content is reduced to text — a plain string, or the text parts of an
+OpenAI-style content-part array. This holds for the widget routes
+(`/api/public/chat`, `/api/private/chat`, `/api/demo/chat`) and the
+OpenAI-compatible routes alike. Custom routes can apply the same rule with the
+exported `normalizeChatBody` / `normalizeMessages` helpers.
+
 ## OpenAI-compatible endpoints
 
 Enabled by default (disable with `features.enableOpenAICompat: false`):
