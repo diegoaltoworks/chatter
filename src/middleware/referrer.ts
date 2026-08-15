@@ -4,19 +4,21 @@
  */
 
 import type { Context, Next } from "hono";
-
-const DEMO_KEYS = ["chatter-api-key-here"];
+import { matchesAllowedOrigin } from "./originMatch";
 
 /**
  * Middleware to check if the request comes from an allowed origin
  * Only applies to demo API keys and session keys - production keys bypass this check
+ *
+ * @param demoApiKeys - API key values treated as demo keys (see
+ * `ChatterConfig.rateLimit.demoApiKeys`). Unset: no key is a demo key.
  */
-export function requireReferrer(allowedOrigins: string[]) {
+export function requireReferrer(allowedOrigins: string[], demoApiKeys: string[] = []) {
   return async (c: Context, next: Next) => {
     const apiKey = c.req.header("x-api-key");
 
     // Check referrer for demo keys AND session keys
-    const isDemoKey = apiKey && DEMO_KEYS.includes(apiKey);
+    const isDemoKey = apiKey ? demoApiKeys.includes(apiKey) : false;
     const isSessionKey = apiKey?.startsWith("session_");
 
     if (isDemoKey || isSessionKey) {
@@ -28,19 +30,7 @@ export function requireReferrer(allowedOrigins: string[]) {
       );
       console.log(`[Referrer] Origin: ${origin || "none"}, Referer: ${referer || "none"}`);
 
-      // Check if request comes from allowed origin
-      // For referer, we need to ensure it's the exact origin followed by / or ? or end of string
-      // to prevent attacks like https://example.com.evil.com
-      const isAllowed = allowedOrigins.some((allowed) => {
-        if (origin === allowed) return true;
-        if (referer) {
-          // Check if referer starts with allowed origin and is followed by /, ?, or nothing
-          if (referer === allowed) return true;
-          if (referer.startsWith(`${allowed}/`)) return true;
-          if (referer.startsWith(`${allowed}?`)) return true;
-        }
-        return false;
-      });
+      const isAllowed = matchesAllowedOrigin(origin, referer, allowedOrigins);
 
       if (!isAllowed) {
         console.log(`[Referrer] BLOCKED - not from allowed origins: ${allowedOrigins.join(", ")}`);

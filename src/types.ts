@@ -145,6 +145,21 @@ export interface ChatterConfig {
     public?: number;
     /** Requests per minute for private endpoint. Default: 120 */
     private?: number;
+    /**
+     * Trust the `X-Forwarded-For` header for per-IP rate-limit keying.
+     * Only set this when Chatter sits behind a reverse proxy (nginx,
+     * Cloudflare, a cloud load balancer) that overwrites client-supplied
+     * XFF with the real socket address — otherwise a caller can rotate a
+     * fake value per request and bypass limits entirely. When `false`,
+     * every caller shares one bucket per limiter. Default: true.
+     */
+    trustProxy?: boolean;
+    /**
+     * API key values that identify a demo/public-showcase key and get a
+     * stricter rate limit plus a referer/origin check (see
+     * `requireReferrer`). Unset: no key is treated as a demo key.
+     */
+    demoApiKeys?: string[];
   };
 
   // Server
@@ -162,6 +177,16 @@ export interface ChatterConfig {
      * When not set, defaults to `["*"]` (all origins allowed).
      */
     allowedOrigins?: string[];
+    /**
+     * Let demo routes (see `features.enableDemoRoutes`) accept any-port
+     * `http(s)://localhost`/`127.0.0.1` in `Origin`/`Referer`, in addition to
+     * `allowedOrigins`, for local development. `Origin`/`Referer` are only
+     * enforced by browsers — a direct (non-browser) client can set either to
+     * anything, so this is a convenience, not access control; leave it off
+     * once `allowedOrigins` is configured for anything security-sensitive.
+     * Default: false.
+     */
+    allowLocalhostDemo?: boolean;
   };
 
   // Brain (advanced)

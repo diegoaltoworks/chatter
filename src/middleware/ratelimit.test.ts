@@ -121,7 +121,10 @@ describe("Rate Limit Middleware", () => {
 
     it("should apply stricter limits to demo keys", async () => {
       const app = new Hono();
-      const config = { ...baseConfig, rateLimit: { public: 100, private: 100 } };
+      const config = {
+        ...baseConfig,
+        rateLimit: { public: 100, private: 100, demoApiKeys: ["chatter-api-key-here"] },
+      };
       const limiter = createRateLimiter(config);
       app.use("/api/*", limiter.limitPublic());
       app.post("/api/test", (c) => c.json({ ok: true }));
@@ -178,6 +181,64 @@ describe("Rate Limit Middleware", () => {
         }),
       );
 
+      expect(res.status).toBe(429);
+    });
+
+    it("should not treat any key as a demo key when demoApiKeys is not configured", async () => {
+      const app = new Hono();
+      const config = { ...baseConfig, rateLimit: { public: 100, private: 100 } };
+      const limiter = createRateLimiter(config);
+      app.use("/api/*", limiter.limitPublic());
+      app.post("/api/test", (c) => c.json({ ok: true }));
+
+      // Without demoApiKeys configured, this key gets the full (non-demo) limit.
+      for (let i = 0; i < 15; i++) {
+        await app.fetch(
+          new Request("http://localhost/api/test", {
+            method: "POST",
+            headers: {
+              "x-forwarded-for": "192.168.1.31",
+              "x-api-key": "chatter-api-key-here",
+            },
+          }),
+        );
+      }
+
+      const res = await app.fetch(
+        new Request("http://localhost/api/test", {
+          method: "POST",
+          headers: {
+            "x-forwarded-for": "192.168.1.31",
+            "x-api-key": "chatter-api-key-here",
+          },
+        }),
+      );
+      expect(res.status).toBe(200);
+    });
+
+    it("should collapse all callers onto one bucket when trustProxy is false", async () => {
+      const app = new Hono();
+      const config = { ...baseConfig, rateLimit: { public: 5, private: 10, trustProxy: false } };
+      const limiter = createRateLimiter(config);
+      app.use("/api/*", limiter.limitPublic());
+      app.post("/api/test", (c) => c.json({ ok: true }));
+
+      // Two distinct spoofed IPs share the same bucket when trustProxy is off.
+      for (let i = 0; i < 5; i++) {
+        await app.fetch(
+          new Request("http://localhost/api/test", {
+            method: "POST",
+            headers: { "x-forwarded-for": `10.0.0.${i}` },
+          }),
+        );
+      }
+
+      const res = await app.fetch(
+        new Request("http://localhost/api/test", {
+          method: "POST",
+          headers: { "x-forwarded-for": "10.0.0.99" },
+        }),
+      );
       expect(res.status).toBe(429);
     });
 

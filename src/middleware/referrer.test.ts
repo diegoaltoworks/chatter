@@ -4,6 +4,7 @@ import { requireReferrer } from "./referrer";
 
 describe("Referrer Middleware", () => {
   const allowedOrigins = ["http://localhost:8181", "https://example.com"];
+  const demoApiKeys = ["chatter-api-key-here"];
 
   describe("requireReferrer", () => {
     it("should allow requests with valid referer from allowed origin", async () => {
@@ -62,7 +63,7 @@ describe("Referrer Middleware", () => {
 
     it("should block demo keys from disallowed origins", async () => {
       const app = new Hono();
-      app.use("/api/*", requireReferrer(allowedOrigins));
+      app.use("/api/*", requireReferrer(allowedOrigins, demoApiKeys));
       app.post("/api/test", (c) => c.json({ ok: true }));
 
       const req = new Request("http://localhost/api/test", {
@@ -242,7 +243,7 @@ describe("Referrer Middleware", () => {
 
     it("should differentiate between demo key and session key", async () => {
       const app = new Hono();
-      app.use("/api/*", requireReferrer(allowedOrigins));
+      app.use("/api/*", requireReferrer(allowedOrigins, demoApiKeys));
       app.post("/api/test", (c) => c.json({ ok: true }));
 
       // Demo key should be blocked
@@ -266,6 +267,23 @@ describe("Referrer Middleware", () => {
       });
       const sessionRes = await app.fetch(sessionReq);
       expect(sessionRes.status).toBe(403);
+    });
+
+    it("should not treat any key as a demo key when demoApiKeys is not configured", async () => {
+      const app = new Hono();
+      app.use("/api/*", requireReferrer(allowedOrigins)); // no demoApiKeys passed
+      app.post("/api/test", (c) => c.json({ ok: true }));
+
+      const req = new Request("http://localhost/api/test", {
+        method: "POST",
+        headers: {
+          "x-api-key": "chatter-api-key-here",
+          referer: "http://evil.com",
+        },
+      });
+
+      const res = await app.fetch(req);
+      expect(res.status).toBe(200);
     });
   });
 });
