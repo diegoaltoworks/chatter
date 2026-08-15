@@ -1,5 +1,11 @@
 import { beforeEach, describe, expect, it } from "bun:test";
-import { createSession, getActiveSessions, getSessionInfo, validateSession } from "./session";
+import {
+  createSession,
+  getActiveSessions,
+  getSessionInfo,
+  sessionSweeper,
+  validateSession,
+} from "./session";
 
 describe("Session Management", () => {
   describe("createSession", () => {
@@ -300,6 +306,15 @@ describe("Session Management", () => {
       const session = createSession({ metadata: {} });
 
       expect(session.metadata).toEqual({});
+    });
+  });
+
+  describe("sweeper", () => {
+    it("does not hold the host's event loop open", () => {
+      // Importing this module starts the sweep timer, so a ref'd timer would
+      // stop any consumer process that merely imports the package from ever
+      // exiting on its own.
+      expect(sessionSweeper.hasRef()).toBe(false);
     });
   });
 });

@@ -18,8 +18,14 @@ interface SessionData {
 // In production, use Redis or similar
 const sessions = new Map<string, SessionData>();
 
-// Clean up expired sessions every 5 minutes
-setInterval(
+// Clean up expired sessions every 5 minutes.
+//
+// `unref` matters for a library: this timer is created on import, so without
+// it merely importing anything that reaches this module (the root export and
+// `./server` both do) keeps the host's event loop alive and their process
+// never exits on its own. Unref'd, the sweep still runs for as long as the
+// host is doing other work, which is exactly when sessions need sweeping.
+export const sessionSweeper = setInterval(
   () => {
     const now = Date.now();
     for (const [key, data] of Array.from(sessions.entries())) {
@@ -30,6 +36,7 @@ setInterval(
   },
   5 * 60 * 1000,
 );
+sessionSweeper.unref?.();
 
 export interface CreateSessionOptions {
   /** Max requests allowed for this session (default: 20) */
