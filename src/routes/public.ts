@@ -3,6 +3,7 @@ import { Hono } from "hono";
 import { stream } from "hono/streaming";
 import { answerOnce, answerStream } from "../core/answer";
 import { resolveBuckets } from "../core/buckets";
+import { normalizeChatBody } from "../core/messages";
 import { prepareChat } from "../core/pipeline";
 import { createAuthMiddleware } from "../middleware/auth";
 import { createRateLimiter } from "../middleware/ratelimit";
@@ -40,21 +41,13 @@ export function publicRoutes(deps: ServerDependencies) {
   app.post("/api/public/chat", async (c) => {
     const body = await c.req.json().catch(() => ({}));
 
-    // Support both single message and conversation history
-    let messages: { role: "user" | "assistant"; content: string }[];
-
-    if (body?.messages && Array.isArray(body.messages)) {
-      // Multi-turn conversation: array of messages
-      messages = body.messages;
-      if (messages.length === 0) {
-        return c.json({ error: "messages array cannot be empty" }, 400);
-      }
-    } else if (body?.message) {
-      // Single message (backward compatible)
-      messages = [{ role: "user", content: String(body.message) }];
-    } else {
-      return c.json({ error: "either 'message' or 'messages' required" }, 400);
+    // Accepts a single message or a conversation; client system/tool turns are
+    // dropped so the server keeps sole ownership of the system prompt.
+    const normalized = normalizeChatBody(body);
+    if (!normalized.ok) {
+      return c.json({ error: normalized.error }, 400);
     }
+    const { messages } = normalized;
 
     // Anonymous surface: no sender identity, so `resolveBuckets` will not let
     // the hook reach past the public defaults.

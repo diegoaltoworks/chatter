@@ -28,47 +28,11 @@ import { stream } from "hono/streaming";
 import { answerOnce, answerStream } from "../core/answer";
 import { resolveBuckets } from "../core/buckets";
 import { DEFAULT_MODEL } from "../core/llm";
-import { type PipelineMessage, type PipelineMode, prepareChat } from "../core/pipeline";
+import { normalizeMessages } from "../core/messages";
+import { type PipelineMode, prepareChat } from "../core/pipeline";
 import { createJWTMiddleware, jwtSubject } from "../middleware/jwt";
 import { createRateLimiter } from "../middleware/ratelimit";
 import type { ServerDependencies } from "../types";
-
-/**
- * Normalize OpenAI-format messages to the pipeline format.
- * Accepts string content and text content-part arrays; drops system/tool
- * messages. Returns null when nothing usable remains.
- */
-export function normalizeMessages(raw: unknown): PipelineMessage[] | null {
-  if (!Array.isArray(raw) || raw.length === 0) return null;
-
-  const messages: PipelineMessage[] = [];
-  for (const entry of raw) {
-    if (!entry || typeof entry !== "object") return null;
-    const { role, content } = entry as { role?: unknown; content?: unknown };
-    if (role !== "user" && role !== "assistant") continue;
-
-    let text: string | null = null;
-    if (typeof content === "string") {
-      text = content;
-    } else if (Array.isArray(content)) {
-      text = content
-        .filter(
-          (part): part is { type: "text"; text: string } =>
-            !!part &&
-            typeof part === "object" &&
-            (part as { type?: unknown }).type === "text" &&
-            typeof (part as { text?: unknown }).text === "string",
-        )
-        .map((part) => part.text)
-        .join("");
-    }
-    if (text === null) continue;
-
-    messages.push({ role, content: text });
-  }
-
-  return messages.length > 0 ? messages : null;
-}
 
 function errorJson(c: Context, status: 400 | 401, message: string) {
   return c.json(
