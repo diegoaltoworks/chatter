@@ -143,3 +143,37 @@ export function hygieneViolations(files: readonly string[]): string[] {
 function normalizePath(path: string): string {
   return path.replace(/^package\//, "").replace(/^\.\//, "");
 }
+
+/**
+ * Root-entry size budgets, in bytes. The root bundle (`.`) is what every
+ * consumer's install size includes regardless of which subpaths they touch,
+ * so it is held to a budget the way the tarball contract is — a regression
+ * here (an optional peer or the widget creeping back into a static import)
+ * is invisible to typecheck/lint/test and only shows up as install bloat.
+ */
+export const BUNDLE_BUDGETS: readonly { path: string; maxBytes: number }[] = [
+  { path: "dist/index.mjs", maxBytes: 100 * 1024 },
+  { path: "dist/index.js", maxBytes: 100 * 1024 },
+];
+
+export interface BundleSizeViolation {
+  path: string;
+  maxBytes: number;
+  actualBytes: number;
+}
+
+/** Which budgeted paths exceed their limit. Throws if a budgeted path has no recorded size — a missing entry is a broken check, not a pass. */
+export function bundleSizeViolations(
+  budgets: readonly { path: string; maxBytes: number }[],
+  sizes: ReadonlyMap<string, number>,
+): BundleSizeViolation[] {
+  return budgets.flatMap((budget) => {
+    const actualBytes = sizes.get(budget.path);
+    if (actualBytes === undefined) {
+      throw new Error(`no size recorded for budgeted path "${budget.path}"`);
+    }
+    return actualBytes > budget.maxBytes
+      ? [{ path: budget.path, maxBytes: budget.maxBytes, actualBytes }]
+      : [];
+  });
+}

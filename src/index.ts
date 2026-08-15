@@ -18,6 +18,8 @@ export { ApiKeyManager } from "./auth";
 // toolkit, incl. gates and the sender registry, lives at the `./channels`
 // subpath).
 export type { Channel } from "./channels";
+// Client types only — the widget classes themselves stay behind the
+// `./client` subpath so importing core never bundles their runtime code.
 export type {
   ChatBotConfig,
   ChatButtonConfig,
@@ -26,8 +28,6 @@ export type {
   ChatMode,
   StreamCallbacks,
 } from "./client";
-// Client library (re-export from client subpackage)
-export { Chat, ChatBot, ChatButton } from "./client";
 export type {
   AnswerFn,
   AnswerFnInput,

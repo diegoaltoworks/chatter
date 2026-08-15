@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import {
+  bundleSizeViolations,
   collectExportEntries,
   hygieneViolations,
   loadPlan,
@@ -119,5 +120,38 @@ describe("hygieneViolations", () => {
 
   test("does not mistake a shipped module for a test declaration", () => {
     expect(hygieneViolations(["dist/core/latest.d.ts", "dist/testing.d.ts"])).toEqual([]);
+  });
+});
+
+describe("bundleSizeViolations", () => {
+  const budgets = [
+    { path: "dist/index.mjs", maxBytes: 100 },
+    { path: "dist/index.js", maxBytes: 100 },
+  ];
+
+  test("passes when every budgeted path is within its limit", () => {
+    const sizes = new Map([
+      ["dist/index.mjs", 90],
+      ["dist/index.js", 100],
+    ]);
+
+    expect(bundleSizeViolations(budgets, sizes)).toEqual([]);
+  });
+
+  test("reports each path that exceeds its budget", () => {
+    const sizes = new Map([
+      ["dist/index.mjs", 101],
+      ["dist/index.js", 50],
+    ]);
+
+    expect(bundleSizeViolations(budgets, sizes)).toEqual([
+      { path: "dist/index.mjs", maxBytes: 100, actualBytes: 101 },
+    ]);
+  });
+
+  test("throws rather than silently pass when a budgeted path has no recorded size", () => {
+    expect(() => bundleSizeViolations(budgets, new Map())).toThrow(
+      /no size recorded for budgeted path "dist\/index\.mjs"/,
+    );
   });
 });

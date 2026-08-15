@@ -6,9 +6,8 @@
  * VS Code extensions, and other MCP-compatible clients.
  */
 
-import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import OpenAI from "openai";
-import { z } from "zod";
+import type { z as ZodNamespace } from "zod";
 import { answerOnce } from "./core/answer";
 import { defaultBuckets, resolveBuckets } from "./core/buckets";
 import { PromptLoader } from "./core/prompts";
@@ -17,6 +16,7 @@ import { getOrGenerateConversationId } from "./mcp-server/conversation-id";
 import { calculateCost } from "./mcp-server/cost-tracker";
 import { createLogger } from "./mcp-server/logger";
 import { createRateLimiter } from "./mcp-server/rate-limiter";
+import { loadMcpSdk, loadZod } from "./mcp-server/sdk";
 
 // Re-export types for backward compatibility
 export type {
@@ -56,6 +56,9 @@ import type { MCPServerOptions } from "./mcp-server/types";
  */
 export async function createMCPServer(config: MCPServerOptions) {
   console.log(`🚀 Starting ${config.bot.name} MCP Server...`);
+
+  // Optional peers, loaded lazily so core installs/imports never require them.
+  const [McpServer, z] = await Promise.all([loadMcpSdk(), loadZod()]);
 
   // Set defaults
   const knowledgeDir = config.knowledgeDir || "./config/knowledge";
@@ -135,7 +138,7 @@ export async function createMCPServer(config: MCPServerOptions) {
         description: publicToolConfig.description,
         inputSchema: publicShape,
       },
-      async (args: z.infer<z.ZodObject<typeof publicShape>>) => {
+      async (args: ZodNamespace.infer<ZodNamespace.ZodObject<typeof publicShape>>) => {
         const { message, messages, conversationId } = args;
         const startTime = Date.now();
 
@@ -254,7 +257,7 @@ export async function createMCPServer(config: MCPServerOptions) {
         description: privateToolConfig.description,
         inputSchema: privateShape,
       },
-      async (args: z.infer<z.ZodObject<typeof privateShape>>) => {
+      async (args: ZodNamespace.infer<ZodNamespace.ZodObject<typeof privateShape>>) => {
         const { message, messages, conversationId } = args;
         const startTime = Date.now();
 

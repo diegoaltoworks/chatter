@@ -137,7 +137,7 @@ See [Client Setup Guide](./docs/client.md) for detailed integration examples, th
 
 ## MCP Server Integration
 
-Use Chatter as a Model Context Protocol (MCP) server to expose your chatbot to Claude Desktop, VS Code extensions, and other MCP-compatible tools:
+Use Chatter as a Model Context Protocol (MCP) server to expose your chatbot to Claude Desktop, VS Code extensions, and other MCP-compatible tools. `@modelcontextprotocol/sdk` and `zod` are optional peer dependencies scoped to this subpath — install them to use it: `bun add @modelcontextprotocol/sdk zod`.
 
 **Basic Setup:**
 ```typescript
