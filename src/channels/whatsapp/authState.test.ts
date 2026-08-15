@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { createClient } from "@libsql/client";
 import { BufferJSON, initAuthCreds, proto } from "@whiskeysockets/baileys";
 import { type AuthStateRuntime, useTursoAuthState } from "./authState";
+import { decrypt } from "./crypto";
 
 function memoryClient() {
   return createClient({ url: ":memory:" });
@@ -30,6 +31,34 @@ describe("useTursoAuthState", () => {
     const second = await useTursoAuthState(db, "secret", "default", runtime);
 
     expect(second.state.creds.registered).toBe(true);
+  });
+
+  test("stored creds are ciphertext at rest, never the plaintext session material", async () => {
+    const db = memoryClient();
+    const { state, saveCreds } = await useTursoAuthState(db, "secret", "default", runtime);
+    state.creds.registered = true;
+    await saveCreds();
+
+    const row = await db.execute({
+      sql: "SELECT value FROM wa_auth WHERE id = ?",
+      args: ["creds"],
+    });
+    expect(row.rows).toHaveLength(1);
+    const storedValue = String(row.rows[0]?.value);
+
+    // A plaintext or weakly-encoded leak would contain this field name
+    // directly; only decrypting with the right secret should reveal it.
+    expect(storedValue).not.toContain("noiseKey");
+    expect(decrypt(storedValue, "secret")).toContain("noiseKey");
+
+    // Same plaintext saved twice must not produce identical ciphertext
+    // (rules out a deterministic, IV-less encoding).
+    await saveCreds();
+    const secondRow = await db.execute({
+      sql: "SELECT value FROM wa_auth WHERE id = ?",
+      args: ["creds"],
+    });
+    expect(String(secondRow.rows[0]?.value)).not.toBe(storedValue);
   });
 
   test("wrong secret fails to decrypt stored creds", async () => {
