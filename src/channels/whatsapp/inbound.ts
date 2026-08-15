@@ -54,6 +54,7 @@ import {
   type ChannelMessage,
   createSlidingWindowRateLimiter,
   decideChannelAction,
+  isBlockedByAllowlist,
   isEffectivelyFromSelf,
   type SessionIdentityRegistry,
   underReplyRateLimit,
@@ -301,6 +302,13 @@ export function createWhatsAppInboundHandler(
   config: WhatsAppInboundConfig,
 ): (event: WhatsAppMessageEvent) => Promise<void> {
   const mutedChats = new Set<string>();
+  // `sessionId:chatId` pairs already logged as blocked by the allowlist — a
+  // host only needs to see a rejected group's jid once per session to add
+  // it, and a chatty non-allowlisted group re-sending the same rejection
+  // every message would otherwise flood the log. Keyed by session too: two
+  // linked numbers sharing this handler can each be in the same rejected
+  // group, and each session's own log line is what tells its host about it.
+  const loggedUnallowedChats = new Set<string>();
   const now = config.now ?? Date.now;
   const group = config.groupRateLimit ?? DEFAULT_GROUP_RATE_LIMIT;
   const dm = config.dmRateLimit ?? DEFAULT_DM_RATE_LIMIT;
@@ -355,8 +363,9 @@ export function createWhatsAppInboundHandler(
         fromBot,
       };
 
+      const allowedChats = config.allowedChats ?? [];
       const action = decideChannelAction(msg, {
-        allowedChats: config.allowedChats ?? [],
+        allowedChats,
         mutedChats,
         muteRegex: config.muteRegex,
         unmuteRegex: config.unmuteRegex,
@@ -371,6 +380,13 @@ export function createWhatsAppInboundHandler(
         mutedChats.delete(chatId);
         if (config.unmuteReply) await sock.sendMessage(chatId, { text: config.unmuteReply });
         return;
+      }
+      if (action === "ignore" && isBlockedByAllowlist(msg, { allowedChats })) {
+        const dedupKey = `${sessionId}:${chatId}`;
+        if (!loggedUnallowedChats.has(dedupKey)) {
+          loggedUnallowedChats.add(dedupKey);
+          console.log(`WhatsApp[${sessionId}]: skipped group ${chatId} - not in allowedChats`);
+        }
       }
       if (action !== "reply") return;
 

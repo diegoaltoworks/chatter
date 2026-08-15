@@ -4,6 +4,7 @@ import {
   type ChannelMessage,
   createSlidingWindowRateLimiter,
   decideChannelAction,
+  isBlockedByAllowlist,
   isEffectivelyFromSelf,
   isFromAnySession,
   type SessionIdentityRegistry,
@@ -172,6 +173,59 @@ describe("decideChannelAction", () => {
 
     expect(decideChannelAction(first, cfg)).toBe("mute");
     expect(decideChannelAction(first, cfg)).toBe("mute");
+  });
+});
+
+describe("isBlockedByAllowlist", () => {
+  test("true for a non-allowlisted group chat", () => {
+    expect(
+      isBlockedByAllowlist(
+        msg({ isDirectMessage: false, chatId: "unlisted@g.us" }),
+        config({ allowedChats: ["allowed@g.us"] }),
+      ),
+    ).toBe(true);
+  });
+
+  test("false for an allowlisted group chat", () => {
+    expect(
+      isBlockedByAllowlist(
+        msg({ isDirectMessage: false, chatId: "allowed@g.us" }),
+        config({ allowedChats: ["allowed@g.us"] }),
+      ),
+    ).toBe(false);
+  });
+
+  test("false when the allowlist is empty (every group eligible)", () => {
+    expect(
+      isBlockedByAllowlist(
+        msg({ isDirectMessage: false, chatId: "any-chat" }),
+        config({ allowedChats: [] }),
+      ),
+    ).toBe(false);
+  });
+
+  test("false for DMs regardless of the allowlist", () => {
+    expect(
+      isBlockedByAllowlist(
+        msg({ isDirectMessage: true, chatId: "not-allowlisted" }),
+        config({ allowedChats: ["some-other-chat"] }),
+      ),
+    ).toBe(false);
+  });
+
+  test("false when the message is already ignored for another reason (from-bot, blank text)", () => {
+    expect(
+      isBlockedByAllowlist(
+        msg({ isDirectMessage: false, chatId: "unlisted@g.us", fromBot: true }),
+        config({ allowedChats: ["allowed@g.us"] }),
+      ),
+    ).toBe(false);
+    expect(
+      isBlockedByAllowlist(
+        msg({ isDirectMessage: false, chatId: "unlisted@g.us", text: "   " }),
+        config({ allowedChats: ["allowed@g.us"] }),
+      ),
+    ).toBe(false);
   });
 });
 

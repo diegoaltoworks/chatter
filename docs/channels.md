@@ -120,7 +120,10 @@ Configuration:
   each message's `sock.user`; never cleared, so a reconnecting session is
   still recognised as itself.
 - **`allowedChats`** — group chats eligible for a reply. Empty (default) =
-  every group; has no effect on DMs, which always reply.
+  every group; has no effect on DMs, which always reply. A group jid isn't
+  guessable in advance: when a group is rejected by this gate, its jid is
+  logged once (`WhatsApp[<sessionId>]: skipped group <jid> - not in
+  allowedChats`) so you can copy it in.
 - **`muteRegex`/`unmuteRegex`** and **`muteReply`/`unmuteReply`** — no
   defaults are shipped (this module carries no bot personality); an unset
   reply string means the mute/unmute state still flips, silently.

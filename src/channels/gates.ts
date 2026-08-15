@@ -47,6 +47,27 @@ function matches(re: RegExp, text: string): boolean {
 }
 
 /**
+ * True when `msg` is dropped because its chat isn't on `allowedChats`. The
+ * allowlist is the first group-only check {@link decideChannelAction} makes,
+ * before mute/unmute and addressing, so whenever this is true the allowlist
+ * really is the attributable reason for the "ignore" — a transport can log
+ * just this case without misattributing a drop that happened for a different
+ * cause (from the bot itself, blank text, muted, unaddressed).
+ */
+export function isBlockedByAllowlist(
+  msg: ChannelMessage,
+  config: Pick<ChannelGateConfig, "allowedChats">,
+): boolean {
+  return (
+    !msg.fromBot &&
+    msg.text.trim().length > 0 &&
+    !msg.isDirectMessage &&
+    config.allowedChats.length > 0 &&
+    !config.allowedChats.includes(msg.chatId)
+  );
+}
+
+/**
  * DMs always reply. In groups, only an allowlisted, unmuted chat gets a
  * reply, and only when addressed (mentioned or replying to the bot) —
  * merely mentioning the bot's name in third person is not an invitation.
@@ -57,9 +78,7 @@ function matches(re: RegExp, text: string): boolean {
 export function decideChannelAction(msg: ChannelMessage, config: ChannelGateConfig): ChannelAction {
   if (msg.fromBot || !msg.text.trim()) return "ignore";
   if (!msg.isDirectMessage) {
-    if (config.allowedChats.length > 0 && !config.allowedChats.includes(msg.chatId)) {
-      return "ignore";
-    }
+    if (isBlockedByAllowlist(msg, config)) return "ignore";
     if (config.muteRegex && matches(config.muteRegex, msg.text)) return "mute";
     if (config.unmuteRegex && matches(config.unmuteRegex, msg.text)) return "unmute";
     if (config.mutedChats.has(msg.chatId)) return "ignore";
