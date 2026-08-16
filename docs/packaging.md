@@ -22,6 +22,7 @@ in a dependency you did not ask for.
 | `./channels` | Channel SPI, reply gates, sender registry |
 | `./whatsapp` | The built-in WhatsApp channel |
 | `./usage` | Daily usage limiter and its Turso store |
+| `./history` | Conversation history store contract and its Turso implementation |
 | `./personas` | Persona resolver, greeter, time context |
 | `./flows` | Slot-filling flow engine |
 | `./images` | Image generation with cache-before-spend |

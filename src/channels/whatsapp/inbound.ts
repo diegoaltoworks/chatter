@@ -50,6 +50,7 @@ import { type BucketsFor, resolveBuckets } from "../../core/buckets";
 import { prepareChat } from "../../core/pipeline";
 import type { PromptLoader } from "../../core/prompts";
 import type { VectorStore } from "../../core/retrieval";
+import type { HistoryStore } from "../../history/types";
 import {
   type ChannelMessage,
   createSlidingWindowRateLimiter,
@@ -275,8 +276,21 @@ export interface WhatsAppInboundConfig {
    * `./images` is configured.
    */
   images?: WhatsAppImageHandler;
+  /**
+   * Optional conversation history (see `./history`). Off by default —
+   * WhatsApp stays single-turn, unchanged, until a store is configured. When
+   * set, prior turns for the chat are loaded before answering and the new
+   * turn (user message, then reply) is appended after.
+   */
+  history?: {
+    store: HistoryStore;
+    /** Most recent turns to load per reply. @default 20 */
+    limit?: number;
+  };
   now?: () => number;
 }
+
+const DEFAULT_HISTORY_LIMIT = 20;
 
 // Defence in depth, not a spend guard: unthrottled DMs let a single sender
 // (or a loop) hammer the brain at full speed; these are deliberately
@@ -415,7 +429,15 @@ export function createWhatsAppInboundHandler(
         bucketsFor: config.bucketsFor,
       });
 
-      const messages = [{ role: "user" as const, content: text }];
+      const priorTurns = config.history
+        ? await config.history.store.load(chatId, config.history.limit ?? DEFAULT_HISTORY_LIMIT)
+        : [];
+      const messages = [...priorTurns, { role: "user" as const, content: text }];
+      // Appended right after the load/messages snapshot, not after the reply:
+      // the window between another instance's load for this chat and this
+      // turn landing in the store is as narrow as it can be without a
+      // transactional read-modify-write.
+      await config.history?.store.append(chatId, { role: "user", content: text });
       const { system } = await prepareChat({
         store: config.store,
         prompts: config.prompts,
@@ -437,7 +459,12 @@ export function createWhatsAppInboundHandler(
         model: config.model,
       });
 
+      // Recorded as soon as each turn exists, not after delivery: a
+      // sendMessage failure below must not erase the model's answer from
+      // history, and a load/append race with a concurrent message for the
+      // same chat is narrower the sooner the user's own turn lands.
       if (content) {
+        await config.history?.store.append(chatId, { role: "assistant", content });
         await sock.sendMessage(chatId, { text: content }, { quoted: message });
       }
     } catch (error) {

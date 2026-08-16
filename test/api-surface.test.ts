@@ -1,12 +1,13 @@
 /**
  * Locks the downstream consumption patterns documented in docs/server.md,
- * docs/channels.md, docs/personas.md, docs/flows.md and docs/integrations.md:
- * the shape of ServerDependencies (incl. the shared db handle), starting a
- * Channel standalone, personaResolver output feeding prepareChat's
- * personaLayer, the bucketsFor retrieval hook, prepareChat's channel-facing
- * params, the answerFn brain hook, sending through the sender registry by
- * name, the flow contract a plugin implements, and the OpenAI-compatible wire
- * shape third-party clients depend on.
+ * docs/channels.md, docs/personas.md, docs/flows.md, docs/history.md and
+ * docs/integrations.md: the shape of ServerDependencies (incl. the shared db
+ * handle), starting a Channel standalone, personaResolver output feeding
+ * prepareChat's personaLayer, the bucketsFor retrieval hook, prepareChat's
+ * channel-facing params, the answerFn brain hook, sending through the sender
+ * registry by name, the flow contract a plugin implements, a HistoryStore's
+ * loaded turns feeding straight into that same messages array, and the
+ * OpenAI-compatible wire shape third-party clients depend on.
  *
  * Typechecked via test/tsconfig.json (see `bun run typecheck:api-surface`,
  * folded into `bun run check`) so a breaking change to any of these types
@@ -21,6 +22,7 @@ import type { AnswerFn, BucketsFor, Channel, PipelineMessage, ServerDependencies
 import { prepareChat, resolveBuckets } from "../src";
 import { createSenderRegistry } from "../src/channels";
 import type { FlowHandler, FlowHandlerContext, FlowHandlerResult, LoadedFlow } from "../src/flows";
+import type { HistoryMessage, HistoryStore } from "../src/history";
 import { createPersonaResolver } from "../src/personas";
 import { openaiRoutes } from "../src/routes/openai";
 import type { ChatterConfig } from "../src/types";
@@ -173,6 +175,34 @@ describe("API surface", () => {
 
     const result: FlowHandlerResult = await flow.handler({ name: "Ana" }, context);
     expect(result).toEqual({ success: true, message: "booked for Ana", result: { id: 1 } });
+  });
+
+  // Guards the WhatsApp history wiring's `[...priorTurns, newTurn]` spread:
+  // if PipelineMessage ever grows an incompatible field, the assignment below
+  // fails to typecheck here rather than surfacing downstream.
+  test("a HistoryStore's loaded turns feed directly into prepareChat/answerOnce's messages array", async () => {
+    const turns: HistoryMessage[] = [
+      { role: "user", content: "hi" },
+      { role: "assistant", content: "hello" },
+    ];
+    const asPipelineMessages: PipelineMessage[] = turns;
+    expect(asPipelineMessages).toEqual(turns);
+
+    const appended: Array<{ conversationId: string; message: HistoryMessage }> = [];
+    const store: HistoryStore = {
+      async append(conversationId, message) {
+        appended.push({ conversationId, message });
+      },
+      async load() {
+        return turns;
+      },
+    };
+
+    expect(await store.load("conv-1", 10)).toEqual(turns);
+    await store.append("conv-1", { role: "user", content: "again" });
+    expect(appended).toEqual([
+      { conversationId: "conv-1", message: { role: "user", content: "again" } },
+    ]);
   });
 
   test("POST /v1/chat/completions responds with the real OpenAI ChatCompletion wire shape", async () => {

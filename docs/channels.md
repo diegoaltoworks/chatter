@@ -202,6 +202,39 @@ handleInbound = createWhatsAppInboundHandler({
   reached, moderation-blocked, generic error); an unset string means that
   outcome replies silently.
 
+## Conversation history
+
+By default the handler is single-turn: only the latest message reaches
+`prepareChat`/`answerOnce`. Configure `history` (see
+[history.md](./history.md)) to load prior turns for the chat before answering
+and append the new turn after — off by default, so existing deployments are
+unaffected:
+
+```ts
+import { createTursoHistoryStore } from "@diegoaltoworks/chatter/history";
+
+handleInbound = createWhatsAppInboundHandler({
+  ...,
+  history: {
+    store: createTursoHistoryStore(deps.db, "whatsapp_history"),
+    limit: 20, // turns loaded per reply; default 20
+  },
+});
+```
+
+- **`store`** — any `HistoryStore`; the shipped Turso implementation is keyed
+  by `deps.db`, the same handle chatter already opened for retrieval.
+- **`limit`** — most recent turns loaded per reply. This bounds what one
+  `load` returns; the store itself also prunes what it physically keeps (see
+  `createTursoHistoryStore`'s `maxPerConversation`). Every loaded turn is a
+  full message on every reply's prompt, so raising it raises token cost too —
+  see [history.md](./history.md).
+
+History is keyed by chat jid, so a group chat's history is shared across every
+participant in it — there is no per-sender history within a group. A message
+the image handler (`./images`, above) intercepts never reaches this store —
+only turns answered through the normal chat pipeline are recorded.
+
 The detector and subject-cleaner (which strips mention tokens, greetings,
 and the draw verb itself to derive the picture's subject) default to a
 generic set of drawing verbs with no bot-specific names; override both via
