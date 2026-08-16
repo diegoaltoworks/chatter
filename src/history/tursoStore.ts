@@ -2,8 +2,8 @@
  * Turso/libsql-backed {@link HistoryStore}.
  *
  * History lives in the database rather than process memory because
- * deployments run multiple instances — the instance that handles turn 2 of a
- * conversation is not guaranteed to be the one that handled turn 1.
+ * deployments run multiple instances, and the instance that handles turn 2
+ * of a conversation is not guaranteed to be the one that handled turn 1.
  *
  * `@libsql/client` is imported for its type alone, so this module adds no
  * runtime dependency to anyone importing `./history` for the store contract.
@@ -60,10 +60,13 @@ const VALID_ROLES = new Set<HistoryMessage["role"]>(["user", "assistant"]);
 
 const DEFAULT_MAX_PER_CONVERSATION = 200;
 
+/** Default table name for {@link createTursoHistoryStore} when no `tableName` is given, mirroring `scheduler`'s `DEFAULT_CLAIM_TABLE`. */
+export const DEFAULT_HISTORY_TABLE = "chat_history";
+
 export interface TursoHistoryStoreOptions {
   /**
    * Retention window: rows older than this are pruned whenever the
-   * conversation they belong to is accessed (`append` or `load`) — there is
+   * conversation they belong to is accessed (`append` or `load`); there is
    * no background sweep. Unset: rows never expire on their own (only the
    * `maxPerConversation` count cap and explicit `clear` remove them). Must be
    * a positive integer, validated at construction like `maxPerConversation`.
@@ -79,7 +82,7 @@ export interface TursoHistoryStoreOptions {
  *
  * `append` prunes each conversation back down to `maxPerConversation` after
  * every write, so the table stays bounded even for a conversation nobody
- * ever calls `load` on with a small `limit` — a caller's `limit` shapes what
+ * ever calls `load` on with a small `limit`; a caller's `limit` shapes what
  * a single `load` returns, not how much history physically accumulates. A
  * non-positive `maxPerConversation` would prune every write to nothing (`0`)
  * or disable pruning entirely (SQLite reads a negative `LIMIT` as
@@ -87,7 +90,7 @@ export interface TursoHistoryStoreOptions {
  */
 export function createTursoHistoryStore(
   client: Client,
-  tableName = "chat_history",
+  tableName = DEFAULT_HISTORY_TABLE,
   maxPerConversation = DEFAULT_MAX_PER_CONVERSATION,
   options?: TursoHistoryStoreOptions,
 ): HistoryStore {

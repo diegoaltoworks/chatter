@@ -5,6 +5,9 @@ import { createConsoleLogger, type Logger } from "./logger";
 
 const EMB_MODEL = "text-embedding-3-large";
 
+/** Default knowledge directory when a caller's `config.knowledgeDir` is unset. */
+export const DEFAULT_KNOWLEDGE_DIR = "./config/knowledge";
+
 /**
  * The retrieval seam `prepareChat` runs against: given a query, return up to
  * `k` chunks drawn only from `allowedBuckets`. {@link VectorStore} is the
@@ -129,7 +132,7 @@ export class VectorStore implements Retriever {
     options: VectorStoreOptions,
   ) {
     this.db = options.databaseClient;
-    this.knowledgeDir = options.knowledgeDir || "./config/knowledge";
+    this.knowledgeDir = options.knowledgeDir || DEFAULT_KNOWLEDGE_DIR;
     this.logger = options.logger ?? createConsoleLogger();
   }
 

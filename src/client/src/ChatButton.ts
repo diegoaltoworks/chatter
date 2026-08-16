@@ -25,23 +25,19 @@ export class ChatButton {
   }
 
   private render(): void {
-    // Create button
     this.buttonElement = document.createElement("button");
     this.buttonElement.className = `chatter-ui-chat-button chatter-ui-chat-button-${this.config.position}`;
     this.buttonElement.innerHTML = this.config.label || "💬";
     this.buttonElement.setAttribute("aria-label", "Open chat");
 
-    // Apply custom styles
     if (this.config.styles) {
       Object.assign(this.buttonElement.style, this.config.styles);
     }
 
-    // Create chat container
     this.chatContainer = document.createElement("div");
     this.chatContainer.className = `chatter-ui-chat-popup chatter-ui-chat-popup-${this.config.position}`;
     this.chatContainer.style.display = "none";
 
-    // Add to document
     document.body.appendChild(this.buttonElement);
     document.body.appendChild(this.chatContainer);
   }
@@ -49,14 +45,12 @@ export class ChatButton {
   private attachEventListeners(): void {
     this.buttonElement.addEventListener("click", () => this.toggle());
 
-    // Close on escape key
     document.addEventListener("keydown", (e) => {
       if (e.key === "Escape" && this.isOpen) {
         this.close();
       }
     });
 
-    // Close when clicking outside
     document.addEventListener("click", (e) => {
       if (
         this.isOpen &&
@@ -79,7 +73,6 @@ export class ChatButton {
   open(): void {
     if (this.isOpen) return;
 
-    // Create chat instance if not exists
     if (!this.chat) {
       this.chat = new Chat({
         host: this.config.host,

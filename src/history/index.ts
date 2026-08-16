@@ -26,5 +26,5 @@ export type {
 } from "./compaction";
 export { createHistoryCompactor, SUMMARY_PREFIX } from "./compaction";
 export type { TursoHistoryStoreOptions } from "./tursoStore";
-export { createTursoHistoryStore } from "./tursoStore";
+export { createTursoHistoryStore, DEFAULT_HISTORY_TABLE } from "./tursoStore";
 export type { HistoryMessage, HistoryStore } from "./types";

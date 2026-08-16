@@ -12,6 +12,7 @@ import { DEFAULT_MODEL } from "../core/llm";
 import { lastUserMessage, normalizeChatBody } from "../core/messages";
 import { prepareChat } from "../core/pipeline";
 import { createSession, getActiveSessions } from "../core/session";
+import { API_KEY_HEADER, API_KEY_PREVIEW_LENGTH } from "../middleware/apiKey";
 import { chatBodyLimit } from "../middleware/bodyLimit";
 import { clientRateLimitKey } from "../middleware/clientKey";
 import { matchesAllowedOrigin, matchesAllowedOriginOrLocalhost } from "../middleware/originMatch";
@@ -103,6 +104,12 @@ function limitDemo(trustProxy: boolean) {
   };
 }
 
+// The demo route's own published contract (response body, log line), kept
+// separate from core/session's library-wide defaults - the two happen to
+// agree today, but a change to one must not silently change the other.
+const DEMO_SESSION_MAX_REQUESTS = 20;
+const DEMO_SESSION_TTL_SECONDS = 3600;
+
 export function demoRoutes(deps: ServerDependencies) {
   const { client, store, config, prompts, logger } = deps;
   const app = new Hono();
@@ -123,19 +130,19 @@ export function demoRoutes(deps: ServerDependencies) {
     limitSessionCreation(trustProxy),
     (c) => {
       const session = createSession({
-        maxRequests: 20,
-        ttl: 3600, // 1 hour
+        maxRequests: DEMO_SESSION_MAX_REQUESTS,
+        ttl: DEMO_SESSION_TTL_SECONDS,
       });
 
       logger.debug(
-        `[Demo] Created session: ${session.key.slice(0, 20)}... (${session.maxRequests} requests, ${3600}s TTL)`,
+        `[Demo] Created session: ${session.key.slice(0, API_KEY_PREVIEW_LENGTH)}... (${session.maxRequests} requests, ${DEMO_SESSION_TTL_SECONDS}s TTL)`,
       );
 
       return c.json({
         key: session.key,
-        expiresIn: 3600,
+        expiresIn: DEMO_SESSION_TTL_SECONDS,
         maxRequests: session.maxRequests,
-        message: "Use this temporary key in the x-api-key header",
+        message: `Use this temporary key in the ${API_KEY_HEADER} header`,
       });
     },
   );

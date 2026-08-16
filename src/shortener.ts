@@ -2,10 +2,11 @@
  * URL shortening against a Kutt-compatible API, config-injected (no
  * `process.env` reads) so hosts can wire credentials however they like.
  *
- * The hard invariant: {@link Shortener.shorten} never throws. Any failure —
- * network error, an aborted request past `timeoutMs`, or a non-2xx/malformed
- * response — resolves to the original URL, since a shortener outage must
- * never break something user-facing that only wanted a shorter link.
+ * The hard invariant: {@link Shortener.shorten} never throws. Any failure
+ * (a network error, an aborted request past `timeoutMs`, or a
+ * non-2xx/malformed response) resolves to the original URL instead, since a
+ * shortener outage must never break something user-facing that only wanted
+ * a shorter link.
  */
 
 export interface ShortenerConfig {
@@ -23,7 +24,7 @@ export interface Shortener {
   shorten(url: string): Promise<string>;
 }
 
-const DEFAULT_TIMEOUT_MS = 5000;
+const SHORTENER_TIMEOUT_MS = 5000;
 
 interface KuttLinkResponse {
   link?: string;
@@ -38,7 +39,10 @@ export function createShortener(
   return {
     async shorten(url: string): Promise<string> {
       const controller = new AbortController();
-      const timeout = setTimeout(() => controller.abort(), config.timeoutMs ?? DEFAULT_TIMEOUT_MS);
+      const timeout = setTimeout(
+        () => controller.abort(),
+        config.timeoutMs ?? SHORTENER_TIMEOUT_MS,
+      );
 
       try {
         const response = await fetchImpl(`${apiUrl}/api/v2/links`, {

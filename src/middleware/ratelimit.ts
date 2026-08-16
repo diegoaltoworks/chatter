@@ -1,6 +1,7 @@
 import type { Context, Next } from "hono";
 
 import type { ChatterConfig } from "../types";
+import { API_KEY_HEADER } from "./apiKey";
 import { clientRateLimitKey } from "./clientKey";
 import { createWindowBucketLimiter } from "./windowBucket";
 
@@ -25,7 +26,7 @@ export function createRateLimiter(config: ChatterConfig) {
     // Demo keys get 10x stricter rate limits
     limitPublic() {
       return async (c: Context, next: Next) => {
-        const apiKey = c.req.header("x-api-key");
+        const apiKey = c.req.header(API_KEY_HEADER);
         const isDemoKey = apiKey ? demoApiKeys.includes(apiKey) : false;
 
         const key = `pub:${clientRateLimitKey(c, trustProxy)}`;

@@ -7,6 +7,9 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import type { BotIdentity } from "../types";
 
+/** Default prompts directory when a caller's `config.promptsDir` is unset. */
+export const DEFAULT_PROMPTS_DIR = "./config/prompts";
+
 /**
  * Prompt loader class that loads and interpolates prompt templates
  * with bot identity information

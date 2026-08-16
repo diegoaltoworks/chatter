@@ -20,7 +20,7 @@ export { loadFlowsFromDirectory } from "./loader";
 export { extractParameters } from "./params";
 export type { FlowRegistry } from "./registry";
 export { createFlowRegistry } from "./registry";
-export { createTursoFlowSessionStore } from "./session";
+export { createTursoFlowSessionStore, DEFAULT_FLOW_SESSION_TABLE } from "./session";
 export type {
   FlowDefinition,
   FlowExtractionResult,

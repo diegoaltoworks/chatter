@@ -125,7 +125,24 @@ chatter/
   tarball's size budget").
 - **No em-dashes.** Not in code comments, docs, commit messages, PR text, or
   any user-facing string. Use a plain hyphen with spaces, a comma, a colon,
-  or restructure the sentence.
+  or restructure the sentence. Checked mechanically for tracked source and
+  docs by `scripts/comment-gate.test.ts` against a ratchet baseline that may
+  only decrease.
+- **The three-part comment rule.** Default to no comment; well-named code
+  already says what it does. When a comment is worth writing, it earns its
+  place by covering three things: the constraint or behavior it protects,
+  why that isn't obvious from the code alone (the mistake someone would
+  otherwise make), and how a reader can tell it's still true (a test to
+  point at, or an explicit note that nothing checks it). A comment with only
+  the first part is a WHAT-comment and should be deleted, not written -
+  `docs/ARCHITECTURE.md`'s invariant entries and the doc comment atop
+  `scripts/architecture-invariants.ts` are worked examples. Two specific
+  failure modes are checked mechanically, also by
+  `scripts/comment-gate.test.ts`: a comment must not hardcode this
+  package's current released version (the release workflow owns
+  `package.json#version`; see [Release Process](#release-process)) or
+  reference a tracker ticket id, and a `path:line` anchor a comment makes
+  must point at a file and line that actually exist.
 
 ### Commits
 

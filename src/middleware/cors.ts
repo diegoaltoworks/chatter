@@ -1,6 +1,7 @@
 import type { Context, Next } from "hono";
+import { API_KEY_HEADER } from "./apiKey";
 
-const ALLOWED_HEADERS = "content-type, x-api-key, authorization, x-conversation-id";
+const ALLOWED_HEADERS = `content-type, ${API_KEY_HEADER}, authorization, x-conversation-id`;
 const ALLOWED_METHODS = "POST, GET, OPTIONS";
 const EXPOSED_HEADERS = "x-conversation-id";
 

@@ -14,12 +14,12 @@ import { DEFAULT_MODEL } from "./core/llm";
 import { resolveLogger } from "./core/logger";
 import { lastUserMessage } from "./core/messages";
 import { prepareChat } from "./core/pipeline";
-import { PromptLoader } from "./core/prompts";
+import { DEFAULT_PROMPTS_DIR, PromptLoader } from "./core/prompts";
 import type { Retriever } from "./core/retrieval";
 import { getOrGenerateConversationId } from "./mcp-server/conversation-id";
 import { calculateCost } from "./mcp-server/cost-tracker";
 import { createLogger } from "./mcp-server/logger";
-import { createRateLimiter } from "./mcp-server/rate-limiter";
+import { createMcpRateLimiter } from "./mcp-server/rate-limiter";
 import { loadMcpSdk, loadZod } from "./mcp-server/sdk";
 import { resolveConversationMessages } from "./mcp-server/tool-input";
 
@@ -61,7 +61,7 @@ import type { MCPServerOptions } from "./mcp-server/types";
  */
 export async function createMCPServer(config: MCPServerOptions) {
   // Every startup/registration message below goes through `log`, whose
-  // default implementation never writes to stdout — the stdio transport
+  // default implementation never writes to stdout - the stdio transport
   // reserves stdout for the JSON-RPC stream, so a raw console.log here would
   // corrupt it.
   const log = resolveLogger(config.logger, config.logLevel);
@@ -70,16 +70,12 @@ export async function createMCPServer(config: MCPServerOptions) {
   // Optional peers, loaded lazily so core installs/imports never require them.
   const [McpServer, z] = await Promise.all([loadMcpSdk(), loadZod()]);
 
-  // Set defaults
-  const knowledgeDir = config.knowledgeDir || "./config/knowledge";
-  const promptsDir = config.promptsDir || "./config/prompts";
+  const promptsDir = config.promptsDir || DEFAULT_PROMPTS_DIR;
   const transportMode = config.transport || "stdio";
 
-  // Initialize modular components
-  const rateLimiter = createRateLimiter(config.toolRateLimit);
+  const rateLimiter = createMcpRateLimiter(config.toolRateLimit);
   const logger = createLogger(config.logging?.console !== false, config.logging?.onChat, log);
 
-  // Tool configurations with defaults
   const publicToolConfig = {
     enabled: config.tools?.public?.enabled !== false,
     name: config.tools?.public?.name || "chat_public",
@@ -96,7 +92,6 @@ export async function createMCPServer(config: MCPServerOptions) {
       `Chat with ${config.bot.name} using private/internal knowledge base. Supports both single messages and conversation history.`,
   };
 
-  // Initialize OpenAI
   const client = new OpenAI({
     apiKey: config.openai.apiKey,
   });
@@ -118,23 +113,20 @@ export async function createMCPServer(config: MCPServerOptions) {
           "or supply config.retriever to use your own retrieval backend instead.",
       );
     }
-    const { VectorStore, createOpenAIEmbedder, openLibsqlClient } = await import(
-      "./core/retrieval"
-    );
+    const { DEFAULT_KNOWLEDGE_DIR, VectorStore, createOpenAIEmbedder, openLibsqlClient } =
+      await import("./core/retrieval");
     const db = await openLibsqlClient(config.database);
     store = new VectorStore(createOpenAIEmbedder(client), {
       databaseClient: db,
-      knowledgeDir,
+      knowledgeDir: config.knowledgeDir || DEFAULT_KNOWLEDGE_DIR,
       logger: log,
     });
   }
   await store.build?.();
   log.info("✅ Knowledge base ready");
 
-  // Create prompt loader
   const prompts = new PromptLoader(promptsDir, config.bot);
 
-  // Create MCP server
   const server = new McpServer({
     name: config.bot.name,
     version: "1.0.0",
@@ -142,7 +134,6 @@ export async function createMCPServer(config: MCPServerOptions) {
 
   log.info("✅ MCP server initialized");
 
-  // Register chat_public tool (if enabled)
   if (publicToolConfig.enabled) {
     const publicShape = {
       message: z.string().optional().describe("A single message to send (for simple queries)"),
@@ -173,10 +164,8 @@ export async function createMCPServer(config: MCPServerOptions) {
         const { message, messages, conversationId } = args;
         const startTime = Date.now();
 
-        // Generate or use provided conversation ID
         const convId = getOrGenerateConversationId(conversationId);
 
-        // Check rate limit
         if (rateLimiter && !rateLimiter.check(publicToolConfig.name)) {
           throw new Error(
             `Rate limit exceeded for ${publicToolConfig.name}. Maximum ${config.toolRateLimit} requests per minute.`,
@@ -203,7 +192,6 @@ export async function createMCPServer(config: MCPServerOptions) {
           logger: log,
         });
 
-        // Generate response
         const result = await answerOnce({
           answerFn: config.answerFn,
           client,
@@ -220,10 +208,8 @@ export async function createMCPServer(config: MCPServerOptions) {
           log,
         );
 
-        // Calculate cost
         const cost = calculateCost(result.usage, config.openai.pricing);
 
-        // Log interaction
         const duration = Date.now() - startTime;
         await logger
           .logChatInteraction(
@@ -260,7 +246,6 @@ export async function createMCPServer(config: MCPServerOptions) {
     log.info(`✅ Registered tool: ${publicToolConfig.name}`);
   }
 
-  // Register chat_private tool (if enabled)
   if (privateToolConfig.enabled) {
     const privateShape = {
       message: z.string().optional().describe("A single message to send (for simple queries)"),
@@ -291,10 +276,8 @@ export async function createMCPServer(config: MCPServerOptions) {
         const { message, messages, conversationId } = args;
         const startTime = Date.now();
 
-        // Generate or use provided conversation ID
         const convId = getOrGenerateConversationId(conversationId);
 
-        // Check rate limit
         if (rateLimiter && !rateLimiter.check(privateToolConfig.name)) {
           throw new Error(
             `Rate limit exceeded for ${privateToolConfig.name}. Maximum ${config.toolRateLimit} requests per minute.`,
@@ -307,7 +290,6 @@ export async function createMCPServer(config: MCPServerOptions) {
           throw new Error("No user message found in conversation");
         }
 
-        // Retrieve context from knowledge base (using private knowledge)
         const buckets = await resolveBuckets({ mode: "private", bucketsFor: config.bucketsFor });
         const { system, context: ctx } = await prepareChat({
           store,
@@ -320,7 +302,6 @@ export async function createMCPServer(config: MCPServerOptions) {
           logger: log,
         });
 
-        // Generate response
         const result = await answerOnce({
           answerFn: config.answerFn,
           client,
@@ -337,10 +318,8 @@ export async function createMCPServer(config: MCPServerOptions) {
           log,
         );
 
-        // Calculate cost
         const cost = calculateCost(result.usage, config.openai.pricing);
 
-        // Log interaction
         const duration = Date.now() - startTime;
         await logger
           .logChatInteraction(
@@ -377,7 +356,6 @@ export async function createMCPServer(config: MCPServerOptions) {
     log.info(`✅ Registered tool: ${privateToolConfig.name}`);
   }
 
-  // Log summary
   const enabledTools = [
     publicToolConfig.enabled ? publicToolConfig.name : null,
     privateToolConfig.enabled ? privateToolConfig.name : null,

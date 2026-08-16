@@ -34,12 +34,12 @@ export interface CaptionComposer {
   composeCaption(request: CaptionRequest): Promise<string>;
 }
 
-const DEFAULT_TIMEOUT_MS = 8_000;
+const CAPTION_TIMEOUT_MS = 8_000;
 const MAX_COMPOSED_LENGTH = 300;
 
 export function createCaptionComposer(options: CaptionComposerOptions): CaptionComposer {
   const { pool } = options;
-  const timeoutMs = options.timeoutMs ?? DEFAULT_TIMEOUT_MS;
+  const timeoutMs = options.timeoutMs ?? CAPTION_TIMEOUT_MS;
   const random = options.random ?? Math.random;
 
   function randomCaption(subject?: string): string {
