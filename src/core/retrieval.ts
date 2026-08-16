@@ -95,6 +95,27 @@ export class VectorStore {
     const docs = loadKnowledge(this.knowledgeDir);
     this.logger.info(`📚 Loaded ${docs.length} knowledge documents`);
 
+    // A consumer that reaches build() with zero documents is almost always
+    // misconfigured (a knowledgeDir that doesn't resolve from the process's
+    // cwd, a bad Docker COPY, a knowledge folder emptied by accident) rather
+    // than a deliberate no-knowledge deployment. Proceeding from here is
+    // actively destructive, not just unhelpful: every existing chunk in
+    // `chunks` would read as "not in this build's output" and get deleted by
+    // the cleanup step below, wiping a working knowledge base down to
+    // nothing while leaving its embeddings orphaned (no FK/cascade ties the
+    // two tables together at the schema level). Refuse outright instead -
+    // `createServer` awaits `build()` with no try/catch, so this fails boot
+    // loudly rather than silently serving a chatbot with no knowledge.
+    if (docs.length === 0) {
+      throw new Error(
+        `VectorStore.build(): loaded 0 knowledge documents from "${this.knowledgeDir}" ` +
+          "(resolved from process.cwd(), not this file's location) - refusing to build, " +
+          "since doing so would delete every existing chunk as stale. Verify knowledgeDir " +
+          "exists relative to the process's working directory and contains base/public/" +
+          "private subdirectories with .md files.",
+      );
+    }
+
     const rows: { id: string; bucket: Bucket; source: string; text: string }[] = [];
     for (const d of docs) {
       for (const part of chunk(d.text)) {
@@ -188,16 +209,22 @@ export class VectorStore {
 
     this.logger.info(`🧹 Cleaning up ${staleIds.length} stale chunks...`);
 
-    // Delete stale chunks in batches (embeddings cascade delete automatically)
+    // Delete stale chunks in batches. Embeddings do NOT cascade delete - the
+    // schema defines no FK between the two tables - so they're deleted
+    // explicitly in the same batch, by id, rather than relying on a
+    // constraint that was never actually there.
     const BATCH_SIZE = 500;
     for (let i = 0; i < staleIds.length; i += BATCH_SIZE) {
       const batch = staleIds.slice(i, i + BATCH_SIZE);
       const placeholders = batch.map(() => "?").join(",");
 
-      await this.db.execute({
-        sql: `DELETE FROM chunks WHERE id IN (${placeholders})`,
-        args: batch,
-      });
+      await this.db.batch(
+        [
+          { sql: `DELETE FROM chunks WHERE id IN (${placeholders})`, args: batch },
+          { sql: `DELETE FROM embeddings WHERE id IN (${placeholders})`, args: batch },
+        ],
+        "write",
+      );
     }
 
     this.logger.info(`✓ Cleaned up ${staleIds.length} stale chunks and their embeddings`);
