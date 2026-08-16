@@ -55,6 +55,7 @@ import { createConsoleLogger, type Logger } from "../../core/logger";
 import type { RerankContext, RewriteQuery } from "../../core/pipeline";
 import type { PromptLoader } from "../../core/prompts";
 import type { VectorStore } from "../../core/retrieval";
+import type { HistoryCompactionOptions } from "../../history/compaction";
 import type { HistoryStore } from "../../history/types";
 import {
   type ChannelMessage,
@@ -367,6 +368,12 @@ export interface WhatsAppInboundConfig {
      * @default every sender is enabled
      */
     historyEnabledFor?: (sender: string) => boolean | Promise<boolean>;
+    /**
+     * Summarize-then-truncate compaction — see
+     * `InboundPipelineConfig.history.compaction` in `./channels`.
+     * @default off
+     */
+    compaction?: HistoryCompactionOptions;
   };
   now?: () => number;
   /** Logger for gate/dispatch diagnostics. Default: a console logger writing to stderr. */

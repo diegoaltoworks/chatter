@@ -25,6 +25,7 @@ import type { AnswerFn, TransformReply } from "../../core/answer";
 import type { BucketsFor } from "../../core/buckets";
 import { createConsoleLogger, type Logger } from "../../core/logger";
 import type { RerankContext, RewriteQuery } from "../../core/pipeline";
+import type { HistoryCompactionOptions } from "../../history/compaction";
 import type { HistoryStore } from "../../history/types";
 import type { Channel } from "../index";
 import { createInboundPipeline } from "../pipeline";
@@ -70,6 +71,12 @@ export interface TelegramChannelConfig {
      * @default every sender is enabled
      */
     historyEnabledFor?: (sender: string) => boolean | Promise<boolean>;
+    /**
+     * Summarize-then-truncate compaction — see
+     * `InboundPipelineConfig.history.compaction` in `./channels`.
+     * @default off
+     */
+    compaction?: HistoryCompactionOptions;
   };
   muteRegex?: RegExp;
   unmuteRegex?: RegExp;

@@ -107,6 +107,21 @@ describe("createTursoHistoryStore", () => {
     expect(await store.load("conv-1", -1)).toEqual([]);
   });
 
+  // `../history/compaction`'s LOAD_ALL constant relies on a very large limit
+  // reading everything the store holds rather than erroring or truncating —
+  // proven here against the real libsql SQL `LIMIT`, not just a fake store's
+  // Array.slice.
+  test("load with a very large limit returns the entire conversation, unaffected by SQLite's own LIMIT handling", async () => {
+    const store = createTursoHistoryStore(memoryClient());
+    for (let i = 0; i < 5; i++) {
+      await store.append("conv-1", { role: "user", content: `turn ${i}` });
+    }
+
+    expect(await store.load("conv-1", Number.MAX_SAFE_INTEGER)).toEqual(
+      Array.from({ length: 5 }, (_, i) => ({ role: "user", content: `turn ${i}` })),
+    );
+  });
+
   test("clear empties a conversation, leaving others untouched", async () => {
     const store = createTursoHistoryStore(memoryClient());
     await store.append("conv-1", { role: "user", content: "hi" });
