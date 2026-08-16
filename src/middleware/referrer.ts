@@ -5,6 +5,8 @@
 
 import type { Context, Next } from "hono";
 import { createConsoleLogger, type Logger } from "../core/logger";
+import { SESSION_KEY_PREFIX } from "../core/session";
+import { API_KEY_HEADER, API_KEY_PREVIEW_LENGTH } from "./apiKey";
 import { matchesAllowedOrigin } from "./originMatch";
 
 /**
@@ -20,18 +22,18 @@ export function requireReferrer(
   logger: Logger = createConsoleLogger(),
 ) {
   return async (c: Context, next: Next) => {
-    const apiKey = c.req.header("x-api-key");
+    const apiKey = c.req.header(API_KEY_HEADER);
 
     // Check referrer for demo keys AND session keys
     const isDemoKey = apiKey ? demoApiKeys.includes(apiKey) : false;
-    const isSessionKey = apiKey?.startsWith("session_");
+    const isSessionKey = apiKey?.startsWith(SESSION_KEY_PREFIX);
 
     if (isDemoKey || isSessionKey) {
       const referer = c.req.header("referer");
       const origin = c.req.header("origin");
 
       logger.debug(
-        `[Referrer] Checking ${isSessionKey ? "session" : "demo"} key: ${apiKey?.slice(0, 20)}...`,
+        `[Referrer] Checking ${isSessionKey ? "session" : "demo"} key: ${apiKey?.slice(0, API_KEY_PREVIEW_LENGTH)}...`,
       );
       logger.debug(`[Referrer] Origin: ${origin || "none"}, Referer: ${referer || "none"}`);
 

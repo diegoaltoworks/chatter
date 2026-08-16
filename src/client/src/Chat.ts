@@ -21,7 +21,6 @@ export class Chat {
   private sendButton!: HTMLButtonElement;
 
   constructor(config: ChatConfig) {
-    // Initialize bot
     this.bot = new ChatBot({
       host: config.host,
       mode: config.mode,
@@ -29,7 +28,6 @@ export class Chat {
       token: config.token,
     });
 
-    // Get or create container
     if (typeof config.container === "string") {
       const el = document.querySelector(config.container);
       if (!el) {
@@ -65,14 +63,14 @@ export class Chat {
     this.inputElement = inputElement as HTMLTextAreaElement;
     this.sendButton = sendButton as HTMLButtonElement;
 
-    // Render initial messages
     for (const msg of this.messages) {
       this.addMessageToUI(msg);
     }
   }
 
   private attachEventListeners(): void {
-    // Close button click (mobile)
+    // Only wired when `onClose` is supplied - ChatButton passes one for its
+    // popup embed; an inline embed with no close affordance leaves it unset.
     const closeButton = this.container.querySelector(".chatter-ui-chat-close");
     if (closeButton && this.onClose) {
       closeButton.addEventListener("click", () => {
@@ -80,7 +78,6 @@ export class Chat {
       });
     }
 
-    // Send button click
     this.sendButton.addEventListener("click", () => this.handleSend());
 
     // Enter to send (Shift+Enter for new line)
@@ -91,7 +88,6 @@ export class Chat {
       }
     });
 
-    // Auto-resize textarea
     this.inputElement.addEventListener("input", () => {
       this.inputElement.style.height = "auto";
       this.inputElement.style.height = `${Math.min(this.inputElement.scrollHeight, 120)}px`;
@@ -122,20 +118,15 @@ export class Chat {
     const message = this.inputElement.value.trim();
     if (!message) return;
 
-    // Add user message
     const userMessage: ChatMessage = { role: "user", content: message };
     this.messages.push(userMessage);
     this.addMessageToUI(userMessage);
 
-    // Clear input
     this.inputElement.value = "";
     this.inputElement.style.height = "auto";
-
-    // Disable input while processing
     this.setInputEnabled(false);
 
     try {
-      // Create assistant message placeholder
       const assistantMessage: ChatMessage = { role: "assistant", content: "" };
       this.messages.push(assistantMessage);
       const messageEl = this.addMessageToUI(assistantMessage);
@@ -145,7 +136,6 @@ export class Chat {
         throw new Error("Message content element not found");
       }
 
-      // Stream response
       await this.bot.streamConversation(this.messages, {
         onChunk: (delta) => {
           assistantMessage.content += delta;

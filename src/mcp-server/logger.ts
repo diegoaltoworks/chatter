@@ -46,8 +46,8 @@ export class MCPLogger {
       cost,
     };
 
-    // Console logging (via the injected logger — never raw stdout, so the
-    // stdio MCP transport's JSON-RPC stream is never corrupted).
+    // Via the injected logger, never raw stdout - the stdio MCP transport's
+    // JSON-RPC stream would otherwise be corrupted.
     if (this.enableConsole) {
       this.logger.info(
         JSON.stringify({
@@ -57,7 +57,6 @@ export class MCPLogger {
       );
     }
 
-    // Custom callback
     if (this.callback) {
       try {
         await this.callback(logEvent);

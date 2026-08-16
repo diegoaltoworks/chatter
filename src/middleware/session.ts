@@ -4,19 +4,20 @@
 
 import type { Context, Next } from "hono";
 import { createConsoleLogger, type Logger } from "../core/logger";
-import { getSessionInfo, validateSession } from "../core/session";
+import { getSessionInfo, SESSION_KEY_PREFIX, validateSession } from "../core/session";
+import { API_KEY_HEADER, API_KEY_PREVIEW_LENGTH } from "./apiKey";
 
 /**
  * Middleware to validate session-based temporary API keys
- * Session keys start with "session_" prefix
+ * Session keys start with the `SESSION_KEY_PREFIX` prefix
  */
 export function validateSessionKey(logger: Logger = createConsoleLogger()) {
   return async (c: Context, next: Next) => {
-    const apiKey = c.req.header("x-api-key");
+    const apiKey = c.req.header(API_KEY_HEADER);
 
     // Only validate keys that look like session keys
-    if (apiKey?.startsWith("session_")) {
-      logger.debug(`[Session] Validating key: ${apiKey.slice(0, 20)}...`);
+    if (apiKey?.startsWith(SESSION_KEY_PREFIX)) {
+      logger.debug(`[Session] Validating key: ${apiKey.slice(0, API_KEY_PREVIEW_LENGTH)}...`);
 
       const info = getSessionInfo(apiKey);
       if (info) {

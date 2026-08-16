@@ -12,7 +12,7 @@ import { ApiKeyManager } from "./auth/apikeys";
 import type { Channel } from "./channels";
 import { createSenderRegistry } from "./channels";
 import { resolveLogger } from "./core/logger";
-import { PromptLoader } from "./core/prompts";
+import { DEFAULT_PROMPTS_DIR, PromptLoader } from "./core/prompts";
 import type { Retriever } from "./core/retrieval";
 import { loadServeStatic, type ServeStaticFn } from "./core/serve-static";
 import { resolveStatic } from "./core/widgets";
@@ -53,8 +53,7 @@ export async function createServer(config: ChatterConfig): Promise<ChatterApp> {
   logger.info(`🚀 Starting ${config.bot.name}...`);
 
   // Set defaults
-  const knowledgeDir = config.knowledgeDir || "./config/knowledge";
-  const promptsDir = config.promptsDir || "./config/prompts";
+  const promptsDir = config.promptsDir || DEFAULT_PROMPTS_DIR;
   const publicDir = config.publicDir || "./public";
   const enablePublic = config.features?.enablePublicChat !== false;
   const enablePrivate = config.features?.enablePrivateChat !== false;
@@ -96,10 +95,12 @@ export async function createServer(config: ChatterConfig): Promise<ChatterApp> {
           "or supply config.retriever to use your own retrieval backend instead.",
       );
     }
-    const { VectorStore, createOpenAIEmbedder } = await import("./core/retrieval");
+    const { DEFAULT_KNOWLEDGE_DIR, VectorStore, createOpenAIEmbedder } = await import(
+      "./core/retrieval"
+    );
     store = new VectorStore(createOpenAIEmbedder(client), {
       databaseClient: db,
-      knowledgeDir,
+      knowledgeDir: config.knowledgeDir || DEFAULT_KNOWLEDGE_DIR,
       logger,
     });
   }

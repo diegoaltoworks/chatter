@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it } from "bun:test";
-import { createRateLimiter, RateLimiter } from "./rate-limiter";
+import { createMcpRateLimiter, RateLimiter } from "./rate-limiter";
 
 describe("RateLimiter", () => {
   let limiter: RateLimiter;
@@ -207,25 +207,25 @@ describe("RateLimiter", () => {
   });
 });
 
-describe("createRateLimiter", () => {
+describe("createMcpRateLimiter", () => {
   it("should create rate limiter when limit is specified", () => {
-    const limiter = createRateLimiter(10);
+    const limiter = createMcpRateLimiter(10);
     expect(limiter).not.toBeNull();
     expect(limiter).toBeInstanceOf(RateLimiter);
   });
 
   it("should return null when limit is undefined", () => {
-    const limiter = createRateLimiter(undefined);
+    const limiter = createMcpRateLimiter(undefined);
     expect(limiter).toBeNull();
   });
 
   it("should use custom window size", () => {
-    const limiter = createRateLimiter(5, 2000);
+    const limiter = createMcpRateLimiter(5, 2000);
     expect(limiter).not.toBeNull();
   });
 
   it("should create functional limiter", () => {
-    const limiter = createRateLimiter(2);
+    const limiter = createMcpRateLimiter(2);
     expect(limiter).not.toBeNull();
 
     if (limiter) {

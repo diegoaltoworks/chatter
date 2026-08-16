@@ -30,6 +30,7 @@ import { resolveBuckets } from "../core/buckets";
 import { DEFAULT_MODEL } from "../core/llm";
 import { normalizeMessages } from "../core/messages";
 import { type PipelineMode, prepareChat } from "../core/pipeline";
+import { API_KEY_HEADER } from "../middleware/apiKey";
 import { chatBodyLimit } from "../middleware/bodyLimit";
 import { createJWTMiddleware, jwtSubject } from "../middleware/jwt";
 import { createRateLimiter } from "../middleware/ratelimit";
@@ -108,9 +109,13 @@ export function openaiRoutes(deps: ServerDependencies) {
     const bearer = c.req.header("authorization") ?? "";
     const key = bearer.startsWith("Bearer ")
       ? bearer.slice("Bearer ".length)
-      : c.req.header("x-api-key");
+      : c.req.header(API_KEY_HEADER);
     if (!key) {
-      return errorJson(c, 401, "Missing API key (Authorization: Bearer or x-api-key header)");
+      return errorJson(
+        c,
+        401,
+        `Missing API key (Authorization: Bearer or ${API_KEY_HEADER} header)`,
+      );
     }
     try {
       const result = await apiKeyManager.verify(key);

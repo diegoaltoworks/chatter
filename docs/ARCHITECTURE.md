@@ -100,6 +100,34 @@ way" reference they point back to.
     somewhere in this repo to check for it, which defeats the rule it exists
     to enforce. There is no test to point to here, on purpose.
 
+11. **A comment does not hardcode this package's current released version, does
+    not reference a tracker ticket id, and any `path:line` anchor it makes
+    points at a file and line that actually exist.** All three go stale
+    silently: the version the moment the next merge auto-publishes, a ticket
+    id the moment the ticket closes, an anchor the moment the target file
+    moves or shrinks. An em-dash anywhere in tracked source or docs is also
+    checked, against a ratchet baseline that may only decrease (see
+    CONTRIBUTING.md's "No em-dashes"). Enforced: `scripts/comment-gate.test.ts`.
+
+## Conventions
+
+Not invariants (nothing enforces them, and breaking one isn't a correctness
+bug), but decisions worth writing down so they don't get re-litigated file
+by file.
+
+- **Prefer an exported factory function (`createX`) returning a plain
+  object/interface over an exported class.** A factory separates
+  construction from the interface a caller programs against, which is what
+  makes a store, limiter, or hook swappable (see invariant 8). Most of the
+  codebase already follows this - `createTursoHistoryStore`,
+  `createFlowEngine`, `createScheduler`, `createShortener`, and so on. A
+  handful of exported classes predate this convention or are genuinely
+  stateful objects a caller is expected to hold onto and call methods on
+  repeatedly (`ApiKeyManager`, `PromptLoader`) rather than a seam a host
+  swaps out; they are public API, so normalizing them to factories now would
+  be a breaking change for no behavioral gain. Don't add a new exported
+  class without a reason beyond habit.
+
 ## Adding an invariant
 
 A new load-bearing property gets a numbered entry here and, unless it falls

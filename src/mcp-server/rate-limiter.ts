@@ -3,6 +3,9 @@
  * Simple in-memory sliding window implementation
  */
 
+/** Default sliding-window size: 1 minute. */
+export const DEFAULT_WINDOW_MS = 60_000;
+
 /**
  * Rate limiter using sliding window algorithm
  */
@@ -15,9 +18,9 @@ export class RateLimiter {
    * Create a new rate limiter
    *
    * @param limit - Maximum requests allowed in the time window
-   * @param windowMs - Time window in milliseconds (default: 60000 = 1 minute)
+   * @param windowMs - Time window in milliseconds (default: `DEFAULT_WINDOW_MS`)
    */
-  constructor(limit: number, windowMs = 60000) {
+  constructor(limit: number, windowMs = DEFAULT_WINDOW_MS) {
     this.requestMap = new Map();
     this.limit = limit;
     this.windowMs = windowMs;
@@ -33,18 +36,13 @@ export class RateLimiter {
     const now = Date.now();
     const windowStart = now - this.windowMs;
 
-    // Get or initialize request timestamps for this key
     const timestamps = this.requestMap.get(key) || [];
-
-    // Remove old timestamps outside the window
     const recentTimestamps = timestamps.filter((ts) => ts > windowStart);
 
-    // Check if rate limit exceeded
     if (recentTimestamps.length >= this.limit) {
       return false;
     }
 
-    // Add current timestamp and update map
     recentTimestamps.push(now);
     this.requestMap.set(key, recentTimestamps);
 
@@ -99,12 +97,20 @@ export class RateLimiter {
 }
 
 /**
- * Create a rate limiter if limit is specified
+ * Create a rate limiter if limit is specified.
+ *
+ * Named `createMcpRateLimiter` (not `createRateLimiter`) so it doesn't
+ * collide with `middleware/ratelimit.ts`'s `createRateLimiter` - an
+ * unrelated HTTP rate limiter with a different signature and return type,
+ * easy to import the wrong one of by name alone.
  *
  * @param limit - Maximum requests per window, or undefined for no limit
  * @param windowMs - Time window in milliseconds
  * @returns RateLimiter instance or null if no limit specified
  */
-export function createRateLimiter(limit: number | undefined, windowMs = 60000): RateLimiter | null {
+export function createMcpRateLimiter(
+  limit: number | undefined,
+  windowMs = DEFAULT_WINDOW_MS,
+): RateLimiter | null {
   return limit ? new RateLimiter(limit, windowMs) : null;
 }

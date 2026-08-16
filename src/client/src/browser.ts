@@ -7,7 +7,6 @@ import { Chat } from "./Chat";
 import { ChatBot } from "./ChatBot";
 import { ChatButton } from "./ChatButton";
 
-// Extend window type
 declare global {
   interface Window {
     Chatter: {
@@ -18,7 +17,8 @@ declare global {
   }
 }
 
-// Expose to window for script tag usage
+// Script-tag usage has no bundler to import from, so the browser build
+// attaches itself to `window` instead.
 if (typeof window !== "undefined") {
   window.Chatter = {
     ChatBot,

@@ -64,10 +64,10 @@ export type {
 } from "./core/pipeline";
 // Chat pipeline (RAG without any UI or transport)
 export { prepareChat } from "./core/pipeline";
-export { PromptLoader } from "./core/prompts";
+export { DEFAULT_PROMPTS_DIR, PromptLoader } from "./core/prompts";
 export type { Embedder, Retriever, VectorStoreOptions } from "./core/retrieval";
 // Core modules (for advanced customization)
-export { createOpenAIEmbedder, VectorStore } from "./core/retrieval";
+export { createOpenAIEmbedder, DEFAULT_KNOWLEDGE_DIR, VectorStore } from "./core/retrieval";
 export {
   createSession,
   getActiveSessions,

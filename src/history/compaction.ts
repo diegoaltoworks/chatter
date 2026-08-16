@@ -56,7 +56,7 @@ export interface HistoryCompactor {
   maybeCompact(store: HistoryStore, conversationId: string): Promise<void>;
 }
 
-const DEFAULT_TIMEOUT_MS = 8_000;
+const COMPACTION_TIMEOUT_MS = 8_000;
 
 // `store.clear` below erases every row for the conversation, so compaction
 // must read everything the store currently holds first — loading only
@@ -102,7 +102,7 @@ export function createHistoryCompactor(
     throw new Error(`Invalid history compaction keep: ${keep}`);
   }
   const summarize = options.summarize ?? defaultSummarize(deps.client, options.model);
-  const timeoutMs = options.timeoutMs ?? DEFAULT_TIMEOUT_MS;
+  const timeoutMs = options.timeoutMs ?? COMPACTION_TIMEOUT_MS;
 
   return {
     async maybeCompact(store, conversationId) {

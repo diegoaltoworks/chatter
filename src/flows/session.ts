@@ -2,8 +2,8 @@
  * Turso/libsql-backed {@link FlowSessionStore}.
  *
  * Session state lives in the database rather than process memory because
- * deployments run multiple instances — the instance that handles turn 2 of a
- * multi-turn flow is not guaranteed to be the one that handled turn 1.
+ * deployments run multiple instances, and the instance that handles turn 2
+ * of a multi-turn flow is not guaranteed to be the one that handled turn 1.
  *
  * `@libsql/client` is imported for its type alone, so this module adds no
  * runtime dependency to anyone importing `./flows` for the pure engine.
@@ -51,10 +51,13 @@ function ensureSessionSchema(client: Client, tableName: string): Promise<unknown
 /** `tableName` is interpolated into SQL, so it is restricted to a plain identifier. */
 const VALID_TABLE_NAME = /^[A-Za-z_][A-Za-z0-9_]*$/;
 
+/** Default table name for {@link createTursoFlowSessionStore} when no `tableName` is given, mirroring `scheduler`'s `DEFAULT_CLAIM_TABLE`. */
+export const DEFAULT_FLOW_SESSION_TABLE = "flow_sessions";
+
 /** Creates a session store keyed by an arbitrary session id (phone number, WhatsApp JID, web session id) on `tableName`. */
 export function createTursoFlowSessionStore(
   client: Client,
-  tableName = "flow_sessions",
+  tableName = DEFAULT_FLOW_SESSION_TABLE,
 ): FlowSessionStore {
   if (!VALID_TABLE_NAME.test(tableName)) {
     throw new Error(`Invalid flow session store table name: ${tableName}`);

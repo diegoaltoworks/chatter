@@ -14,6 +14,18 @@ interface SessionData {
   metadata?: Record<string, unknown>;
 }
 
+/** Prefix that marks an `x-api-key` value as a temporary session key rather than a JWT API key - checked by the auth/referrer/session middleware. */
+export const SESSION_KEY_PREFIX = "session_";
+
+/** Default max requests for a session created without an explicit `maxRequests`. */
+export const DEFAULT_SESSION_MAX_REQUESTS = 20;
+
+/** Default session lifetime in seconds (1 hour) for a session created without an explicit `ttl`. */
+export const DEFAULT_SESSION_TTL_SECONDS = 3600;
+
+/** How often the expired-session sweep runs (5 minutes). */
+export const SESSION_SWEEP_INTERVAL_MS = 5 * 60 * 1000;
+
 // In-memory session store
 // In production, use Redis or similar
 const sessions = new Map<string, SessionData>();
@@ -25,17 +37,14 @@ const sessions = new Map<string, SessionData>();
 // `./server` both do) keeps the host's event loop alive and their process
 // never exits on its own. Unref'd, the sweep still runs for as long as the
 // host is doing other work, which is exactly when sessions need sweeping.
-export const sessionSweeper = setInterval(
-  () => {
-    const now = Date.now();
-    for (const [key, data] of Array.from(sessions.entries())) {
-      if (now > data.expiresAt) {
-        sessions.delete(key);
-      }
+export const sessionSweeper = setInterval(() => {
+  const now = Date.now();
+  for (const [key, data] of Array.from(sessions.entries())) {
+    if (now > data.expiresAt) {
+      sessions.delete(key);
     }
-  },
-  5 * 60 * 1000,
-);
+  }
+}, SESSION_SWEEP_INTERVAL_MS);
 sessionSweeper.unref?.();
 
 export interface CreateSessionOptions {
@@ -51,9 +60,13 @@ export interface CreateSessionOptions {
  * Create a new temporary session key
  */
 export function createSession(options: CreateSessionOptions = {}): SessionData {
-  const { maxRequests = 20, ttl = 3600, metadata } = options;
+  const {
+    maxRequests = DEFAULT_SESSION_MAX_REQUESTS,
+    ttl = DEFAULT_SESSION_TTL_SECONDS,
+    metadata,
+  } = options;
 
-  const key = `session_${randomUUID()}`;
+  const key = `${SESSION_KEY_PREFIX}${randomUUID()}`;
   const now = Date.now();
 
   const session: SessionData = {

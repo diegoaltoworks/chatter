@@ -1,5 +1,7 @@
 import type { Context, Next } from "hono";
+import { SESSION_KEY_PREFIX } from "../core/session";
 import type { ServerDependencies } from "../types";
+import { API_KEY_HEADER, API_KEY_PREVIEW_LENGTH } from "./apiKey";
 
 /**
  * Create authentication middleware for public API endpoints
@@ -9,12 +11,12 @@ export function createAuthMiddleware(deps: ServerDependencies) {
   const { apiKeyManager, logger } = deps;
 
   return async function requirePublicKey(c: Context, next: Next) {
-    const hdr = c.req.header("x-api-key");
+    const hdr = c.req.header(API_KEY_HEADER);
 
     // Session keys are validated by validateSessionKey middleware
     // Allow them through if they've passed that validation
-    if (hdr?.startsWith("session_")) {
-      logger.debug(`[Auth] Session key allowed: ${hdr.slice(0, 20)}...`);
+    if (hdr?.startsWith(SESSION_KEY_PREFIX)) {
+      logger.debug(`[Auth] Session key allowed: ${hdr.slice(0, API_KEY_PREVIEW_LENGTH)}...`);
       await next();
       return;
     }
@@ -27,7 +29,7 @@ export function createAuthMiddleware(deps: ServerDependencies) {
 
     if (!hdr) {
       logger.debug("[Auth] No API key provided");
-      return c.json({ error: "Unauthorized - Missing x-api-key header" }, 401);
+      return c.json({ error: `Unauthorized - Missing ${API_KEY_HEADER} header` }, 401);
     }
 
     try {
@@ -47,7 +49,7 @@ export function createAuthMiddleware(deps: ServerDependencies) {
     }
 
     // No valid authentication found
-    logger.debug(`[Auth] Invalid API key: ${hdr?.slice(0, 20) || "none"}`);
+    logger.debug(`[Auth] Invalid API key: ${hdr?.slice(0, API_KEY_PREVIEW_LENGTH) || "none"}`);
     return c.json({ error: "Unauthorized" }, 401);
   };
 }
