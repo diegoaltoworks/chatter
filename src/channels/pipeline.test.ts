@@ -494,4 +494,129 @@ describe("createInboundPipeline", () => {
       });
     });
   });
+
+  describe("rewriteQuery/rerankContext hooks", () => {
+    test("rewriteQuery reshapes the query store.query runs, sees mode and the resolved sender", async () => {
+      const queries: unknown[] = [];
+      const seen: unknown[] = [];
+      const store = {
+        query: async (q: string) => {
+          queries.push(q);
+          return ["context"];
+        },
+      } as unknown as VectorStore;
+
+      const handle = createInboundPipeline(
+        {
+          client: {} as never,
+          store,
+          prompts: {
+            baseSystemRules: "rules",
+            publicPersona: "persona",
+            privatePersona: "private persona",
+          } as unknown as PromptLoader,
+        },
+        {
+          channel: "test-channel",
+          rewriteQuery: (ctx) => {
+            seen.push(ctx);
+            return `expanded: ${ctx.query}`;
+          },
+          answerFn: async () => "ok",
+        },
+      );
+      const reply: InboundReplySender = {
+        sendAnswer: async () => undefined,
+        sendGateReply: async () => undefined,
+      };
+
+      await handle(msg(), { reply, sender: "+15550000" });
+
+      expect(queries).toEqual(["expanded: hello"]);
+      expect(seen).toEqual([{ query: "hello", mode: "public", sender: "+15550000" }]);
+    });
+
+    test("rerankContext reorders the chunks folded into the assembled system prompt", async () => {
+      let captured: AnswerFnInput | undefined;
+      const store = {
+        query: async () => ["first", "second"],
+      } as unknown as VectorStore;
+
+      const handle = createInboundPipeline(
+        {
+          client: {} as never,
+          store,
+          prompts: {
+            baseSystemRules: "rules",
+            publicPersona: "persona",
+            privatePersona: "private persona",
+          } as unknown as PromptLoader,
+        },
+        {
+          channel: "test-channel",
+          rerankContext: async ({ chunks }) => [...chunks].reverse(),
+          answerFn: async (input) => {
+            captured = input;
+            return "ok";
+          },
+        },
+      );
+      const reply: InboundReplySender = {
+        sendAnswer: async () => undefined,
+        sendGateReply: async () => undefined,
+      };
+
+      await handle(msg(), { reply });
+
+      expect(captured?.system).toContain("second\n\nfirst");
+    });
+
+    test("a throwing rewriteQuery is logged and retrieval falls back to the unmodified query", async () => {
+      const lines: unknown[][] = [];
+      const logger = {
+        debug: () => {},
+        info: () => {},
+        warn: () => {},
+        error: (...args: unknown[]) => lines.push(args),
+      };
+      const queries: unknown[] = [];
+      const store = {
+        query: async (q: string) => {
+          queries.push(q);
+          return ["context"];
+        },
+      } as unknown as VectorStore;
+
+      const handle = createInboundPipeline(
+        {
+          client: {} as never,
+          store,
+          prompts: {
+            baseSystemRules: "rules",
+            publicPersona: "persona",
+            privatePersona: "private persona",
+          } as unknown as PromptLoader,
+        },
+        {
+          channel: "test-channel",
+          rewriteQuery: () => {
+            throw new Error("rewrite boom");
+          },
+          answerFn: async () => "ok",
+          logger,
+        },
+      );
+      const reply: InboundReplySender = {
+        sendAnswer: async () => undefined,
+        sendGateReply: async () => undefined,
+      };
+
+      const outcome = await handle(msg(), { reply });
+
+      expect(outcome).toEqual({ action: "reply", content: "ok" });
+      expect(queries).toEqual(["hello"]);
+      expect(lines).toHaveLength(1);
+      expect(String(lines[0][0])).toContain("rewriteQuery");
+    });
+  });
 });

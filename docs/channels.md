@@ -70,8 +70,8 @@ own-mention stripping — everything Baileys-shaped), then hands it to
 `./channels`' `createInboundPipeline`, which applies `decideChannelAction`
 (allowlist, mute/unmute, DM/group rate limits) and answers through the same
 `prepareChat`/`answerOnce` seam every other surface uses — so the WhatsApp
-channel automatically honours a configured `answerFn`, `bucketsFor` and
-`transformReply`. See
+channel automatically honours a configured `answerFn`, `bucketsFor`,
+`rewriteQuery`, `rerankContext` and `transformReply`. See
 [Building a Channel](./build-a-channel.md) for how to put the same pipeline
 behind a different transport.
 
@@ -105,6 +105,8 @@ await createServer({
       prompts: deps.prompts,
       answerFn: deps.config.answerFn,
       bucketsFor: deps.config.bucketsFor,
+      rewriteQuery: deps.config.rewriteQuery,
+      rerankContext: deps.config.rerankContext,
       transformReply: deps.config.transformReply,
       logger: deps.logger,
       // Share ONE registry across every WhatsApp channel instance in this

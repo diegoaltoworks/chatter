@@ -17,9 +17,11 @@ function createFakeDeps(
   deps: ServerDependencies;
   requestedModels: string[];
   retrievedBuckets: string[][];
+  retrievedQueries: string[];
 } {
   const requestedModels: string[] = [];
   const retrievedBuckets: string[][] = [];
+  const retrievedQueries: string[] = [];
 
   const client = {
     chat: {
@@ -42,7 +44,8 @@ function createFakeDeps(
   };
 
   const store = {
-    query: async (_q: string, _k: number, buckets: string[]) => {
+    query: async (q: string, _k: number, buckets: string[]) => {
+      retrievedQueries.push(q);
       retrievedBuckets.push(buckets);
       return ["some context"];
     },
@@ -79,7 +82,7 @@ function createFakeDeps(
     ...overrides,
   } as unknown as ServerDependencies;
 
-  return { deps, requestedModels, retrievedBuckets };
+  return { deps, requestedModels, retrievedBuckets, retrievedQueries };
 }
 
 function completionsRequest(body: unknown, headers: Record<string, string> = {}) {
@@ -614,5 +617,74 @@ describe("transformReply hook", () => {
     expect(body).toContain("Hello");
     expect(body).toContain(" world");
     expect(seen).toHaveLength(0);
+  });
+});
+
+describe("rewriteQuery/rerankContext on the OpenAI-compatible route", () => {
+  test("retrieves with the query unmodified when no hook is configured", async () => {
+    const { deps, retrievedQueries } = createFakeDeps();
+    const app = openaiRoutes(deps);
+
+    await app.fetch(completionsRequest({ messages: [{ role: "user", content: "hi" }] }, AUTH));
+
+    expect(retrievedQueries).toEqual(["hi"]);
+  });
+
+  test("the API key id reaches rewriteQuery as sender - the same broader identity answerFn sees", async () => {
+    const seen: unknown[] = [];
+    const { deps, retrievedQueries } = createFakeDeps(
+      {
+        apiKeyManager: {
+          verify: async (token: string) =>
+            token === "valid-key" ? { valid: true, payload: { sub: "key-abc" } } : { valid: false },
+        } as unknown as ServerDependencies["apiKeyManager"],
+      },
+      {
+        rewriteQuery: (ctx) => {
+          seen.push(ctx);
+          return ctx.query;
+        },
+      },
+    );
+    const app = openaiRoutes(deps);
+
+    await app.fetch(completionsRequest({ messages: [{ role: "user", content: "hi" }] }, AUTH));
+
+    expect(seen).toEqual([{ query: "hi", mode: "public", sender: "key-abc" }]);
+    expect(retrievedQueries).toEqual(["hi"]);
+  });
+
+  test("a throwing rewriteQuery falls back to the original query rather than failing the request", async () => {
+    const { deps, retrievedQueries } = createFakeDeps(undefined, {
+      rewriteQuery: async () => {
+        throw new Error("rewrite boom");
+      },
+    });
+    const app = openaiRoutes(deps);
+
+    const res = await app.fetch(
+      completionsRequest({ messages: [{ role: "user", content: "hi" }] }, AUTH),
+    );
+
+    expect(res.status).toBe(200);
+    expect(retrievedQueries).toEqual(["hi"]);
+  });
+
+  test("a throwing rerankContext falls back to the original chunks rather than failing the request", async () => {
+    const { deps } = createFakeDeps(undefined, {
+      rerankContext: async () => {
+        throw new Error("rerank boom");
+      },
+    });
+    deps.config.answerFn = async ({ system }) => system;
+    const app = openaiRoutes(deps);
+
+    const res = await app.fetch(
+      completionsRequest({ messages: [{ role: "user", content: "hi" }] }, AUTH),
+    );
+
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { choices: [{ message: { content: string } }] };
+    expect(body.choices[0].message.content).toContain("some context");
   });
 });

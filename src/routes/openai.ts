@@ -154,17 +154,29 @@ export function openaiRoutes(deps: ServerDependencies) {
       bucketsFor: config.bucketsFor,
     });
 
+    // Identity handed to the brain hook and rewriteQuery only — never used
+    // for retrieval scope. The private route's JWT subject and the public
+    // route's API key id are both "who is asking", just not "what may they
+    // read": rewriteQuery doesn't widen access the way bucketsFor could, so
+    // it sees the same broader identity answerFn does.
+    const sender = jwtSubject(c) ?? apiKeySubject(c);
+
     let system: string;
     try {
-      ({ system } = await prepareChat({ store, prompts, mode, messages, buckets }));
+      ({ system } = await prepareChat({
+        store,
+        prompts,
+        mode,
+        messages,
+        buckets,
+        sender,
+        rewriteQuery: config.rewriteQuery,
+        rerankContext: config.rerankContext,
+        logger,
+      }));
     } catch {
       return errorJson(c, 400, "Conversation must contain at least one user message");
     }
-
-    // Identity handed to the brain hook only — never used for retrieval
-    // scope. The private route's JWT subject and the public route's API key
-    // id are both "who is asking", just not "what may they read".
-    const sender = jwtSubject(c) ?? apiKeySubject(c);
 
     // A brain hook can key threads/history off this; generated when the
     // client sends neither and echoed back via response header so the

@@ -236,4 +236,202 @@ describe("prepareChat", () => {
       }
     });
   });
+
+  describe("rewriteQuery", () => {
+    test("replaces the query store.query runs against", async () => {
+      const { store, prompts, queries } = createFakes();
+
+      await prepareChat({
+        store,
+        prompts,
+        mode: "public",
+        messages,
+        rewriteQuery: async ({ query }) => `expanded: ${query}`,
+      });
+
+      expect(queries[0]?.query).toBe("expanded: latest question");
+    });
+
+    test("receives mode and sender", async () => {
+      const { store, prompts } = createFakes();
+      const seen: Array<{ query: string; mode: string; sender?: string }> = [];
+
+      await prepareChat({
+        store,
+        prompts,
+        mode: "private",
+        messages,
+        sender: "user-1",
+        rewriteQuery: async (ctx) => {
+          seen.push(ctx);
+          return ctx.query;
+        },
+      });
+
+      expect(seen).toEqual([{ query: "latest question", mode: "private", sender: "user-1" }]);
+    });
+
+    test("falls back to the original query when the hook throws", async () => {
+      const { store, prompts, queries } = createFakes();
+
+      await prepareChat({
+        store,
+        prompts,
+        mode: "public",
+        messages,
+        rewriteQuery: async () => {
+          throw new Error("boom");
+        },
+      });
+
+      expect(queries[0]?.query).toBe("latest question");
+    });
+
+    test("falls back to the original query when the hook returns a blank string", async () => {
+      const { store, prompts, queries } = createFakes();
+
+      await prepareChat({
+        store,
+        prompts,
+        mode: "public",
+        messages,
+        rewriteQuery: async () => "   ",
+      });
+
+      expect(queries[0]?.query).toBe("latest question");
+    });
+  });
+
+  describe("rerankContext", () => {
+    test("replaces the chunks folded into the system prompt", async () => {
+      const { prompts } = createFakes();
+      const store = {
+        query: async () => ["first chunk", "second chunk"],
+      } as unknown as VectorStore;
+
+      const result = await prepareChat({
+        store,
+        prompts,
+        mode: "public",
+        messages,
+        rerankContext: async ({ chunks }) => [...chunks].reverse(),
+      });
+
+      expect(result.context).toEqual(["second chunk", "first chunk"]);
+      expect(result.system).toBe(
+        "rules\n\npublic persona\n\nContext:\nsecond chunk\n\nfirst chunk",
+      );
+    });
+
+    test("receives the rewritten query, not the original", async () => {
+      const { store, prompts } = createFakes();
+      const seen: Array<{ query: string; chunks: string[] }> = [];
+
+      await prepareChat({
+        store,
+        prompts,
+        mode: "public",
+        messages,
+        rewriteQuery: async () => "rewritten",
+        rerankContext: async (ctx) => {
+          seen.push(ctx);
+          return ctx.chunks;
+        },
+      });
+
+      expect(seen).toEqual([{ query: "rewritten", chunks: ["some context"] }]);
+    });
+
+    test("falls back to the original chunks when the hook throws", async () => {
+      const { store, prompts } = createFakes();
+
+      const result = await prepareChat({
+        store,
+        prompts,
+        mode: "public",
+        messages,
+        rerankContext: async () => {
+          throw new Error("boom");
+        },
+      });
+
+      expect(result.context).toEqual(["some context"]);
+    });
+
+    test("falls back to the original chunks when the hook returns something malformed", async () => {
+      const { store, prompts } = createFakes();
+
+      const result = await prepareChat({
+        store,
+        prompts,
+        mode: "public",
+        messages,
+        // @ts-expect-error — proving a malformed return value is rejected, not just an empty array
+        rerankContext: async () => "not an array",
+      });
+
+      expect(result.context).toEqual(["some context"]);
+    });
+  });
+
+  describe("fail-open logging", () => {
+    function fakeLogger() {
+      const errors: unknown[][] = [];
+      return { errors, error: (...args: unknown[]) => errors.push(args) };
+    }
+
+    test("logs a throwing rewriteQuery instead of failing silently", async () => {
+      const { store, prompts } = createFakes();
+      const logger = fakeLogger();
+
+      await prepareChat({
+        store,
+        prompts,
+        mode: "public",
+        messages,
+        logger,
+        rewriteQuery: async () => {
+          throw new Error("boom");
+        },
+      });
+
+      expect(logger.errors).toHaveLength(1);
+      expect(String(logger.errors[0]?.[0])).toContain("rewriteQuery");
+    });
+
+    test("logs a throwing rerankContext instead of failing silently", async () => {
+      const { store, prompts } = createFakes();
+      const logger = fakeLogger();
+
+      await prepareChat({
+        store,
+        prompts,
+        mode: "public",
+        messages,
+        logger,
+        rerankContext: async () => {
+          throw new Error("boom");
+        },
+      });
+
+      expect(logger.errors).toHaveLength(1);
+      expect(String(logger.errors[0]?.[0])).toContain("rerankContext");
+    });
+
+    test("no logger configured means the failure is silent, not thrown", async () => {
+      const { store, prompts } = createFakes();
+
+      await expect(
+        prepareChat({
+          store,
+          prompts,
+          mode: "public",
+          messages,
+          rewriteQuery: async () => {
+            throw new Error("boom");
+          },
+        }),
+      ).resolves.toBeDefined();
+    });
+  });
 });

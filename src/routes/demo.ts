@@ -177,7 +177,16 @@ export function demoRoutes(deps: ServerDependencies) {
         // Retrieve context from knowledge base. The demo surface is anonymous,
         // so the hook may narrow the scope but not widen it.
         const buckets = await resolveBuckets({ mode: "public", bucketsFor: config.bucketsFor });
-        const { system } = await prepareChat({ store, prompts, mode: "public", messages, buckets });
+        const { system } = await prepareChat({
+          store,
+          prompts,
+          mode: "public",
+          messages,
+          buckets,
+          rewriteQuery: config.rewriteQuery,
+          rerankContext: config.rerankContext,
+          logger,
+        });
         const model = config.openai.model || DEFAULT_MODEL;
 
         // Check if streaming requested

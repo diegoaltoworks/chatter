@@ -85,7 +85,13 @@ wrapper (`getUpdates`/`sendMessage`, however you fetch it) and build the
 `Channel`:
 
 ```ts
-import type { AnswerFn, BucketsFor, TransformReply } from "@diegoaltoworks/chatter";
+import type {
+  AnswerFn,
+  BucketsFor,
+  RerankContext,
+  RewriteQuery,
+  TransformReply,
+} from "@diegoaltoworks/chatter";
 import type { Channel, ChannelMessage } from "@diegoaltoworks/chatter/channels";
 import { createInboundPipeline } from "@diegoaltoworks/chatter/channels";
 
@@ -104,6 +110,8 @@ export function createTelegramChannel(config: {
   allowedChats?: string[];
   answerFn?: AnswerFn;
   bucketsFor?: BucketsFor;
+  rewriteQuery?: RewriteQuery;
+  rerankContext?: RerankContext;
   transformReply?: TransformReply;
   channelHint?: string;
 }): Channel {
@@ -122,6 +130,8 @@ export function createTelegramChannel(config: {
           channel: "telegram",
           answerFn: config.answerFn ?? deps.config.answerFn,
           bucketsFor: config.bucketsFor ?? deps.config.bucketsFor,
+          rewriteQuery: config.rewriteQuery ?? deps.config.rewriteQuery,
+          rerankContext: config.rerankContext ?? deps.config.rerankContext,
           transformReply: config.transformReply ?? deps.config.transformReply,
           channelHint: config.channelHint ?? "Channel: Telegram.",
           allowedChats: config.allowedChats,
@@ -300,8 +310,8 @@ copy for your own.
 ## What you get for free
 
 Everything routed through `createInboundPipeline` automatically honours a
-configured `answerFn` and `bucketsFor` (the same seams every other chatter
-surface uses — see [integrations.md](./integrations.md)), applies output
-guardrails, and answers through `prepareChat`, so a new channel never
-hand-rolls its own prompt assembly or drifts from the model/config the rest
-of the server uses.
+configured `answerFn`, `bucketsFor`, `rewriteQuery` and `rerankContext` (the
+same seams every other chatter surface uses — see
+[integrations.md](./integrations.md)), applies output guardrails, and answers
+through `prepareChat`, so a new channel never hand-rolls its own prompt
+assembly or drifts from the model/config the rest of the server uses.

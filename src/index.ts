@@ -53,7 +53,15 @@ export type { NormalizedChatBody } from "./core/messages";
 // Inbound message normalization (the server owns the system prompt: client
 // system/tool turns never reach the pipeline)
 export { normalizeChatBody, normalizeMessages } from "./core/messages";
-export type { PipelineMessage, PipelineMode, PreparedChat } from "./core/pipeline";
+export type {
+  PipelineMessage,
+  PipelineMode,
+  PreparedChat,
+  RerankContext,
+  RerankContextArgs,
+  RewriteQuery,
+  RewriteQueryArgs,
+} from "./core/pipeline";
 // Chat pipeline (RAG without any UI or transport)
 export { prepareChat } from "./core/pipeline";
 export { PromptLoader } from "./core/prompts";

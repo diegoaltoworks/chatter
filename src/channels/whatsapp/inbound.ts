@@ -36,6 +36,8 @@
  *       prompts: deps.prompts,
  *       answerFn: deps.config.answerFn,
  *       bucketsFor: deps.config.bucketsFor,
+ *       rewriteQuery: deps.config.rewriteQuery,
+ *       rerankContext: deps.config.rerankContext,
  *       transformReply: deps.config.transformReply,
  *       registry: new Map(),
  *       logger: deps.logger,
@@ -50,6 +52,7 @@ import type OpenAI from "openai";
 import type { AnswerFn, TransformReply } from "../../core/answer";
 import type { BucketsFor } from "../../core/buckets";
 import { createConsoleLogger, type Logger } from "../../core/logger";
+import type { RerankContext, RewriteQuery } from "../../core/pipeline";
 import type { PromptLoader } from "../../core/prompts";
 import type { VectorStore } from "../../core/retrieval";
 import type { HistoryStore } from "../../history/types";
@@ -303,6 +306,10 @@ export interface WhatsAppInboundConfig {
   prompts: PromptLoader;
   answerFn?: AnswerFn;
   bucketsFor?: BucketsFor;
+  /** Rewrites the retrieval query before it reaches the vector store — see `ChatterConfig.rewriteQuery`. */
+  rewriteQuery?: RewriteQuery;
+  /** Post-processes retrieved chunks before they're folded into the prompt — see `ChatterConfig.rerankContext`. */
+  rerankContext?: RerankContext;
   /** Modifies or vetoes the produced reply before delivery — see `ChatterConfig.transformReply`. */
   transformReply?: TransformReply;
   model?: string;
@@ -388,6 +395,8 @@ export function createWhatsAppInboundHandler(
       channel: "whatsapp",
       answerFn: config.answerFn,
       bucketsFor: config.bucketsFor,
+      rewriteQuery: config.rewriteQuery,
+      rerankContext: config.rerankContext,
       transformReply: config.transformReply,
       model: config.model,
       channelHint: config.channelHint,

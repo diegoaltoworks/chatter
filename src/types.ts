@@ -12,6 +12,7 @@ import type { Channel, ChannelSenderRegistry } from "./channels";
 import type { AnswerFn, TransformReply } from "./core/answer";
 import type { BucketsFor } from "./core/buckets";
 import type { Logger, LogLevel } from "./core/logger";
+import type { RerankContext, RewriteQuery } from "./core/pipeline";
 import type { PromptLoader } from "./core/prompts";
 import type { VectorStore } from "./core/retrieval";
 
@@ -289,6 +290,30 @@ export interface ChatterConfig {
    * Unset: the mode defaults apply everywhere.
    */
   bucketsFor?: BucketsFor;
+  /**
+   * Rewrites the retrieval query for a turn before it reaches the vector
+   * store — e.g. expanding an ambiguous follow-up into something embeddable
+   * on its own. Receives the same `sender` identity `answerFn` sees (not the
+   * retrieval-scope-restricted one `bucketsFor` sees on the public
+   * OpenAI-compatible route — rewriting a query widens nothing, so it isn't
+   * subject to that clamp).
+   *
+   * Consulted everywhere `bucketsFor` is. A throw/rejection, or a return
+   * value that isn't a non-blank string, falls back to the unmodified query
+   * — a broken rewrite degrades relevance, never the chat path. Unset:
+   * retrieval runs on the latest user message unmodified.
+   */
+  rewriteQuery?: RewriteQuery;
+  /**
+   * Post-processes the chunks retrieval returned — reordering, filtering, or
+   * otherwise reranking — before they're folded into the system prompt.
+   *
+   * Consulted everywhere `bucketsFor` is, immediately after retrieval runs.
+   * A throw/rejection, or a return value that isn't a string array, falls
+   * back to the chunks retrieval returned, unmodified. Unset: retrieved
+   * chunks are used as-is.
+   */
+  rerankContext?: RerankContext;
 
   // Custom routes (advanced)
   /** Custom route handler for advanced use cases. May be async — see {@link CustomRoutes} */

@@ -191,6 +191,52 @@ const { system, messages } = await prepareChat({ store, prompts, mode: "public",
 whatever it is given, so anything derived from request input belongs on the
 `resolveBuckets` path first.
 
+### Shaping retrieval itself (`rewriteQuery`, `rerankContext`)
+
+`bucketsFor` decides *where* a turn may retrieve from; `rewriteQuery` and
+`rerankContext` decide *how well* that retrieval performs — the seams a
+hybrid-RAG setup (query expansion, a cross-encoder reranker, a keyword-search
+merge) plugs into without hand-rolling retrieval around `prepareChat`:
+
+```ts
+const server = await createServer({
+  // ...
+  rewriteQuery: async ({ query, mode, sender }) => {
+    // Expand an ambiguous follow-up into something embeddable on its own.
+    return await expandQuery(query);
+  },
+  rerankContext: async ({ query, chunks }) => {
+    // Reorder, filter, or merge in results from a second retrieval path.
+    return await crossEncoderRerank(query, chunks);
+  },
+});
+```
+
+`rewriteQuery` runs first, before `store.query`, and receives the latest
+user message as `query` plus the pipeline `mode` and — where the surface
+knows one — a `sender` identity. Unlike `bucketsFor`, this identity is never
+security-restricted: rewriting a query cannot widen what it retrieves, so it
+carries the same broader identity `answerFn` sees (the public
+OpenAI-compatible route's API key id included). `rerankContext` runs after
+`store.query`, and receives the query retrieval actually ran with — the
+rewritten one, if `rewriteQuery` changed it — plus the `chunks` the store
+returned, in its own order.
+
+Both hooks are consulted everywhere `bucketsFor` is: the widget routes, the
+OpenAI-compatible endpoints, the MCP chat tools, the demo route, and
+channels. Both fail open — a throw, rejection, or a return value that isn't
+the expected shape (a non-blank string for `rewriteQuery`, a string array for
+`rerankContext`) falls back to what retrieval would have produced unmodified,
+logging the failure when a logger is configured. A broken hook degrades
+relevance for that turn; it never breaks the chat path. Leave either unset
+and retrieval behaves exactly as it does today.
+
+**`rerankContext` is not the access-control seam.** Because a failure falls
+back to the unfiltered chunks, a hook that drops chunks a sender shouldn't
+see would silently un-drop them on its own error. Scope decisions belong in
+`bucketsFor`, which fails closed by design — use `rerankContext` only for
+relevance and ordering.
+
 ## Bringing your own brain (`answerFn`)
 
 Prompt shaping stops at the completion call. `answerFn` replaces the call

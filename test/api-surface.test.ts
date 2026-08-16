@@ -4,8 +4,9 @@
  * docs/history.md, docs/build-a-channel.md and docs/integrations.md: the shape of
  * ServerDependencies (incl. the shared db handle), starting a Channel
  * standalone, personaResolver output feeding prepareChat's personaLayer, the
- * bucketsFor retrieval hook, prepareChat's channel-facing params, the
- * answerFn brain hook, the transformReply outbound hook, sending through the
+ * bucketsFor retrieval hook, the rewriteQuery/rerankContext retrieval seams,
+ * prepareChat's channel-facing params, the answerFn brain hook, the
+ * transformReply outbound hook, sending through the
  * sender registry by name, the flow contract a plugin implements, a
  * HistoryStore's loaded turns feeding straight into that same messages
  * array, the channel-agnostic inbound pipeline a new transport builds on,
@@ -26,6 +27,8 @@ import type {
   Channel,
   Logger,
   PipelineMessage,
+  RerankContext,
+  RewriteQuery,
   ServerDependencies,
   TransformReply,
 } from "../src";
@@ -259,6 +262,45 @@ describe("API surface", () => {
     expect(system).toBe(
       "rules\n\nYou are Riley, a WhatsApp concierge.\n\nReplies are delivered over WhatsApp; keep them short.\n\nContext:\nretrieved context",
     );
+  });
+
+  test("rewriteQuery and rerankContext shape retrieval without touching prepareChat's other params", async () => {
+    const store = {
+      query: async (q: string, _k: number, _buckets: string[]) => {
+        expect(q).toBe("rewritten query");
+        return ["a", "b"];
+      },
+    } as unknown as ServerDependencies["store"];
+    const prompts = {
+      baseSystemRules: "rules",
+      publicPersona: "persona",
+      privatePersona: "private persona",
+    } as unknown as ServerDependencies["prompts"];
+
+    const seenRewrite: Array<{ query: string; mode: string; sender?: string }> = [];
+    const rewriteQuery: RewriteQuery = async (ctx) => {
+      seenRewrite.push(ctx);
+      return "rewritten query";
+    };
+    const seenRerank: Array<{ query: string; chunks: string[] }> = [];
+    const rerankContext: RerankContext = async (ctx) => {
+      seenRerank.push(ctx);
+      return [...ctx.chunks].reverse();
+    };
+
+    const { context } = await prepareChat({
+      store,
+      prompts,
+      mode: "public",
+      messages: [{ role: "user", content: "original query" }],
+      sender: "user-1",
+      rewriteQuery,
+      rerankContext,
+    });
+
+    expect(seenRewrite).toEqual([{ query: "original query", mode: "public", sender: "user-1" }]);
+    expect(seenRerank).toEqual([{ query: "rewritten query", chunks: ["a", "b"] }]);
+    expect(context).toEqual(["b", "a"]);
   });
 
   test("a flow directory's handler is a FlowHandler returning FlowHandlerResult, given a FlowHandlerContext", async () => {

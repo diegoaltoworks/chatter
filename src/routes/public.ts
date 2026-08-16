@@ -61,7 +61,16 @@ export function publicRoutes(deps: ServerDependencies) {
 
     let system: string;
     try {
-      ({ system } = await prepareChat({ store, prompts, mode: "public", messages, buckets }));
+      ({ system } = await prepareChat({
+        store,
+        prompts,
+        mode: "public",
+        messages,
+        buckets,
+        rewriteQuery: config.rewriteQuery,
+        rerankContext: config.rerankContext,
+        logger,
+      }));
     } catch {
       return c.json({ error: "no user message found in conversation" }, 400);
     }

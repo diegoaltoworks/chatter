@@ -239,6 +239,26 @@ knowledge stays out of reach of the public pipeline. See
 the hook, and the `resolveBuckets` helper channels and custom routes should
 use.
 
+### Retrieval Shaping
+
+Rewrite the retrieval query before it runs, and rerank the chunks it returns
+before they reach the prompt — the seams a hybrid-RAG setup plugs into:
+
+```typescript
+{
+  rewriteQuery: async ({ query, mode, sender }) => await expandQuery(query),
+  rerankContext: async ({ query, chunks }) => await crossEncoderRerank(query, chunks),
+}
+```
+
+Both are optional and fail open: a throw, rejection, or malformed return
+value falls back to the unmodified query/chunks rather than breaking the
+chat path. `rerankContext` is not an access-control seam — a hook that drops
+chunks on purpose would silently un-drop them on its own failure, so scope
+decisions belong in `bucketsFor` instead. See
+[integrations.md](./integrations.md) for the full rules and which surfaces
+consult each hook.
+
 ### Outbound Reply Hook
 
 Modify or veto a reply after it's already been produced — past `answerFn` (or

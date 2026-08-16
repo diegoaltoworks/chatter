@@ -50,7 +50,17 @@ export function privateRoutes(deps: ServerDependencies) {
 
     let system: string;
     try {
-      ({ system } = await prepareChat({ store, prompts, mode: "private", messages, buckets }));
+      ({ system } = await prepareChat({
+        store,
+        prompts,
+        mode: "private",
+        messages,
+        buckets,
+        sender,
+        rewriteQuery: config.rewriteQuery,
+        rerankContext: config.rerankContext,
+        logger,
+      }));
     } catch {
       return c.json({ error: "no user message found in conversation" }, 400);
     }

@@ -31,6 +31,7 @@ async function createPrivateJWT() {
 function createFakeDeps(config: Partial<ChatterConfig> = {}) {
   const requestedModels: string[] = [];
   const retrievedBuckets: string[][] = [];
+  const retrievedQueries: string[] = [];
 
   const client = {
     chat: {
@@ -54,7 +55,8 @@ function createFakeDeps(config: Partial<ChatterConfig> = {}) {
   const deps = {
     client,
     store: {
-      query: async (_q: string, _k: number, buckets: string[]) => {
+      query: async (q: string, _k: number, buckets: string[]) => {
+        retrievedQueries.push(q);
         retrievedBuckets.push(buckets);
         return ["some context"];
       },
@@ -82,7 +84,7 @@ function createFakeDeps(config: Partial<ChatterConfig> = {}) {
     },
   } as unknown as ServerDependencies;
 
-  return { deps, requestedModels, retrievedBuckets };
+  return { deps, requestedModels, retrievedBuckets, retrievedQueries };
 }
 
 function chatRequest(path: string, body: unknown, headers: Record<string, string>) {
@@ -533,5 +535,102 @@ describe("bucketsFor on the chat routes", () => {
     expect(res.status).toBe(200);
     expect(seen).toEqual([{ mode: "private", sender: "staff-1" }]);
     expect(retrievedBuckets).toEqual([["base", "private", "finance"]]);
+  });
+});
+
+describe("rewriteQuery/rerankContext on the chat routes", () => {
+  test("public chat retrieves with the query unmodified when no hook is configured", async () => {
+    const { deps, retrievedQueries } = createFakeDeps();
+    const app = publicRoutes(deps);
+
+    await app.fetch(chatRequest("/api/public/chat", message, { "x-api-key": PUBLIC_KEY }));
+
+    expect(retrievedQueries).toEqual(["hi"]);
+  });
+
+  test("public chat retrieves against a rewritten query", async () => {
+    const { deps, retrievedQueries } = createFakeDeps({
+      rewriteQuery: async ({ query }) => `expanded: ${query}`,
+    });
+    const app = publicRoutes(deps);
+
+    await app.fetch(chatRequest("/api/public/chat", message, { "x-api-key": PUBLIC_KEY }));
+
+    expect(retrievedQueries).toEqual(["expanded: hi"]);
+  });
+
+  test("public chat's rerankContext sees the retrieved chunks and its answer reaches the assembled prompt", async () => {
+    const seen: unknown[] = [];
+    const { deps, requestedModels } = createFakeDeps({
+      rerankContext: async (ctx) => {
+        seen.push(ctx);
+        return ["reranked chunk"];
+      },
+      answerFn: async ({ system }) => system,
+    });
+    const app = publicRoutes(deps);
+
+    const res = await app.fetch(
+      chatRequest("/api/public/chat", message, { "x-api-key": PUBLIC_KEY }),
+    );
+
+    expect(seen).toEqual([{ query: "hi", chunks: ["some context"] }]);
+    const { reply } = await res.json();
+    expect(reply).toContain("reranked chunk");
+    expect(requestedModels).toEqual([]);
+  });
+
+  test("private chat's rewriteQuery sees the JWT subject as sender", async () => {
+    const { publicKeyPem, token } = await createPrivateJWT();
+    const seen: unknown[] = [];
+    const { deps, retrievedQueries } = createFakeDeps({
+      auth: { jwt: { publicKeyPem } },
+      rewriteQuery: async (ctx) => {
+        seen.push(ctx);
+        return ctx.query;
+      },
+    });
+    const app = privateRoutes(deps);
+
+    await app.fetch(
+      chatRequest("/api/private/chat", message, { Authorization: `Bearer ${token}` }),
+    );
+
+    expect(seen).toEqual([{ query: "hi", mode: "private", sender: "staff-1" }]);
+    expect(retrievedQueries).toEqual(["hi"]);
+  });
+
+  test("a throwing rewriteQuery falls back to the original query rather than failing the request", async () => {
+    const { deps, retrievedQueries } = createFakeDeps({
+      rewriteQuery: async () => {
+        throw new Error("rewrite boom");
+      },
+    });
+    const app = publicRoutes(deps);
+
+    const res = await app.fetch(
+      chatRequest("/api/public/chat", message, { "x-api-key": PUBLIC_KEY }),
+    );
+
+    expect(res.status).toBe(200);
+    expect(retrievedQueries).toEqual(["hi"]);
+  });
+
+  test("a throwing rerankContext falls back to the original chunks rather than failing the request", async () => {
+    const { deps } = createFakeDeps({
+      rerankContext: async () => {
+        throw new Error("rerank boom");
+      },
+      answerFn: async ({ system }) => system,
+    });
+    const app = publicRoutes(deps);
+
+    const res = await app.fetch(
+      chatRequest("/api/public/chat", message, { "x-api-key": PUBLIC_KEY }),
+    );
+
+    expect(res.status).toBe(200);
+    const { reply } = await res.json();
+    expect(reply).toContain("some context");
   });
 });
