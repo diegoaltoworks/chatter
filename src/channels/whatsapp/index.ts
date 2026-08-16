@@ -57,6 +57,8 @@ export {
   jidsMatch,
   jidToPhoneNumber,
   messageContext,
+  type ResolvedWaMessage,
+  resolveWaMessage,
   senderPhoneFor,
   stripOwnMentions,
   type WaMessageContext,
@@ -71,5 +73,13 @@ export {
   type WaLeaseRow,
   type WaLeaseStore,
 } from "./lease";
+export {
+  createWhatsAppMessageRouter,
+  type MessageDetector,
+  type ParallelDetector,
+  type ReplaceDetector,
+  type WaDetectorContext,
+  type WhatsAppMessageRouterConfig,
+} from "./router";
 // `./pairing` backs the wa-pair CLI and is deliberately NOT re-exported here:
 // it would become published API this subpath has to keep stable.
