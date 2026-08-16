@@ -1,11 +1,17 @@
 # Changelog
 
-All notable changes to this project will be documented in this file.
+Per-release notes are generated automatically from commit/PR history when a
+version is published — see [GitHub Releases](https://github.com/diegoaltoworks/chatter/releases)
+for the current and complete history. This file is not kept in sync with that
+automation; entries below stop shortly after 0.5.0 and are retained only as a
+historical record of changes made before releases were automated.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
-and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+and this project adhered to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## Changes after 0.5.0
+
+All released — see GitHub Releases for exact version numbers.
 
 ### Added
 - **OpenAI-compatible endpoints**: `POST /v1/chat/completions` (public pipeline, API key auth) and `POST /api/private/v1/chat/completions` (private pipeline, JWT auth), with SSE streaming (`chat.completion.chunk` + `[DONE]`) and non-streaming responses. Any OpenAI-format chat UI or SDK can now be the front end. Disable with `features.enableOpenAICompat: false`.
@@ -55,92 +61,4 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Issue and PR templates
 - Example implementations
 
-[Unreleased]: https://github.com/diegoaltoworks/chatter/compare/v0.5.0...HEAD
 [0.5.0]: https://github.com/diegoaltoworks/chatter/releases/tag/v0.5.0
-# MCP Server Integration - Implementation Summary
-
-## Changes Made
-
-### 1. Dependencies Added
-- Added `@modelcontextprotocol/sdk` as peer dependency (^1.0.0)
-- Added `zod` as peer dependency (^3.25.0)
-- Installed both as dev dependencies for build process
-
-### 2. New Files Created
-- `src/mcp-server.ts` - Core MCP server implementation
-- `examples/mcp-server-example.ts` - Example usage file
-
-### 3. Package Configuration Updates
-- Added new export path `./mcp` in package.json
-  - Types: `./dist/mcp-server.d.ts`
-  - ESM: `./dist/mcp-server.mjs`
-  - CJS: `./dist/mcp-server.js`
-- Added `build:mcp` script for building MCP server bundle
-- Integrated MCP build into main build pipeline
-
-### 4. Main Index Updates
-- Exported `createMCPServer` factory function
-- Exported `MCPServerOptions` and `MCPTransportMode` types
-
-### 5. Documentation Updates
-- Added MCP Server Integration section to README.md
-- Included setup examples and Claude Desktop configuration
-
-## MCP Server Features
-
-### Exposed Tools
-1. **chat_public** - Chat using public knowledge base
-   - Supports single message or conversation history
-   - RAG-powered with 6 context chunks
-   - Uses base + public knowledge buckets
-
-2. **chat_private** - Chat using private/internal knowledge base
-   - Supports single message or conversation history
-   - RAG-powered with 8 context chunks
-   - Uses base + private knowledge buckets
-
-### Transport Support
-- STDIO transport (default) for local clients like Claude Desktop
-- Both tools apply existing guardrails (detectLeakage, scrubOutput)
-
-## Usage
-
-### As Package Import
-```typescript
-import { createMCPServer } from '@diegoaltoworks/chatter/mcp';
-import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
-
-const server = await createMCPServer({ /* config */ });
-const transport = new StdioServerTransport();
-await server.connect(transport);
-```
-
-### Claude Desktop Configuration
-```json
-{
-  "mcpServers": {
-    "chatter": {
-      "command": "node",
-      "args": ["/path/to/mcp-server.js"],
-      "env": {
-        "OPENAI_API_KEY": "...",
-        "TURSO_URL": "...",
-        "TURSO_AUTH_TOKEN": "..."
-      }
-    }
-  }
-}
-```
-
-## Build Output
-- `dist/mcp-server.js` (14.9kb) - CommonJS bundle
-- `dist/mcp-server.mjs` (13.0kb) - ES Module bundle
-- `dist/mcp-server.d.ts` - TypeScript declarations
-
-## Implementation Notes
-- Reuses existing core modules (VectorStore, PromptLoader, completeOnce)
-- Maintains consistency with existing Chatter server patterns
-- Minimal code duplication - wraps existing chat logic
-- Type-safe with full TypeScript support
-- Follows MCP SDK best practices with Zod schemas
-

@@ -286,6 +286,10 @@ Tests mobile chat widget:
 
 **Mobile validated:** Responsive design, iOS/Android compatibility
 
+**Modules not requiring dedicated unit tests:**
+- `core/llm.ts` - Thin wrapper around OpenAI SDK (tested via integration)
+- `routes/*.ts` - Route handlers (tested via `src/routes/*.test.ts` and integration)
+
 ## Environment Requirements
 
 ### Unit Tests
@@ -376,23 +380,6 @@ Our tests follow these principles:
 - ✅ **Readable** - Clear arrange/act/assert structure
 - ✅ **Independent** - Tests don't depend on external services (unit tests)
 - ✅ **Clean** - Integration tests clean up after themselves
-
-## Coverage Metrics
-
-| Category | Coverage | Status |
-|----------|----------|--------|
-| **Authentication** | 100% | ✅ Excellent |
-| **Security Guardrails** | 100% | ✅ Excellent |
-| **Session Management** | 100% | ✅ Excellent |
-| **Middleware** | 100% | ✅ Excellent |
-| **Core Utilities** | 100% | ✅ Excellent |
-| **Integration Flows** | 95% | ✅ Excellent |
-| **Client Widgets** | 95% | ✅ Excellent |
-| **Overall** | ~98% | ✅ Excellent |
-
-**Modules not requiring dedicated unit tests:**
-- `core/llm.ts` - Thin wrapper around OpenAI SDK (tested via integration)
-- `routes/*.ts` - Route handlers (tested via `src/routes/*.test.ts` and integration)
 
 ## Running Specific Tests
 
@@ -536,9 +523,3 @@ For testing questions:
 - 📚 [Main Documentation](../README.md)
 - 💬 [GitHub Discussions](https://github.com/diegoaltoworks/chatter/discussions)
 - 🐛 [Report Issues](https://github.com/diegoaltoworks/chatter/issues)
-
----
-
-**Test Suite Quality:** Production-Ready ✅  
-**Last Updated:** 2026-03-14  
-**Maintained By:** Diego Alto

@@ -2,38 +2,26 @@
 
 ## Supported Versions
 
-We release patches for security vulnerabilities for the following versions:
-
-| Version | Supported          |
-| ------- | ------------------ |
-| 0.1.x   | :white_check_mark: |
-| < 0.1   | :x:                |
+Chatter is pre-1.0 (currently 0.x). Only the latest published version receives
+security fixes — there is no maintained back-branch.
 
 ## Security Scanning
 
-This project uses multiple security scanning tools:
-
 ### Automated Scans
 
-1. **NPM Audit** - Runs on every push and PR
-   - Checks for known vulnerabilities in dependencies
-   - Fails on moderate or higher severity issues
+1. **`bun audit --audit-level=moderate`** - Part of `bun run check`, which runs
+   via CI's `check` job on pushes and PRs targeting `main`/`develop`. Fails the
+   gate on moderate or higher severity issues.
 
-2. **CodeQL Analysis** - Weekly scans and on every push
-   - Static code analysis for security vulnerabilities
-   - Detects common security patterns and anti-patterns
+2. **Dependabot** - Weekly (Monday) scheduled updates for npm, GitHub Actions,
+   and the Dockerfile's Bun base image (see `.github/dependabot.yml`). CI runs
+   on every dependency PR and a maintainer merges it; a dependabot-authored
+   commit never triggers a publish on its own (see
+   [Packaging](docs/packaging.md)).
 
-3. **Dependency Review** - Runs on pull requests
-   - Reviews new dependencies for vulnerabilities
-   - Checks for license compliance
-
-4. **Secret Scanning** - Runs on every push
-   - Scans for accidentally committed secrets
-   - Uses TruffleHog for detection
-
-5. **Weekly Dependency Checks** - Automated Monday scans
-   - Checks for outdated dependencies
-   - Reports available security updates
+CodeQL, TruffleHog secret scanning, and a dedicated dependency-review action
+are not currently wired up in this repo — don't assume they're catching
+anything until a workflow exists to prove it.
 
 ### Manual Security Checks
 
@@ -41,16 +29,16 @@ Run security scans locally before committing:
 
 ```bash
 # Run security audit
-npm run security:audit
+bun run security:audit
 
 # Run security check (fails on moderate+ vulnerabilities)
-npm run security:check
+bun run security:check
 
 # Fix automatically fixable vulnerabilities
-npm run security:audit:fix
+bun run security:audit:fix
 
 # Run full quality checks (includes security)
-npm run check
+bun run check
 ```
 
 ## Reporting a Vulnerability
@@ -149,9 +137,8 @@ When deploying Chatter:
 
 6. **Keep Dependencies Updated**
    ```bash
-   npm outdated
-   npm update
-   npm audit fix
+   bun outdated
+   bun update
    ```
 
 7. **Use Strong Secrets**
@@ -183,8 +170,3 @@ We recognize security researchers who responsibly disclose vulnerabilities:
 - [OWASP Top 10](https://owasp.org/www-project-top-ten/)
 - [Node.js Security Best Practices](https://nodejs.org/en/docs/guides/security/)
 - [NPM Security](https://docs.npmjs.com/about-security-audits)
-
----
-
-**Last Updated:** 2026-03-14  
-**Security Policy Version:** 1.0
