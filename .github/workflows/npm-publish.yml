@@ -221,15 +221,18 @@ jobs:
 
       # Merges only once CI on this exact commit is known good: GitHub itself
       # refuses a merge before main-protection's required checks post, which
-      # this run already waited for above. GitHub can take a few seconds to
-      # recompute mergeability/check-status after that wait, so a merge
-      # attempted the instant CI reports green can transiently 422 — retried
-      # rather than left to wedge the release PR open. The merge SHA comes
-      # from an explicit fetch rather than gh's own post-merge local branch
-      # cleanup (which only happens to leave main checked out) — that keeps a
-      # local git hiccup in branch deletion from being mistaken for a failed
-      # merge, so deleting the branch is a best-effort step of its own
-      # afterward.
+      # this run already waited for above. Observed in practice: GitHub's
+      # mergeable_state can report "blocked" for a couple of minutes after
+      # every required check has already posted "success" — a documented
+      # GitHub-side caching/recomputation lag, not a real block. `gh pr merge`
+      # reads that cached field and refuses to even attempt the merge while it
+      # says "blocked", so it can keep failing well past the point the merge
+      # would actually succeed; calling the merge endpoint directly sidesteps
+      # that stale read and performs GitHub's own real-time check instead.
+      # Retried generously rather than left to wedge the release PR open. The
+      # merge SHA comes from an explicit fetch rather than relying on the
+      # merge response (belt-and-braces against any local git hiccup in the
+      # follow-up branch deletion being mistaken for a failed merge).
       - name: Merge the release PR
         id: merge
         if: steps.pr.outputs.branch != ''
@@ -237,15 +240,18 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           merged=false
-          for _ in $(seq 1 6); do
-            if gh pr merge "${{ steps.pr.outputs.number }}" --repo "${{ github.repository }}" --squash; then
+          for _ in $(seq 1 18); do
+            if gh api -X PUT "repos/${{ github.repository }}/pulls/${{ steps.pr.outputs.number }}/merge" \
+              -f merge_method=squash \
+              -f commit_title="chore(release): v${{ steps.pr.outputs.version }}" >/dev/null; then
               merged=true
               break
             fi
-            sleep 5
+            sleep 10
           done
           if [ "$merged" != true ]; then
-            echo "::error::Could not merge the release PR after retrying — leaving it open for a human."
+            STATE=$(gh pr view "${{ steps.pr.outputs.number }}" --repo "${{ github.repository }}" --json mergeStateStatus --jq .mergeStateStatus)
+            echo "::error::Could not merge the release PR after retrying (mergeStateStatus: $STATE) — leaving it open for a human."
             exit 1
           fi
           git fetch origin main
