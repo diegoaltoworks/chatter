@@ -24,6 +24,15 @@ function isClientRole(role: unknown): role is PipelineMessage["role"] {
 }
 
 /**
+ * Find the most recent user turn in a conversation. Every chat surface needs
+ * this (retrieval query, RAG logging, ...); a shared helper keeps the
+ * "search from the end" behaviour from drifting between copies.
+ */
+export function lastUserMessage<T extends { role: string }>(messages: T[]): T | undefined {
+  return [...messages].reverse().find((m) => m.role === "user");
+}
+
+/**
  * Normalize a raw `messages` array to the pipeline format.
  *
  * Returns `null` when the input is not a non-empty array, when any entry is

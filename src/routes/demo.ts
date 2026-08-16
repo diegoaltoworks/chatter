@@ -7,8 +7,10 @@ import type { Context } from "hono";
 import { Hono } from "hono";
 import { stream } from "hono/streaming";
 import { answerOnce, answerStream } from "../core/answer";
-import { defaultBuckets, resolveBuckets } from "../core/buckets";
-import { normalizeChatBody } from "../core/messages";
+import { resolveBuckets } from "../core/buckets";
+import { DEFAULT_MODEL } from "../core/llm";
+import { lastUserMessage, normalizeChatBody } from "../core/messages";
+import { prepareChat } from "../core/pipeline";
 import { createSession, getActiveSessions } from "../core/session";
 import { clientRateLimitKey } from "../middleware/clientKey";
 import { matchesAllowedOrigin, matchesAllowedOriginOrLocalhost } from "../middleware/originMatch";
@@ -163,24 +165,15 @@ export function demoRoutes(deps: ServerDependencies) {
         return c.json({ error: normalized.error }, 400);
       }
       const { messages } = normalized;
-
-      // Get the latest user message for RAG context
-      const lastUserMsg = [...messages].reverse().find((m) => m.role === "user");
-      if (!lastUserMsg) {
+      if (!lastUserMessage(messages)) {
         return c.json({ error: "no user message found in conversation" }, 400);
       }
 
       // Retrieve context from knowledge base. The demo surface is anonymous,
       // so the hook may narrow the scope but not widen it.
-      const buckets =
-        (await resolveBuckets({ mode: "public", bucketsFor: config.bucketsFor })) ??
-        defaultBuckets("public");
-      const ctx = await store.query(lastUserMsg.content, 6, buckets);
-      const system = [
-        prompts.baseSystemRules,
-        prompts.publicPersona,
-        `Context:\n${ctx.join("\n\n")}`,
-      ].join("\n\n");
+      const buckets = await resolveBuckets({ mode: "public", bucketsFor: config.bucketsFor });
+      const { system } = await prepareChat({ store, prompts, mode: "public", messages, buckets });
+      const model = config.openai.model || DEFAULT_MODEL;
 
       // Check if streaming requested
       const url = new URL(c.req.url);
@@ -194,6 +187,7 @@ export function demoRoutes(deps: ServerDependencies) {
             system,
             messages,
             mode: "public",
+            model,
           })) {
             await s.write(`data: ${JSON.stringify({ delta })}\n\n`);
           }
@@ -208,6 +202,7 @@ export function demoRoutes(deps: ServerDependencies) {
         system,
         messages,
         mode: "public",
+        model,
       });
       return c.json({ reply: out.content });
     } catch (error) {

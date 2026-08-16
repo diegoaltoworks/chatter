@@ -10,6 +10,7 @@
  */
 
 import { defaultBuckets } from "./buckets";
+import { lastUserMessage } from "./messages";
 import type { PromptLoader } from "./prompts";
 import type { VectorStore } from "./retrieval";
 
@@ -25,6 +26,8 @@ export interface PreparedChat {
   system: string;
   /** Conversation messages, unchanged */
   messages: PipelineMessage[];
+  /** Raw retrieved chunks, before being folded into `system` — for callers that log or display RAG context alongside the answer */
+  context: string[];
 }
 
 const MODE_SETTINGS: Record<PipelineMode, { topK: number; label: string }> = {
@@ -74,7 +77,7 @@ export async function prepareChat({
    */
   buckets?: string[];
 }): Promise<PreparedChat> {
-  const lastUserMsg = [...messages].reverse().find((m) => m.role === "user");
+  const lastUserMsg = lastUserMessage(messages);
   if (!lastUserMsg) {
     throw new Error("no user message found in conversation");
   }
@@ -91,5 +94,5 @@ export async function prepareChat({
     `${label}:\n${ctx.join("\n\n")}`,
   ].join("\n\n");
 
-  return { system, messages };
+  return { system, messages, context: ctx };
 }

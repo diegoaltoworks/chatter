@@ -9,7 +9,10 @@
 import OpenAI from "openai";
 import type { z as ZodNamespace } from "zod";
 import { answerOnce } from "./core/answer";
-import { defaultBuckets, resolveBuckets } from "./core/buckets";
+import { resolveBuckets } from "./core/buckets";
+import { DEFAULT_MODEL } from "./core/llm";
+import { lastUserMessage } from "./core/messages";
+import { prepareChat } from "./core/pipeline";
 import { PromptLoader } from "./core/prompts";
 import { VectorStore } from "./core/retrieval";
 import { getOrGenerateConversationId } from "./mcp-server/conversation-id";
@@ -17,6 +20,7 @@ import { calculateCost } from "./mcp-server/cost-tracker";
 import { createLogger } from "./mcp-server/logger";
 import { createRateLimiter } from "./mcp-server/rate-limiter";
 import { loadMcpSdk, loadZod } from "./mcp-server/sdk";
+import { resolveConversationMessages } from "./mcp-server/tool-input";
 
 // Re-export types for backward compatibility
 export type {
@@ -90,6 +94,7 @@ export async function createMCPServer(config: MCPServerOptions) {
   const client = new OpenAI({
     apiKey: config.openai.apiKey,
   });
+  const model = config.openai.model || DEFAULT_MODEL;
 
   // Build vector store
   const store = new VectorStore(client, {
@@ -152,34 +157,22 @@ export async function createMCPServer(config: MCPServerOptions) {
           );
         }
 
-        // Parse input
-        let conversationMessages: Array<{ role: "user" | "assistant"; content: string }>;
+        const conversationMessages = resolveConversationMessages(message, messages);
 
-        if (messages && Array.isArray(messages)) {
-          conversationMessages = messages as Array<{ role: "user" | "assistant"; content: string }>;
-        } else if (message) {
-          conversationMessages = [{ role: "user", content: String(message) }];
-        } else {
-          throw new Error("Either 'message' or 'messages' is required");
-        }
-
-        // Get the latest user message for RAG context
-        const lastUserMsg = [...conversationMessages].reverse().find((m) => m.role === "user");
-        if (!lastUserMsg) {
+        if (!lastUserMessage(conversationMessages)) {
           throw new Error("No user message found in conversation");
         }
 
         // Retrieve context from knowledge base. MCP tools carry no per-user
         // identity, so the hook may narrow the scope but not widen it.
-        const buckets =
-          (await resolveBuckets({ mode: "public", bucketsFor: config.bucketsFor })) ??
-          defaultBuckets("public");
-        const ctx = await store.query(lastUserMsg.content, 6, buckets);
-        const system = [
-          prompts.baseSystemRules,
-          prompts.publicPersona,
-          `Context:\n${ctx.join("\n\n")}`,
-        ].join("\n\n");
+        const buckets = await resolveBuckets({ mode: "public", bucketsFor: config.bucketsFor });
+        const { system, context: ctx } = await prepareChat({
+          store,
+          prompts,
+          mode: "public",
+          messages: conversationMessages,
+          buckets,
+        });
 
         // Generate response
         const result = await answerOnce({
@@ -188,10 +181,11 @@ export async function createMCPServer(config: MCPServerOptions) {
           system,
           messages: conversationMessages,
           mode: "public",
+          model,
         });
 
         // Calculate cost
-        const cost = calculateCost(result.usage);
+        const cost = calculateCost(result.usage, config.openai.pricing);
 
         // Log interaction
         const duration = Date.now() - startTime;
@@ -271,33 +265,21 @@ export async function createMCPServer(config: MCPServerOptions) {
           );
         }
 
-        // Parse input
-        let conversationMessages: Array<{ role: "user" | "assistant"; content: string }>;
+        const conversationMessages = resolveConversationMessages(message, messages);
 
-        if (messages && Array.isArray(messages)) {
-          conversationMessages = messages as Array<{ role: "user" | "assistant"; content: string }>;
-        } else if (message) {
-          conversationMessages = [{ role: "user", content: String(message) }];
-        } else {
-          throw new Error("Either 'message' or 'messages' is required");
-        }
-
-        // Get the latest user message for RAG context
-        const lastUserMsg = [...conversationMessages].reverse().find((m) => m.role === "user");
-        if (!lastUserMsg) {
+        if (!lastUserMessage(conversationMessages)) {
           throw new Error("No user message found in conversation");
         }
 
         // Retrieve context from knowledge base (using private knowledge)
-        const buckets =
-          (await resolveBuckets({ mode: "private", bucketsFor: config.bucketsFor })) ??
-          defaultBuckets("private");
-        const ctx = await store.query(lastUserMsg.content, 8, buckets);
-        const system = [
-          prompts.baseSystemRules,
-          prompts.privatePersona,
-          `Internal Context:\n${ctx.join("\n\n")}`,
-        ].join("\n\n");
+        const buckets = await resolveBuckets({ mode: "private", bucketsFor: config.bucketsFor });
+        const { system, context: ctx } = await prepareChat({
+          store,
+          prompts,
+          mode: "private",
+          messages: conversationMessages,
+          buckets,
+        });
 
         // Generate response
         const result = await answerOnce({
@@ -306,10 +288,11 @@ export async function createMCPServer(config: MCPServerOptions) {
           system,
           messages: conversationMessages,
           mode: "private",
+          model,
         });
 
         // Calculate cost
-        const cost = calculateCost(result.usage);
+        const cost = calculateCost(result.usage, config.openai.pricing);
 
         // Log interaction
         const duration = Date.now() - startTime;

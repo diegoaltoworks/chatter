@@ -2,6 +2,7 @@
  * Logging for MCP Server
  */
 
+import { lastUserMessage } from "../core/messages";
 import type { ChatMessage, CostInfo, MCPLogCallback } from "./types";
 
 /**
@@ -28,7 +29,7 @@ export class MCPLogger {
     duration: number,
     cost: CostInfo,
   ): Promise<void> {
-    const lastUserMsg = [...conversationMessages].reverse().find((m) => m.role === "user");
+    const lastUserMsg = lastUserMessage(conversationMessages);
 
     const logEvent = {
       timestamp: new Date().toISOString(),

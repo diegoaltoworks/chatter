@@ -2,7 +2,9 @@
  * MCP Server Type Definitions
  */
 
-import type { ChatterConfig } from "../types";
+import type { ChatterConfig, PricingRates } from "../types";
+
+export type { PricingRates };
 
 /**
  * MCP Server transport options
@@ -16,7 +18,8 @@ export interface CostInfo {
   promptTokens: number;
   completionTokens: number;
   totalTokens: number;
-  estimatedCost: number; // in USD
+  /** USD, or `null` when no `openai.pricing` was configured (token-only) */
+  estimatedCost: number | null;
 }
 
 /**
