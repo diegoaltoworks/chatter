@@ -8,7 +8,7 @@
 
 import OpenAI from "openai";
 import type { z as ZodNamespace } from "zod";
-import { answerOnce } from "./core/answer";
+import { answerOnce, applyTransformReply } from "./core/answer";
 import { resolveBuckets } from "./core/buckets";
 import { DEFAULT_MODEL } from "./core/llm";
 import { resolveLogger } from "./core/logger";
@@ -192,6 +192,12 @@ export async function createMCPServer(config: MCPServerOptions) {
           model,
         });
 
+        const replyText = await applyTransformReply(
+          config.transformReply,
+          { channel: "mcp-public", conversationId: convId, text: result.content },
+          log,
+        );
+
         // Calculate cost
         const cost = calculateCost(result.usage, config.openai.pricing);
 
@@ -203,7 +209,7 @@ export async function createMCPServer(config: MCPServerOptions) {
             convId,
             conversationMessages,
             ctx,
-            result.content,
+            replyText ?? "",
             duration,
             cost,
           )
@@ -213,7 +219,7 @@ export async function createMCPServer(config: MCPServerOptions) {
           content: [
             {
               type: "text",
-              text: result.content,
+              text: replyText ?? "",
             },
           ],
           _meta: {
@@ -300,6 +306,12 @@ export async function createMCPServer(config: MCPServerOptions) {
           model,
         });
 
+        const replyText = await applyTransformReply(
+          config.transformReply,
+          { channel: "mcp-private", conversationId: convId, text: result.content },
+          log,
+        );
+
         // Calculate cost
         const cost = calculateCost(result.usage, config.openai.pricing);
 
@@ -311,7 +323,7 @@ export async function createMCPServer(config: MCPServerOptions) {
             convId,
             conversationMessages,
             ctx,
-            result.content,
+            replyText ?? "",
             duration,
             cost,
           )
@@ -321,7 +333,7 @@ export async function createMCPServer(config: MCPServerOptions) {
           content: [
             {
               type: "text",
-              text: result.content,
+              text: replyText ?? "",
             },
           ],
           _meta: {

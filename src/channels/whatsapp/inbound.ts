@@ -36,6 +36,7 @@
  *       prompts: deps.prompts,
  *       answerFn: deps.config.answerFn,
  *       bucketsFor: deps.config.bucketsFor,
+ *       transformReply: deps.config.transformReply,
  *       registry: new Map(),
  *       logger: deps.logger,
  *     });
@@ -46,7 +47,7 @@
 
 import type { WAMessage, WASocket } from "@whiskeysockets/baileys";
 import type OpenAI from "openai";
-import type { AnswerFn } from "../../core/answer";
+import type { AnswerFn, TransformReply } from "../../core/answer";
 import type { BucketsFor } from "../../core/buckets";
 import { createConsoleLogger, type Logger } from "../../core/logger";
 import type { PromptLoader } from "../../core/prompts";
@@ -302,6 +303,8 @@ export interface WhatsAppInboundConfig {
   prompts: PromptLoader;
   answerFn?: AnswerFn;
   bucketsFor?: BucketsFor;
+  /** Modifies or vetoes the produced reply before delivery — see `ChatterConfig.transformReply`. */
+  transformReply?: TransformReply;
   model?: string;
   /**
    * Own identities per session — share ONE registry across every session
@@ -382,8 +385,10 @@ export function createWhatsAppInboundHandler(
   const pipeline = createInboundPipeline(
     { client: config.client, store: config.store, prompts: config.prompts },
     {
+      channel: "whatsapp",
       answerFn: config.answerFn,
       bucketsFor: config.bucketsFor,
+      transformReply: config.transformReply,
       model: config.model,
       channelHint: config.channelHint,
       personaResolver: personaResolver
@@ -398,6 +403,7 @@ export function createWhatsAppInboundHandler(
       dmRateLimit: config.dmRateLimit,
       groupRateLimit: config.groupRateLimit,
       now: config.now,
+      logger,
     },
   );
 

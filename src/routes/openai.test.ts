@@ -538,3 +538,81 @@ describe("bucketsFor on the OpenAI-compatible route", () => {
     expect(retrievedBuckets).toEqual([["base", "private", "finance"]]);
   });
 });
+
+describe("transformReply hook", () => {
+  test("a string result replaces the completion content", async () => {
+    const { deps } = createFakeDeps(undefined, { transformReply: () => "transformed" });
+    const app = openaiRoutes(deps);
+
+    const res = await app.fetch(
+      completionsRequest({ messages: [{ role: "user", content: "hi" }] }, AUTH),
+    );
+
+    const json = (await res.json()) as { choices: { message: { content: string } }[] };
+    expect(json.choices[0].message.content).toBe("transformed");
+  });
+
+  test("null vetoes the reply, reported as empty content", async () => {
+    const { deps } = createFakeDeps(undefined, { transformReply: () => null });
+    const app = openaiRoutes(deps);
+
+    const res = await app.fetch(
+      completionsRequest({ messages: [{ role: "user", content: "hi" }] }, AUTH),
+    );
+
+    const json = (await res.json()) as { choices: { message: { content: string } }[] };
+    expect(res.status).toBe(200);
+    expect(json.choices[0].message.content).toBe("");
+  });
+
+  test("a throwing transformReply keeps the original completion content", async () => {
+    const { deps } = createFakeDeps(undefined, {
+      transformReply: () => {
+        throw new Error("plugin bug");
+      },
+    });
+    const app = openaiRoutes(deps);
+
+    const res = await app.fetch(
+      completionsRequest({ messages: [{ role: "user", content: "hi" }] }, AUTH),
+    );
+
+    const json = (await res.json()) as { choices: { message: { content: string } }[] };
+    expect(json.choices[0].message.content).toBe("Hello world");
+  });
+
+  test("sees the channel and mode, distinguishing public from private", async () => {
+    const seen: string[] = [];
+    const { deps } = createFakeDeps(undefined, {
+      transformReply: (ctx) => {
+        seen.push(ctx.channel);
+        return ctx.text;
+      },
+    });
+    const app = openaiRoutes(deps);
+
+    await app.fetch(completionsRequest({ messages: [{ role: "user", content: "hi" }] }, AUTH));
+
+    expect(seen).toEqual(["openai-compat-public"]);
+  });
+
+  test("the streaming path is unaffected by transformReply", async () => {
+    const seen: unknown[] = [];
+    const { deps } = createFakeDeps(undefined, {
+      transformReply: (ctx) => {
+        seen.push(ctx);
+        return "transformed";
+      },
+    });
+    const app = openaiRoutes(deps);
+
+    const res = await app.fetch(
+      completionsRequest({ stream: true, messages: [{ role: "user", content: "hi" }] }, AUTH),
+    );
+
+    const body = await res.text();
+    expect(body).toContain("Hello");
+    expect(body).toContain(" world");
+    expect(seen).toHaveLength(0);
+  });
+});

@@ -171,6 +171,63 @@ describe("POST /api/demo/chat", () => {
   });
 });
 
+describe("transformReply hook on the demo route", () => {
+  function demoChatRequest() {
+    return new Request("http://localhost/api/demo/chat", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ message: "hello" }),
+    });
+  }
+
+  test("a string result replaces the reply", async () => {
+    const app = demoRoutes(createFakeDeps({ transformReply: () => "transformed" }));
+
+    const res = await app.fetch(demoChatRequest());
+
+    expect(await res.json()).toEqual({ reply: "transformed" });
+  });
+
+  test("null vetoes the reply, reported as empty", async () => {
+    const app = demoRoutes(createFakeDeps({ transformReply: () => null }));
+
+    const res = await app.fetch(demoChatRequest());
+
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ reply: "" });
+  });
+
+  test("a throwing transformReply keeps the original reply", async () => {
+    const app = demoRoutes(
+      createFakeDeps({
+        transformReply: () => {
+          throw new Error("plugin bug");
+        },
+      }),
+    );
+
+    const res = await app.fetch(demoChatRequest());
+
+    expect(await res.json()).toEqual({ reply: "reply" });
+  });
+
+  test("sees the demo channel identity", async () => {
+    const seen: string[] = [];
+    const app = demoRoutes(
+      createFakeDeps({
+        transformReply: (ctx) => {
+          seen.push(ctx.channel);
+          return ctx.text;
+        },
+      }),
+    );
+
+    await app.fetch(demoChatRequest());
+
+    expect(seen).toEqual(["widget-demo"]);
+  });
+});
+
 describe("demo rate limiting trustProxy", () => {
   test("keys by X-Forwarded-For when trustProxy is explicitly enabled", async () => {
     const app = demoRoutes(createFakeDeps({ rateLimit: { trustProxy: true } }));

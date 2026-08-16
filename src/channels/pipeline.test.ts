@@ -55,6 +55,7 @@ function harness(overrides: Partial<InboundPipelineConfig> = {}): Harness {
   const handle = createInboundPipeline(
     { client: {} as never, store, prompts },
     {
+      channel: "test-channel",
       answerFn: async (input) => {
         answers.push(input);
         return "a reply";
@@ -208,6 +209,7 @@ describe("createInboundPipeline", () => {
         } as unknown as PromptLoader,
       },
       {
+        channel: "test-channel",
         bucketsFor: () => ["base", "public", "extra"],
         channelHint: "Channel: Test.",
         answerFn: async (input) => {
@@ -417,6 +419,79 @@ describe("createInboundPipeline", () => {
         { role: "assistant", content: "a reply" },
       ]);
       expect(store.data.has("chat-1")).toBe(false);
+    });
+  });
+
+  describe("transformReply hook", () => {
+    test("a string result replaces the delivered reply", async () => {
+      const { handle, reply, chatReplies } = harness({
+        transformReply: () => "transformed",
+      });
+
+      const outcome = await handle(msg(), { reply });
+
+      expect(outcome).toEqual({ action: "reply", content: "transformed" });
+      expect(chatReplies).toEqual([{ chatId: "chat-1", text: "transformed" }]);
+    });
+
+    test("null vetoes the reply: nothing is delivered or recorded to history", async () => {
+      const store = fakeHistoryStore();
+      const { handle, reply, chatReplies } = harness({
+        transformReply: () => null,
+        history: { store },
+      });
+
+      const outcome = await handle(msg(), { reply });
+
+      expect(outcome).toEqual({ action: "ignore" });
+      expect(chatReplies).toHaveLength(0);
+      // Only the user's own turn is recorded — the vetoed assistant turn never lands.
+      expect(store.data.get("chat-1")).toEqual([{ role: "user", content: "hello" }]);
+    });
+
+    test("a throwing transformReply is logged and the original reply is delivered", async () => {
+      const lines: unknown[][] = [];
+      const logger = {
+        debug: () => {},
+        info: () => {},
+        warn: () => {},
+        error: (...args: unknown[]) => lines.push(args),
+      };
+      const { handle, reply, chatReplies } = harness({
+        transformReply: () => {
+          throw new Error("plugin bug");
+        },
+        logger,
+      });
+
+      const outcome = await handle(msg(), { reply });
+
+      expect(outcome).toEqual({ action: "reply", content: "a reply" });
+      expect(chatReplies).toEqual([{ chatId: "chat-1", text: "a reply" }]);
+      expect(lines).toHaveLength(1);
+      expect(String(lines[0][0])).toContain("transformReply");
+    });
+
+    test("receives the channel, resolved sender and conversationId alongside the produced text", async () => {
+      let seen:
+        | { channel: string; sender?: string; conversationId?: string; text: string }
+        | undefined;
+      const { handle, reply } = harness({
+        channel: "my-channel",
+        transformReply: (ctx) => {
+          seen = ctx;
+          return ctx.text;
+        },
+      });
+
+      await handle(msg(), { reply, sender: "user-42", conversationId: "conv-7" });
+
+      expect(seen).toEqual({
+        channel: "my-channel",
+        sender: "user-42",
+        conversationId: "conv-7",
+        text: "a reply",
+      });
     });
   });
 });

@@ -1,8 +1,9 @@
 import { describe, expect, test } from "bun:test";
+import type { TransformReplyInput } from "../../core/answer";
 import type { Logger } from "../../core/logger";
 import type { PromptLoader } from "../../core/prompts";
 import type { VectorStore } from "../../core/retrieval";
-import type { ServerDependencies } from "../../types";
+import type { ChatterConfig, ServerDependencies } from "../../types";
 import { createSenderRegistry } from "../senders";
 import type { TelegramApi, TelegramMessage, TelegramUpdate, TelegramUser } from "./api";
 import { createTelegramChannel, type TelegramChannelConfig } from "./channel";
@@ -62,7 +63,10 @@ function silentLogger(): Logger & { lines: string[] } {
   return { lines, debug: record, info: record, warn: record, error: record };
 }
 
-function fakeDeps(logger: Logger): ServerDependencies & { answered: string[] } {
+function fakeDeps(
+  logger: Logger,
+  configOverrides: Partial<ChatterConfig> = {},
+): ServerDependencies & { answered: string[] } {
   const answered: string[] = [];
   return {
     answered,
@@ -79,6 +83,7 @@ function fakeDeps(logger: Logger): ServerDependencies & { answered: string[] } {
         answered.push(input.messages.at(-1)?.content ?? "");
         return "the answer";
       },
+      ...configOverrides,
     } as unknown as ServerDependencies["config"],
     senders: createSenderRegistry(logger),
     logger,
@@ -297,5 +302,60 @@ describe("createTelegramChannel", () => {
     await channel.stop?.();
 
     expect(hints[0]).toContain("Channel: Telegram.");
+  });
+
+  async function runWithTransformReply(
+    transformReply: (ctx: TransformReplyInput) => string | null,
+    channelConfig: Partial<TelegramChannelConfig> = {},
+  ): Promise<{ api: FakeApi; logger: Logger & { lines: string[] } }> {
+    const api = fakeApi([[{ update_id: 1, message: message() }]]);
+    const logger = silentLogger();
+    const deps = fakeDeps(logger, { transformReply });
+
+    const channel = createTelegramChannel({
+      botToken: "t",
+      api,
+      sleep: async () => undefined,
+      logger,
+      ...channelConfig,
+    });
+    await channel.start(deps);
+    await settle();
+    await channel.stop?.();
+    return { api, logger };
+  }
+
+  test("transformReply replaces the delivered text", async () => {
+    const { api } = await runWithTransformReply(() => "replaced");
+
+    expect(api.sent).toEqual([{ chatId: "-4242", text: "replaced", replyToMessageId: 55 }]);
+  });
+
+  test("transformReply sees the channel identity, including a configured multi-bot name", async () => {
+    const seen: string[] = [];
+    await runWithTransformReply(
+      (ctx) => {
+        seen.push(ctx.channel);
+        return ctx.text;
+      },
+      { name: "support-bot" },
+    );
+
+    expect(seen).toEqual(["support-bot"]);
+  });
+
+  test("transformReply vetoing the reply sends nothing", async () => {
+    const { api } = await runWithTransformReply(() => null);
+
+    expect(api.sent).toEqual([]);
+  });
+
+  test("a throwing transformReply is logged and keeps the original reply", async () => {
+    const { api, logger } = await runWithTransformReply(() => {
+      throw new Error("boom");
+    });
+
+    expect(api.sent).toEqual([{ chatId: "-4242", text: "the answer", replyToMessageId: 55 }]);
+    expect(logger.lines.some((line) => line.includes("transformReply"))).toBe(true);
   });
 });

@@ -16,6 +16,7 @@
 import type OpenAI from "openai";
 import { guardOutput } from "./guardrails";
 import { completeOnce, completeStream } from "./llm";
+import type { Logger } from "./logger";
 import type { PipelineMessage, PipelineMode } from "./pipeline";
 
 /** Token accounting in the OpenAI wire shape */
@@ -105,6 +106,54 @@ export async function answerOnce({
     return runAnswerFn(answerFn, { system, messages, mode, sender, conversationId });
   }
   return completeOnce({ client, system, messages, temperature, model });
+}
+
+/** What a `transformReply` hook receives: the produced answer plus who/where it's going. */
+export interface TransformReplyInput {
+  /**
+   * Identifies the surface delivering this reply — a channel's own name
+   * (e.g. "whatsapp", "telegram") or a fixed identifier for an HTTP surface
+   * (e.g. "widget-public", "openai-compat-private").
+   */
+  channel: string;
+  sender?: string;
+  conversationId?: string;
+  text: string;
+}
+
+/**
+ * Modifies or vetoes an already-produced reply, after `answerFn`/the built-in
+ * completion and guardrails have run. A string result replaces the reply;
+ * `null` vetoes it — treated the same as an empty answer by every call site
+ * (nothing delivered; the channel pipeline never records an assistant turn
+ * for it, though the user's own turn — already appended before answering —
+ * stays recorded).
+ *
+ * Non-streaming surfaces only: a streaming response is delivered incrementally
+ * as it's produced, before a final answer exists to transform.
+ */
+export type TransformReply = (input: TransformReplyInput) => string | null | Promise<string | null>;
+
+/**
+ * Runs `transformReply` if configured. A throw/rejection is logged and the
+ * ORIGINAL text is returned — the delivery invariant: a bug in a plugin hook
+ * must never silently swallow an answer the model already produced.
+ */
+export async function applyTransformReply(
+  transformReply: TransformReply | undefined,
+  input: TransformReplyInput,
+  logger?: Pick<Logger, "error">,
+): Promise<string | null> {
+  if (!transformReply) return input.text;
+  try {
+    return await transformReply(input);
+  } catch (error) {
+    logger?.error(
+      `transformReply threw for channel "${input.channel}"; sending the original reply`,
+      error,
+    );
+    return input.text;
+  }
 }
 
 /**

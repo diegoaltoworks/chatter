@@ -5,11 +5,11 @@
  * ServerDependencies (incl. the shared db handle), starting a Channel
  * standalone, personaResolver output feeding prepareChat's personaLayer, the
  * bucketsFor retrieval hook, prepareChat's channel-facing params, the
- * answerFn brain hook, sending through the sender registry by name, the flow
- * contract a plugin implements, a HistoryStore's loaded turns feeding
- * straight into that same messages array, the channel-agnostic inbound
- * pipeline a new transport builds on, and the OpenAI-compatible wire shape
- * third-party clients depend on.
+ * answerFn brain hook, the transformReply outbound hook, sending through the
+ * sender registry by name, the flow contract a plugin implements, a
+ * HistoryStore's loaded turns feeding straight into that same messages
+ * array, the channel-agnostic inbound pipeline a new transport builds on,
+ * and the OpenAI-compatible wire shape third-party clients depend on.
  *
  * Typechecked via test/tsconfig.json (see `bun run typecheck:api-surface`,
  * folded into `bun run check`) so a breaking change to any of these types
@@ -27,6 +27,7 @@ import type {
   Logger,
   PipelineMessage,
   ServerDependencies,
+  TransformReply,
 } from "../src";
 import { createConsoleLogger, prepareChat, resolveBuckets } from "../src";
 import {
@@ -311,7 +312,7 @@ describe("API surface", () => {
 
     const handle = createInboundPipeline(
       { client: {} as ServerDependencies["client"], store, prompts },
-      { answerFn: async () => "hello from the pipeline" },
+      { channel: "test-channel", answerFn: async () => "hello from the pipeline" },
     );
 
     const delivered: Array<{ chatId: string; text: string }> = [];
@@ -335,6 +336,44 @@ describe("API surface", () => {
 
     expect(outcome).toEqual({ action: "reply", content: "hello from the pipeline" });
     expect(delivered).toEqual([{ chatId: "chat-1", text: "hello from the pipeline" }]);
+  });
+
+  test("ChatterConfig.transformReply modifies a reply the channel pipeline already produced", async () => {
+    const store = { query: async () => ["context"] } as unknown as ServerDependencies["store"];
+    const prompts = {
+      baseSystemRules: "rules",
+      publicPersona: "persona",
+      privatePersona: "private persona",
+    } as unknown as ServerDependencies["prompts"];
+
+    const transformReply: TransformReply = ({ text }) => `${text} (transformed)`;
+
+    const handle = createInboundPipeline(
+      { client: {} as ServerDependencies["client"], store, prompts },
+      { channel: "test-channel", answerFn: async () => "hello", transformReply },
+    );
+
+    const delivered: Array<{ chatId: string; text: string }> = [];
+    const reply: InboundReplySender = {
+      sendAnswer: async (chatId, text) => {
+        delivered.push({ chatId, text });
+      },
+      sendGateReply: async () => undefined,
+    };
+    const msg: ChannelMessage = {
+      chatId: "chat-1",
+      senderId: "user-1",
+      text: "hi",
+      isDirectMessage: true,
+      mentionsBot: false,
+      isReplyToBot: false,
+      fromBot: false,
+    };
+
+    const outcome = await handle(msg, { reply, sender: "user-1", conversationId: "chat-1" });
+
+    expect(outcome).toEqual({ action: "reply", content: "hello (transformed)" });
+    expect(delivered).toEqual([{ chatId: "chat-1", text: "hello (transformed)" }]);
   });
 
   test("POST /v1/chat/completions responds with the real OpenAI ChatCompletion wire shape", async () => {

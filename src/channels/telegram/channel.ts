@@ -18,7 +18,7 @@
  * which is the same policy `decideChannelAction` applies anyway.
  */
 
-import type { AnswerFn } from "../../core/answer";
+import type { AnswerFn, TransformReply } from "../../core/answer";
 import type { BucketsFor } from "../../core/buckets";
 import { createConsoleLogger, type Logger } from "../../core/logger";
 import type { HistoryStore } from "../../history/types";
@@ -42,6 +42,8 @@ export interface TelegramChannelConfig {
   allowedChats?: string[];
   answerFn?: AnswerFn;
   bucketsFor?: BucketsFor;
+  /** Modifies or vetoes the produced reply before delivery — see `ChatterConfig.transformReply`. Falls back to the server's own. */
+  transformReply?: TransformReply;
   model?: string;
   /** Extra system-prompt section describing the delivery channel; passed through to `prepareChat`. @default "Channel: Telegram." */
   channelHint?: string;
@@ -135,8 +137,10 @@ export function createTelegramChannel(config: TelegramChannelConfig): Channel {
       const pipeline = createInboundPipeline(
         { client: deps.client, store: deps.store, prompts: deps.prompts },
         {
+          channel: channelName,
           answerFn: config.answerFn ?? deps.config.answerFn,
           bucketsFor: config.bucketsFor ?? deps.config.bucketsFor,
+          transformReply: config.transformReply ?? deps.config.transformReply,
           model: config.model,
           channelHint: config.channelHint ?? "Channel: Telegram.",
           personaResolver: config.personaResolver,
@@ -149,6 +153,7 @@ export function createTelegramChannel(config: TelegramChannelConfig): Channel {
           dmRateLimit: config.dmRateLimit,
           groupRateLimit: config.groupRateLimit,
           now: config.now,
+          logger: log,
         },
       );
 

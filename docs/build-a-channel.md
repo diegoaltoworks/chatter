@@ -85,7 +85,7 @@ wrapper (`getUpdates`/`sendMessage`, however you fetch it) and build the
 `Channel`:
 
 ```ts
-import type { AnswerFn, BucketsFor } from "@diegoaltoworks/chatter";
+import type { AnswerFn, BucketsFor, TransformReply } from "@diegoaltoworks/chatter";
 import type { Channel, ChannelMessage } from "@diegoaltoworks/chatter/channels";
 import { createInboundPipeline } from "@diegoaltoworks/chatter/channels";
 
@@ -104,6 +104,7 @@ export function createTelegramChannel(config: {
   allowedChats?: string[];
   answerFn?: AnswerFn;
   bucketsFor?: BucketsFor;
+  transformReply?: TransformReply;
   channelHint?: string;
 }): Channel {
   return {
@@ -118,8 +119,10 @@ export function createTelegramChannel(config: {
       const handle = createInboundPipeline(
         { client: deps.client, store: deps.store, prompts: deps.prompts },
         {
+          channel: "telegram",
           answerFn: config.answerFn ?? deps.config.answerFn,
           bucketsFor: config.bucketsFor ?? deps.config.bucketsFor,
+          transformReply: config.transformReply ?? deps.config.transformReply,
           channelHint: config.channelHint ?? "Channel: Telegram.",
           allowedChats: config.allowedChats,
           muteRegex: /^\/mute$/i,
