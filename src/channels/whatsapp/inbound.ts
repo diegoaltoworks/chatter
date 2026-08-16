@@ -83,19 +83,6 @@ export function jidToPhoneNumber(jid: string): string {
 }
 
 /**
- * Strips a jid's device suffix (`":17"`) for identity comparisons, but keeps
- * the domain — unlike {@link jidsMatch}, which is deliberately domain-blind
- * for mention/reply matching. Collapsing `@lid` and `@s.whatsapp.net` into
- * the same key here would let an unrelated LID and phone jid that happen to
- * share a numeral compare equal in the loop-guard registry.
- */
-function normalizeJid(jid: string): string {
-  const [user = "", domain] = jid.split("@");
-  const withoutDevice = user.split(":")[0] ?? user;
-  return domain ? `${withoutDevice}@${domain}` : withoutDevice;
-}
-
-/**
  * Resolve the sender's real phone number. Modern WhatsApp identifies group
  * senders (and some DM chats) by LID (anonymized `"12345@lid"`), which
  * carries no relationship to the phone number — treating it as one silently
@@ -186,6 +173,19 @@ export function extractText(message: WAMessage): string {
 }
 
 /**
+ * Strips a jid's device suffix (`":17"`) for identity comparisons, but keeps
+ * the domain — unlike {@link jidsMatch}, which is deliberately domain-blind
+ * for mention/reply matching. Collapsing `@lid` and `@s.whatsapp.net` into
+ * the same key here would let an unrelated LID and phone jid that happen to
+ * share a numeral compare equal in the loop-guard registry.
+ */
+function normalizeJid(jid: string): string {
+  const [user = "", domain] = jid.split("@");
+  const withoutDevice = user.split(":")[0] ?? user;
+  return domain ? `${withoutDevice}@${domain}` : withoutDevice;
+}
+
+/**
  * Removes the bot's OWN @mention tokens from a message's text.
  *
  * WhatsApp puts a mention in the raw text as the literal token `@<digits>` —
@@ -224,6 +224,67 @@ export function stripOwnMentions(text: string, ownIds: string[]): string {
 
   const cleaned = stripped.trim();
   return cleaned ? cleaned : text;
+}
+
+export interface ResolvedWaMessage {
+  msg: ChannelMessage;
+  /** This session's own identities (phone + LID, normalized), as just written to `registry`. */
+  ownIds: string[];
+}
+
+/**
+ * Turns a raw Baileys message into the {@link ChannelMessage} shape every
+ * consumer works from — own-identity resolution, the loop guard, and
+ * mention/reply-to detection — done ONCE per message. `createWhatsAppInboundHandler`
+ * and `./router`'s `createWhatsAppMessageRouter` both call this rather than
+ * each re-deriving it, so registering more detectors on the router never
+ * multiplies this work.
+ */
+export function resolveWaMessage(
+  event: WhatsAppMessageEvent,
+  registry: SessionIdentityRegistry,
+): ResolvedWaMessage {
+  const { sessionId, sock, message } = event;
+  const chatId = message.key.remoteJid ?? "";
+  const rawText = extractText(message);
+  const context = messageContext(message);
+  const senderId = message.key.participant ?? chatId;
+
+  // Kept in sync on every message, not just at connection open: the socket's
+  // LID identity can populate later via creds.update, and the registry must
+  // never be staler than this session's own view of itself. Entries are
+  // never removed — see SessionIdentityRegistry. Normalized (device suffix
+  // stripped): Baileys reports sock.user.id WITH a device suffix
+  // ("...:12@domain") while the same number arrives on another session's
+  // socket as a bare participant jid — comparing raw strings would never
+  // match, defeating the guard in exactly the two-linked-numbers scenario it
+  // exists for.
+  const ownIds = [sock.user?.id, (sock.user as { lid?: string } | undefined)?.lid]
+    .filter((id): id is string => Boolean(id))
+    .map(normalizeJid);
+  registry.set(sessionId, ownIds);
+
+  // Everything downstream — gates, image routing, persona resolution, the
+  // model itself — works on the text a human would read, with the bot's own
+  // mention token removed.
+  const text = stripOwnMentions(rawText, ownIds);
+
+  const fromBot = isEffectivelyFromSelf(
+    { fromBot: message.key.fromMe ?? false, senderId: normalizeJid(senderId) },
+    registry,
+  );
+
+  const msg: ChannelMessage = {
+    chatId,
+    senderId,
+    text,
+    isDirectMessage: !isGroupJid(chatId),
+    mentionsBot: context.mentionedJids.some((jid) => ownIds.some((own) => jidsMatch(jid, own))),
+    isReplyToBot: ownIds.some((own) => jidsMatch(context.quotedParticipantJid, own)),
+    fromBot,
+  };
+
+  return { msg, ownIds };
 }
 
 // --- inbound handler ---
@@ -336,47 +397,12 @@ export function createWhatsAppInboundHandler(
       const chatId = message.key.remoteJid ?? "";
       if (!chatId || chatId === "status@broadcast") return;
 
-      const rawText = extractText(message);
-      const context = messageContext(message);
-      const senderId = message.key.participant ?? chatId;
-
-      // Kept in sync on every message, not just at connection open: the
-      // socket's LID identity can populate later via creds.update, and the
-      // registry must never be staler than this session's own view of
-      // itself. Entries are never removed — see SessionIdentityRegistry.
-      // Normalized (device suffix stripped): Baileys reports sock.user.id
-      // WITH a device suffix ("...:12@domain") while the same number
-      // arrives on another session's socket as a bare participant jid —
-      // comparing raw strings would never match, defeating the guard in
-      // exactly the two-linked-numbers scenario it exists for.
-      const ownIds = [sock.user?.id, (sock.user as { lid?: string } | undefined)?.lid]
-        .filter((id): id is string => Boolean(id))
-        .map(normalizeJid);
-      config.registry.set(sessionId, ownIds);
-
-      // Everything downstream — gates, image routing, persona resolution, the
-      // model itself — works on the text a human would read, with the bot's
-      // own mention token removed. That includes the mute/unmute patterns: a
-      // host's anchored regex sees "shut up", not "@<botDigits> shut up",
-      // which is what an addressed command actually looks like to a reader.
-      // A non-empty message never strips to empty (see stripOwnMentions), so
-      // nothing newly falls through the gates' blank-text check.
-      const text = stripOwnMentions(rawText, ownIds);
-
-      const fromBot = isEffectivelyFromSelf(
-        { fromBot: message.key.fromMe ?? false, senderId: normalizeJid(senderId) },
-        config.registry,
-      );
-
-      const msg: ChannelMessage = {
-        chatId,
-        senderId,
-        text,
-        isDirectMessage: !isGroupJid(chatId),
-        mentionsBot: context.mentionedJids.some((jid) => ownIds.some((own) => jidsMatch(jid, own))),
-        isReplyToBot: ownIds.some((own) => jidsMatch(context.quotedParticipantJid, own)),
-        fromBot,
-      };
+      // Mute/unmute patterns and the model both see the text a human would
+      // read: a host's anchored regex sees "shut up", not "@<botDigits> shut
+      // up", which is what an addressed command actually looks like to a
+      // reader (see stripOwnMentions, applied inside resolveWaMessage).
+      const { msg } = resolveWaMessage(event, config.registry);
+      const text = msg.text;
 
       // Logged independently of the pipeline's own decision-making — a
       // group jid isn't guessable in advance, and this is the one gate

@@ -244,6 +244,101 @@ generic set of drawing verbs with no bot-specific names; override both via
 `detector: { detectPattern, stripPatterns }` if your host needs different
 triggers.
 
+## Multiple detectors
+
+A host sometimes needs more than one thing to happen on an inbound message:
+react to a voice note, fire a fixed acknowledgement alongside the normal
+reply, or let a different handler fully replace the answer for messages
+matching some pattern. Hand-rolling that on top of `onMessage` means
+re-deriving own-identity resolution, the loop guard, and the allowlist/mute
+wiring per handler — and nothing stops a handler meant to run *alongside*
+the reply from being wired with the *replaces the reply* convention instead,
+silently eating the real answer.
+
+`createWhatsAppMessageRouter` (see `./whatsapp`) resolves identity and
+gating once per message, then fans it out to any number of `detectors`:
+
+```ts
+import {
+  createWhatsAppChannel,
+  createWhatsAppInboundHandler,
+  createWhatsAppMessageRouter,
+} from "@diegoaltoworks/chatter/whatsapp";
+import type { SessionIdentityRegistry } from "@diegoaltoworks/chatter/channels";
+
+const registry: SessionIdentityRegistry = new Map();
+
+const router = createWhatsAppMessageRouter({
+  registry,
+  allowedChats: (process.env.WA_CHAT_ALLOWLIST ?? "").split(",").filter(Boolean),
+  detectors: [
+    // Fires independently of the reply — never blocks it, never treated as
+    // "handled" even if it throws.
+    {
+      name: "voice-note-trigger",
+      mode: "parallel",
+      test: (ctx) => Boolean(ctx.message.message?.audioMessage),
+      handle: async (ctx) => {
+        await transcribeAndLog(ctx.sock, ctx.message);
+      },
+    },
+    {
+      name: "fixed-reaction",
+      mode: "parallel",
+      test: (ctx) => /^lol\b/i.test(ctx.text),
+      handle: async (ctx) => {
+        await ctx.sock.sendMessage(ctx.msg.chatId, { react: { text: "😂", key: ctx.message.key } });
+      },
+    },
+    // Checked in registration order; the first match fully owns the message
+    // and the fallback below never runs for it.
+    {
+      name: "extraction-reply",
+      mode: "replace",
+      test: (ctx) => looksLikeExtractionRequest(ctx.text),
+      handle: async (ctx) => {
+        const result = await runExtraction(ctx.text);
+        await ctx.sock.sendMessage(ctx.msg.chatId, { text: result });
+      },
+    },
+  ],
+  // An existing single-handler host plugs in unchanged as the fallback.
+  fallback: createWhatsAppInboundHandler({
+    client: deps.client,
+    store: deps.store,
+    prompts: deps.prompts,
+    registry,
+  }),
+});
+
+const whatsapp = createWhatsAppChannel({
+  sessionSecret: process.env.WA_SESSION_SECRET as string,
+  onMessage: (event) => router(event),
+});
+```
+
+- **`"parallel"` detectors** all fire for a matching message, without
+  awaiting or gating the reply path; a throwing/rejecting `handle` is caught
+  and logged (or passed to `onDetectorError`, if set) and never blocks
+  another detector or the fallback.
+- **`"replace"` detectors** run in registration order; the first whose
+  `test` matches has its `handle` awaited and the fallback is skipped
+  entirely. No match runs `fallback` instead.
+- **`ctx`** (`WaDetectorContext`) bundles the already-resolved
+  `ChannelMessage`, own identities, and the already-extracted,
+  own-mention-stripped text, alongside the raw `sock`/`message` a detector
+  needs to actually reply — no detector re-derives mention/loop-guard
+  resolution itself.
+- The loop guard and `allowedChats` are enforced once, before any detector
+  runs — a message from the bot's own session, or from a group the whole
+  channel isn't eligible for, never reaches a detector or the fallback.
+- **`fallback`** is typed identically to `onMessage`/`createWhatsAppInboundHandler`'s
+  return, so an existing single-handler host becomes the fallback with no
+  adaptation, exactly as shown above.
+
+The router is additive: a host with a single `createWhatsAppInboundHandler`
+call and no interceptors of its own has no reason to introduce it.
+
 ## Auth state
 
 Session material (which grants full account access) is stored encrypted in
