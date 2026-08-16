@@ -59,6 +59,14 @@ describe("prepareChat", () => {
     expect(result.messages).toBe(messages);
   });
 
+  test("returns the raw retrieved chunks alongside the assembled system prompt", async () => {
+    const { store, prompts } = createFakes();
+
+    const result = await prepareChat({ store, prompts, mode: "public", messages });
+
+    expect(result.context).toEqual(["some context"]);
+  });
+
   test("uses the private persona, label and topK for private mode", async () => {
     const { store, prompts, queries } = createFakes();
 

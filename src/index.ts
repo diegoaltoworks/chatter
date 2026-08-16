@@ -92,5 +92,6 @@ export type {
   CustomRoutes,
   EmbeddingChunk,
   KnowledgeDocument,
+  PricingRates,
   ServerDependencies,
 } from "./types";

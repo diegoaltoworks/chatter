@@ -2,27 +2,32 @@
  * Cost Tracking for OpenAI API Usage
  */
 
-import type { CostInfo } from "./types";
+import type { CostInfo, PricingRates } from "./types";
 
 /**
- * Calculate cost based on token usage
- * GPT-4o pricing as of 2024: $2.50 per 1M input tokens, $10.00 per 1M output tokens
+ * Calculate cost based on token usage.
+ *
+ * Pricing varies by model and changes over time, so this never guesses at
+ * it: without `rates` the token counts are still reported but
+ * `estimatedCost` is `null` rather than a number computed against a price
+ * that may not match whatever model actually answered.
  *
  * @param usage - Token usage from OpenAI API response
+ * @param rates - USD per 1M tokens, typically sourced from `config.openai.pricing`
  * @returns Cost information including token counts and estimated USD cost
  */
-export function calculateCost(usage: {
-  prompt_tokens: number;
-  completion_tokens: number;
-}): CostInfo {
+export function calculateCost(
+  usage: { prompt_tokens: number; completion_tokens: number },
+  rates?: PricingRates,
+): CostInfo {
   const promptTokens = usage.prompt_tokens || 0;
   const completionTokens = usage.completion_tokens || 0;
   const totalTokens = promptTokens + completionTokens;
 
-  // GPT-4o pricing: $2.50 per 1M input tokens, $10.00 per 1M output tokens
-  const promptCost = (promptTokens / 1_000_000) * 2.5;
-  const completionCost = (completionTokens / 1_000_000) * 10.0;
-  const estimatedCost = promptCost + completionCost;
+  const estimatedCost = rates
+    ? (promptTokens / 1_000_000) * rates.promptPer1M +
+      (completionTokens / 1_000_000) * rates.completionPer1M
+    : null;
 
   return {
     promptTokens,
@@ -36,10 +41,10 @@ export function calculateCost(usage: {
  * Format cost as a human-readable string
  *
  * @param cost - Cost information
- * @returns Formatted cost string (e.g., "$0.003670")
+ * @returns Formatted cost string (e.g., "$0.003670"), or "tokens only" when no rates were configured
  */
 export function formatCost(cost: CostInfo): string {
-  return `$${cost.estimatedCost.toFixed(6)}`;
+  return cost.estimatedCost === null ? "tokens only" : `$${cost.estimatedCost.toFixed(6)}`;
 }
 
 /**

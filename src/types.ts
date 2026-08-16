@@ -15,6 +15,15 @@ import type { PromptLoader } from "./core/prompts";
 import type { VectorStore } from "./core/retrieval";
 
 /**
+ * USD price per 1M tokens, used to turn token usage into an estimated cost.
+ * No built-in default: pricing varies by model and changes over time.
+ */
+export interface PricingRates {
+  promptPer1M: number;
+  completionPer1M: number;
+}
+
+/**
  * Bot identity configuration
  */
 export interface BotIdentity {
@@ -79,6 +88,13 @@ export interface ChatterConfig {
     apiKey: string;
     /** Model to use. Default: gpt-4o */
     model?: string;
+    /**
+     * USD price per 1M prompt/completion tokens, used only to estimate cost
+     * in MCP tool responses and logging. Optional because pricing varies by
+     * model and changes over time; without it, cost estimates report token
+     * counts only rather than guessing at a price.
+     */
+    pricing?: PricingRates;
   };
 
   // Database

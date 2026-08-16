@@ -31,7 +31,9 @@ Notes:
 - **The server picks the model.** A client-supplied `model` field is accepted
   for wire compatibility but ignored; the upstream model is always
   `config.openai.model` (default `gpt-4o`). Clients must not control your
-  spend.
+  spend. Every built-in chat surface — the widget routes, the demo route, and
+  the MCP chat tools — honors this same setting; none of them fall back to a
+  hardcoded model.
 - **The server owns the system prompt.** Incoming `system`/`tool` messages are
   dropped; guardrails, persona, and retrieved context are assembled
   server-side.

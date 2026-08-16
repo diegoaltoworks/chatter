@@ -6,7 +6,28 @@
  */
 
 import { describe, expect, test } from "bun:test";
-import { normalizeChatBody, normalizeMessages } from "./messages";
+import { lastUserMessage, normalizeChatBody, normalizeMessages } from "./messages";
+
+describe("lastUserMessage", () => {
+  test("finds the most recent user turn, ignoring assistant turns after it", () => {
+    const messages = [
+      { role: "user", content: "first" },
+      { role: "assistant", content: "reply" },
+      { role: "user", content: "latest" },
+      { role: "assistant", content: "another reply" },
+    ];
+
+    expect(lastUserMessage(messages)?.content).toBe("latest");
+  });
+
+  test("returns undefined when there is no user turn", () => {
+    expect(lastUserMessage([{ role: "assistant", content: "hi" }])).toBeUndefined();
+  });
+
+  test("returns undefined for an empty conversation", () => {
+    expect(lastUserMessage([])).toBeUndefined();
+  });
+});
 
 describe("normalizeMessages", () => {
   test("keeps user and assistant string content", () => {

@@ -237,7 +237,7 @@ Add to your `claude_desktop_config.json`:
 Both tools:
 - Support single messages or full conversation history
 - Track conversation IDs across sessions for continuity
-- Return token usage and cost estimates in response metadata
+- Return token usage in response metadata, plus an estimated USD cost when `openai.pricing` is configured
 - Use RAG-powered context retrieval from your knowledge base
 - Can be customized with different names and descriptions
 - Can be individually enabled/disabled
@@ -245,7 +245,7 @@ Both tools:
 
 **Features:**
 - **Conversation ID Tracking**: Pass `conversationId` parameter to maintain session continuity across tool calls
-- **Cost Tracking**: Every response includes token usage (prompt/completion/total) and estimated USD cost
+- **Cost Tracking**: Every response includes token usage (prompt/completion/total). Add `openai: { pricing: { promptPer1M, completionPer1M } }` to also get an estimated USD cost — without it, `estimatedCost` is `null` rather than guessing at a price for the wrong model
 - **Rate Limiting**: Optional per-tool rate limiting (requests per minute) to control API usage
 - **Observability**: Comprehensive logging with conversation tracking and cost data
 

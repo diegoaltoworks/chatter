@@ -9,14 +9,17 @@ import { describe, expect, test } from "bun:test";
 import type { ChatterConfig, ServerDependencies } from "../types";
 import { demoRoutes } from "./demo";
 
-function createFakeDeps(config: Partial<ChatterConfig> = {}) {
+function createFakeDeps(config: Partial<ChatterConfig> = {}, completionCalls: unknown[] = []) {
   const client = {
     chat: {
       completions: {
-        create: async () => ({
-          choices: [{ message: { content: "reply" } }],
-          usage: { prompt_tokens: 1, completion_tokens: 1, total_tokens: 2 },
-        }),
+        create: async (params: unknown) => {
+          completionCalls.push(params);
+          return {
+            choices: [{ message: { content: "reply" } }],
+            usage: { prompt_tokens: 1, completion_tokens: 1, total_tokens: 2 },
+          };
+        },
       },
     },
   };
@@ -108,6 +111,61 @@ describe("checkDemoOrigin", () => {
 
     const bypass = await app.fetch(sessionRequest({ origin: "https://real-app.com.evil.com" }));
     expect(bypass.status).toBe(403);
+  });
+});
+
+describe("POST /api/demo/chat", () => {
+  test("routes the completion through the configured model, not a hardcoded default", async () => {
+    const completionCalls: unknown[] = [];
+    const app = demoRoutes(createFakeDeps({}, completionCalls));
+
+    const res = await app.fetch(
+      new Request("http://localhost/api/demo/chat", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ message: "hello" }),
+      }),
+    );
+
+    expect(res.status).toBe(200);
+    expect(completionCalls).toHaveLength(1);
+    expect((completionCalls[0] as { model: string }).model).toBe("gpt-4o-mini");
+  });
+
+  test("assembles the system prompt through the shared pipeline (rules + persona + context)", async () => {
+    const completionCalls: unknown[] = [];
+    const app = demoRoutes(createFakeDeps({}, completionCalls));
+
+    await app.fetch(
+      new Request("http://localhost/api/demo/chat", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ message: "hello" }),
+      }),
+    );
+
+    const messages = (completionCalls[0] as { messages: Array<{ role: string; content: string }> })
+      .messages;
+    expect(messages[0]).toEqual({
+      role: "system",
+      content: "rules\n\npublic persona\n\nContext:\nsome context",
+    });
+  });
+
+  test("rejects a conversation with no user message before touching retrieval or the model", async () => {
+    const completionCalls: unknown[] = [];
+    const app = demoRoutes(createFakeDeps({}, completionCalls));
+
+    const res = await app.fetch(
+      new Request("http://localhost/api/demo/chat", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ messages: [{ role: "assistant", content: "hi" }] }),
+      }),
+    );
+
+    expect(res.status).toBe(400);
+    expect(completionCalls).toHaveLength(0);
   });
 });
 
