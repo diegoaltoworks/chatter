@@ -6,15 +6,15 @@ channel, `./personas`, `./flows`, `./images`, `./usage`, the scheduler, the
 shortener, and the proveout example), as of the release this ticket shipped
 in. Scope: confirm cross-module paths and security invariants are actually
 exercised end to end, not just covered by per-module unit tests, and file any
-gaps found. This is a point-in-time snapshot — re-audit rather than trust it
+gaps found. This is a point-in-time snapshot - re-audit rather than trust it
 once the modules it names have moved on.
 
 ## Cross-module paths reviewed
 
-- **Gates → channel → pipeline.** A gated "ignore" decision leaves `answerFn`
-  uncalled and never sends a reply — covered end to end in the WhatsApp
+- **Gates -> channel -> pipeline.** A gated "ignore" decision leaves `answerFn`
+  uncalled and never sends a reply - covered end to end in the WhatsApp
   inbound handler's tests, not just in isolation on `decideChannelAction`.
-- **Personas → prepareChat.** Previously only a fake resolver callback or a
+- **Personas -> prepareChat.** Previously only a fake resolver callback or a
   literal string exercised the `personaLayer` seam. Added a test chaining a
   real `createPersonaResolver` through the WhatsApp inbound handler into
   `prepareChat`'s assembled system prompt, and a second, narrower test doing
@@ -22,17 +22,17 @@ once the modules it names have moved on.
 - **Usage reserve semantics.** Ordering (per-key before global) and
   reserve-once are directly and thoroughly unit tested. The limiter is
   currently wired into production code only through the WhatsApp image
-  handler — no core HTTP route calls it yet, which is expected since nothing
+  handler - no core HTTP route calls it yet, which is expected since nothing
   in this sprint required it there.
 - **Flows contract.** A fixture-based test loads real flow directories
   (`flow.json` + `handler.ts` + `instructions.md`) through the full
-  loader → registry → intent → params → manager chain, including a
+  loader -> registry -> intent -> params -> manager chain, including a
   Turso-backed session store round trip. Adequate.
 - **Auth-state lease.** A real Turso-backed lease store is exercised under
   concurrent acquisition, and a separate test proves the live heartbeat loop
   tears a session down once superseded. Adequate.
-- **Pairing 515 path.** The registered-persist acceptance criteria (515 →
-  reconnect → late `creds.update` → verified `registered: true` before
+- **Pairing 515 path.** The registered-persist acceptance criteria (515 ->
+  reconnect -> late `creds.update` -> verified `registered: true` before
   success is printed) are directly modeled with a faked socket and a faked
   in-memory session store that mimics the shape `useTursoAuthState` hands
   the CLI. Adequate for the sequencing logic; the real Turso store's own
@@ -61,7 +61,7 @@ once the modules it names have moved on.
 ## Gaps found and closed
 
 Three tests were added to close genuine end-to-end coverage gaps (no code
-defects were found — the underlying behavior was already correct, it just
+defects were found - the underlying behavior was already correct, it just
 wasn't asserted at the cross-module boundary):
 
 - `src/channels/whatsapp/inbound.test.ts`: a real `createPersonaResolver`
@@ -79,6 +79,6 @@ wasn't asserted at the cross-module boundary):
 
 ## Deferred
 
-Nothing rose to the level of a new backlog ticket — no bugs or invariant
+Nothing rose to the level of a new backlog ticket - no bugs or invariant
 violations were found during this review, only test-coverage gaps, which are
 closed above.

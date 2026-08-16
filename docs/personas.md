@@ -8,7 +8,7 @@ import { createPersonaResolver, createGreeter, timeContext } from "@diegoaltowor
 ```
 
 Nothing in this module is chat- or transport-specific, and it adds no required
-dependencies. It ships **no content** — no bot names, no in-character copy, no
+dependencies. It ships **no content** - no bot names, no in-character copy, no
 default templates. A registry and, for greetings, template pools are always
 supplied by the caller.
 
@@ -35,7 +35,7 @@ A registry maps contacts to personas and personas to prompt files:
   land.
 - `personaProbability` (default `0.5`) is the chance a mapped contact gets
   their persona on a fresh roll; a contact's own `probability` overrides it.
-- `personaWindowMinutes` (default `10`) is how long a roll is held — a
+- `personaWindowMinutes` (default `10`) is how long a roll is held - a
   conversation keeps one voice for the window instead of switching every
   message.
 - Contact keys are opaque caller-supplied ids (a channel sender id, an E.164
@@ -66,23 +66,23 @@ await prepareChat({
 `resolvePersonaLayer` rolls (or returns the currently held) persona for the
 contact, loads its prompt file, and falls back to the default persona's layer
 when the roll doesn't land. It returns `string | null`; `prepareChat`'s
-`personaLayer` is `string | undefined`, so `?? undefined` bridges the two —
+`personaLayer` is `string | undefined`, so `?? undefined` bridges the two -
 `null` (and an omitted `personaLayer`) both mean "use chatter's own default
 persona".
 
 Lower-level pieces are exposed for callers that need to share a roll across
 features (e.g. a greeting that must agree with the chat that follows):
 
-- `rollPersonaId(contactId)` — the persona id in effect right now, or `null`
+- `rollPersonaId(contactId)` - the persona id in effect right now, or `null`
   for "use the default".
-- `personaLayerFor(personaId)` — deterministic layer for an explicit id, no
+- `personaLayerFor(personaId)` - deterministic layer for an explicit id, no
   dice roll.
-- `contactFor(contactId)` — the registry's contact record, or `undefined`.
-- `defaultPersonaId()` — the registry's configured default persona id.
+- `contactFor(contactId)` - the registry's contact record, or `undefined`.
+- `defaultPersonaId()` - the registry's configured default persona id.
 
 **Failures degrade to `null`, never throw.** A missing registry file,
 malformed JSON, an unknown persona id, or a missing prompt file all resolve to
-`null` rather than raising into a chat request — the caller's own default
+`null` rather than raising into a chat request - the caller's own default
 persona layer is the fallback.
 
 ### Template variables
@@ -120,7 +120,7 @@ greeter.greet(senderId); // -> "Hi Sam!" or null
 ```
 
 `greet` returns `null` for an unknown contact, a contact with no `name`, or a
-persona with no template pool — the greeter has no content of its own to fall
+persona with no template pool - the greeter has no content of its own to fall
 back on. `{name}` is capitalized and substituted; everything else about the
 templates is the caller's.
 

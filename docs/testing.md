@@ -11,7 +11,7 @@ bun test
 # Run only unit tests (fast, no external dependencies)
 bun test src/**/*.test.ts
 
-# Run only integration tests (no credentials needed — see below)
+# Run only integration tests (no credentials needed - see below)
 bun test test/integration/**/*.test.ts
 
 # Watch mode (re-run on file changes)
@@ -24,17 +24,17 @@ bun test --coverage
 ## Test Suite Overview
 
 - **Unit tests** live beside the code they cover (`src/**/*.test.ts`) and need
-  no credentials or network — external clients are faked and databases are
+  no credentials or network - external clients are faked and databases are
   in-memory.
 - **Integration tests** live in `test/integration/` and run a real
   `createServer(config)` against an in-memory libsql database
   (`database.url: "file::memory:"`) with a faked `fetch` standing in for
-  OpenAI (see `test/integration/harness.ts`) — no credentials needed, and
+  OpenAI (see `test/integration/harness.ts`) - no credentials needed, and
   nothing calls a paid API.
 - **Client tests** cover the widget in `src/client/`.
 
-- **Packaging tests** cover the published contract. The pure half — what the
-  `exports` map demands, and which parts of it a tarball fails — is unit-tested
+- **Packaging tests** cover the published contract. The pure half - what the
+  `exports` map demands, and which parts of it a tarball fails - is unit-tested
   in `scripts/`; the half that must actually build, pack and install runs
   separately as `bun run test:pack` (see [Packaging](./packaging.md)), because
   no test that imports from `src/` can see a broken subpath.
@@ -52,7 +52,7 @@ bun test --coverage
 
 - **Docs ToC tests** cover documentation drift. `scripts/docs-toc.test.ts`
   reads every `docs/*.md` file and fails if either README.md's Documentation
-  section or docs/index.md's Quick Navigation section forgot to link it — the
+  section or docs/index.md's Quick Navigation section forgot to link it - the
   same "nothing else would notice going missing" shape as the supply-chain
   check, applied to the doc set instead of CI config.
 
@@ -312,7 +312,7 @@ No environment variables or credentials needed:
 **Behavior:**
 - `createServer` runs for real against `database.url: "file::memory:"`
 - A faked `fetch` answers OpenAI chat-completion and embedding requests
-  locally (`test/integration/harness.ts`) — no network call leaves the process
+  locally (`test/integration/harness.ts`) - no network call leaves the process
 - Creates temporary directories for test isolation
 - Cleans up all resources after completion
 
@@ -435,7 +435,7 @@ Tests run automatically on:
 
 | Job | What it proves |
 | --- | --- |
-| `check` | The gates — `bun run check` (typecheck, api-surface compile, lint, tests, audit) and a full build |
+| `check` | The gates - `bun run check` (typecheck, api-surface compile, lint, tests, audit) and a full build |
 | `node-runtime` | The built bundles load and serve under plain Node (`bun run test:node`) |
 | `package-contract` | Every `exports` subpath resolves from a packed tarball (`bun run test:pack`) |
 | `docker` | The image builds |

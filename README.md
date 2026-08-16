@@ -9,7 +9,7 @@
 [![CI](https://github.com/diegoaltoworks/chatter/actions/workflows/ci.yml/badge.svg)](https://github.com/diegoaltoworks/chatter/actions/workflows/ci.yml)
 [![Demo](https://img.shields.io/badge/demo-chatter--demo-blue)](https://github.com/diegoaltoworks/chatter-demo)
 
-[Features](#features) • [Quick Start](#quick-start) • [Documentation](#documentation) • [Demo](#demo)
+[Features](#features) - [Quick Start](#quick-start) - [Documentation](#documentation) - [Demo](#demo)
 
 </div>
 
@@ -18,15 +18,15 @@
 - 🤖 **RAG-Powered**: Retrieval-Augmented Generation using OpenAI embeddings and Turso vector database
 - 🎨 **Customizable Widgets**: Pre-built chat components (ChatBot, Chat, ChatButton) with full styling control
 - 📝 **Markdown Rendering**: Assistant replies render Markdown (headings, lists, code blocks, links) safely with HTML escaping
-- 🔌 **OpenAI-Compatible API**: `POST /v1/chat/completions` (streaming + non-streaming) so any chat UI or SDK — [Deep Chat](https://deepchat.dev), [assistant-ui](https://www.assistant-ui.com), the OpenAI SDKs — can be the front end ([guide](./docs/integrations.md))
-- 🎛️ **Headless Mode**: Run the server as a pure API with `features: { headless: true }` — no built-in widget or demo pages
+- 🔌 **OpenAI-Compatible API**: `POST /v1/chat/completions` (streaming + non-streaming) so any chat UI or SDK - [Deep Chat](https://deepchat.dev), [assistant-ui](https://www.assistant-ui.com), the OpenAI SDKs - can be the front end ([guide](./docs/integrations.md))
+- 🎛️ **Headless Mode**: Run the server as a pure API with `features: { headless: true }` - no built-in widget or demo pages
 - 🔐 **Built-in API Key Management**: JWT-based API keys with CLI tool for easy creation
 - 🔑 **Authentication Ready**: Built-in support for JWT, Clerk, and custom auth providers
 - 📱 **Mobile Optimized**: Responsive design with iOS/Android-specific fixes
 - ⚡ **High Performance**: Built on Hono with streaming support
 - 🛡️ **Security First**: Rate limiting, CORS, referrer checking, and input guardrails
 - 💸 **Usage Metering**: Per-caller and global daily caps for paid features, multi-instance safe, via `@diegoaltoworks/chatter/usage` ([guide](./docs/usage.md))
-- 💬 **Channels**: Built-in WhatsApp, Telegram and Matrix transports plus a Channel SPI for plugging in any other one — allowlist/mute gates, reply rate-limiting, and a shared inbound pipeline every channel reuses ([WhatsApp](./docs/channels.md), [Telegram](./docs/telegram.md), [Matrix](./docs/matrix.md), [build your own](./docs/build-a-channel.md))
+- 💬 **Channels**: Built-in WhatsApp, Telegram and Matrix transports plus a Channel SPI for plugging in any other one - allowlist/mute gates, reply rate-limiting, and a shared inbound pipeline every channel reuses ([WhatsApp](./docs/channels.md), [Telegram](./docs/telegram.md), [Matrix](./docs/matrix.md), [build your own](./docs/build-a-channel.md))
 - 🧩 **Flows**: Multi-turn, schema-driven slot-filling for structured conversations, with hybrid keyword + LLM intent matching ([guide](./docs/flows.md))
 - 🖼️ **Images**: On-demand generation and editing with cache-before-spend ordering and optional Cloudinary upload ([guide](./docs/images.md))
 - 🎭 **Personas**: Windowed, per-contact prompt layers and named greetings from a JSON registry ([guide](./docs/personas.md))
@@ -63,19 +63,19 @@ npx chatter create-apikey --name "my-app" --expires-in 365d
 
 ### Runtime
 
-The package runs on **Bun or Node** (>= 24 — it is built and published for both,
+The package runs on **Bun or Node** (>= 24 - it is built and published for both,
 and CI loads the built bundles under each). Two things differ:
 
-- **Serving the app** — `Bun.serve({ port: 8181, fetch: app.fetch })` on Bun;
+- **Serving the app** - `Bun.serve({ port: 8181, fetch: app.fetch })` on Bun;
   `serve({ port: 8181, fetch: app.fetch })` from [`@hono/node-server`](https://github.com/honojs/node-server) on Node.
-- **Static assets** — serving the widget files (`/chatter.js`, `/chatter.css`)
+- **Static assets** - serving the widget files (`/chatter.js`, `/chatter.css`)
   and a `publicDir` needs a runtime adapter, picked automatically. On Node that
   adapter is `@hono/node-server`, an optional peer dependency: without it,
   `/chatter.js` and `/chatter.css` 404 and the server logs an actionable
   error naming the missing package. Install it, or run with
   `features: { headless: true }` if the server should serve no files.
 
-Everything else — the chat pipeline, RAG, channels, the OpenAI-compatible API —
+Everything else - the chat pipeline, RAG, channels, the OpenAI-compatible API -
 is runtime-neutral. Development and the quality gates run on Bun.
 
 ## Examples
@@ -90,7 +90,7 @@ is runtime-neutral. Development and the quality gates run on Bun.
 
 ## Documentation
 
-Complete guides for setup, deployment, and integration — see
+Complete guides for setup, deployment, and integration - see
 [docs/index.md](./docs/index.md) for the full, ordered walkthrough:
 
 - **[Architecture](./docs/ARCHITECTURE.md)** - Load-bearing invariants, each linked to the test that enforces it
@@ -121,7 +121,7 @@ Complete guides for setup, deployment, and integration — see
 The [chatter-demo](https://github.com/diegoaltoworks/chatter-demo) repository contains a complete, production-ready implementation showing:
 
 - Full server setup with custom configuration
-- 8 live demo implementations (Widget/React × Button/Inline × Public/Private)
+- 8 live demo implementations (Widget/React x Button/Inline x Public/Private)
 - Clerk authentication integration
 - Deployment configuration for Google Cloud Run
 - Knowledge base and prompt customization
@@ -157,7 +157,7 @@ See [Client Setup Guide](./docs/client.md) for detailed integration examples, th
 
 ## MCP Server Integration
 
-Use Chatter as a Model Context Protocol (MCP) server to expose your chatbot to Claude Desktop, VS Code extensions, and other MCP-compatible tools. `@modelcontextprotocol/sdk` and `zod` are optional peer dependencies scoped to this subpath — install them to use it: `bun add @modelcontextprotocol/sdk zod`.
+Use Chatter as a Model Context Protocol (MCP) server to expose your chatbot to Claude Desktop, VS Code extensions, and other MCP-compatible tools. `@modelcontextprotocol/sdk` and `zod` are optional peer dependencies scoped to this subpath - install them to use it: `bun add @modelcontextprotocol/sdk zod`.
 
 **Basic Setup:**
 ```typescript
@@ -265,13 +265,13 @@ Both tools:
 
 **Features:**
 - **Conversation ID Tracking**: Pass `conversationId` parameter to maintain session continuity across tool calls
-- **Cost Tracking**: Every response includes token usage (prompt/completion/total). Add `openai: { pricing: { promptPer1M, completionPer1M } }` to also get an estimated USD cost — without it, `estimatedCost` is `null` rather than guessing at a price for the wrong model
+- **Cost Tracking**: Every response includes token usage (prompt/completion/total). Add `openai: { pricing: { promptPer1M, completionPer1M } }` to also get an estimated USD cost - without it, `estimatedCost` is `null` rather than guessing at a price for the wrong model
 - **Rate Limiting**: Optional per-tool rate limiting (requests per minute) to control API usage
 - **Observability**: Comprehensive logging with conversation tracking and cost data
 
 ## Plugins
 
-### Talker — Voice Calls & SMS
+### Talker - Voice Calls & SMS
 
 Add phone call and SMS support to your Chatter bot with [Talker](https://github.com/diegoaltoworks/talker):
 
@@ -294,7 +294,7 @@ const app = await createServer({
 });
 ```
 
-One server, one port — web chat, phone calls, and SMS. See the [Talker README](https://github.com/diegoaltoworks/talker) for full documentation.
+One server, one port - web chat, phone calls, and SMS. See the [Talker README](https://github.com/diegoaltoworks/talker) for full documentation.
 
 ## License
 

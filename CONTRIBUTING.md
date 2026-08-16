@@ -35,7 +35,7 @@ Enhancement suggestions are tracked as GitHub issues. Create an issue using the 
 ### Prerequisites
 
 - [Bun](https://bun.sh) v1.2+ (the development runtime; see `engines` in `package.json`)
-- Node.js 24+ (the published package's floor — `test:node` verifies the built package boots under it)
+- Node.js 24+ (the published package's floor - `test:node` verifies the built package boots under it)
 
 ### Setup
 
@@ -118,7 +118,7 @@ chatter/
 - **No untested numbers.** A doc must not state a benchmark, a latency, a
   size, a count, or any other figure that no test asserts. A number nobody
   checks silently goes stale the first time the code it described changes,
-  and a stale number is worse than no number — it reads as authoritative.
+  and a stale number is worse than no number - it reads as authoritative.
   Either point at what pins the figure (`bundle-size budget: see
   BUNDLE_BUDGETS in scripts/pack-exports.ts, measured by bun run test:pack`)
   or phrase it qualitatively instead ("fast", "bounded", "under the
@@ -139,7 +139,7 @@ chatter/
   rejects a commit whose message isn't a conventional-commit subject. This
   is a local guardrail, not a CI check: on `main` the commit that actually
   drives the release version is the squash-merge commit, whose subject is
-  the PR title, composed on GitHub and never passed through this hook —
+  the PR title, composed on GitHub and never passed through this hook -
   keep the PR title itself conventional-commit shaped.
 - Mark a breaking change with `!` before the colon (`feat!:`, `fix(api)!:`) or
   a `BREAKING CHANGE:` footer in the commit body. Past 1.0 this ships a major
@@ -148,23 +148,23 @@ chatter/
 ## Definition of Done
 
 What "done" requires depends on what kind of change it is. This table is the
-specific version of "add tests and update docs" — which test to extend, not
+specific version of "add tests and update docs" - which test to extend, not
 just that one exists. See [ARCHITECTURE.md](docs/ARCHITECTURE.md) for the
 invariants these tests protect, and [docs/patterns/](docs/patterns/) for the
 worked walkthroughs.
 
 | Change type | Required steps | Test to extend |
 | --- | --- | --- |
-| **New chat surface** (route, channel, MCP tool) | Answer through `prepareChat` → `answerOnce`/`answerStream`, never `completeOnce`/`completeStream` directly | `scripts/architecture-invariants.test.ts` (automatic) + a surface-level test proving `answerFn` is honoured |
+| **New chat surface** (route, channel, MCP tool) | Answer through `prepareChat` -> `answerOnce`/`answerStream`, never `completeOnce`/`completeStream` directly | `scripts/architecture-invariants.test.ts` (automatic) + a surface-level test proving `answerFn` is honoured |
 | **New hook/seam** (like `answerFn`, `bucketsFor`) | Pure decision function with an explicit ceiling/default; document narrowing vs. widening | A dedicated `*.test.ts` beside the seam proving the ceiling can't be bypassed |
-| **New subpath** (optional integration) | Follow [docs/patterns/adding-a-capability.md](docs/patterns/adding-a-capability.md): `build:<name>` script, optional peer dependency, `exports` key last | `bun run test:pack` — packs the real tarball and resolves every declared `exports` key against it, so a new key is checked without editing the test |
+| **New subpath** (optional integration) | Follow [docs/patterns/adding-a-capability.md](docs/patterns/adding-a-capability.md): `build:<name>` script, optional peer dependency, `exports` key last | `bun run test:pack` - packs the real tarball and resolves every declared `exports` key against it, so a new key is checked without editing the test |
 | **New config field** | Additive, optional, safe default (existing behaviour unchanged when unset) | `test/api-surface.test.ts` (compiled via `bun run typecheck:api-surface`) + the relevant `test/integration/*.test.ts` |
 | **New store** (Turso-backed persistence) | Follow [docs/patterns/adding-a-store.md](docs/patterns/adding-a-store.md): idempotent `CREATE TABLE IF NOT EXISTS`, validated table name, atomic claim | A store-level test against a real in-memory libsql client |
 | **New doc** (`docs/*.md`) | Link it from both README.md's Documentation section and docs/index.md's Quick Navigation | `scripts/docs-toc.test.ts` (automatic) |
 | **New/edited CI workflow** | Pin third-party actions to a commit SHA + version comment, pin Bun to the shared exact version, use `--frozen-lockfile` | `scripts/supply-chain.test.ts` (automatic) |
 
 Every "automatic" test above is a `*.test.ts` under `scripts/` that reads
-this repo's real files — `bun test` (part of `bun run check`) runs it without
+this repo's real files - `bun test` (part of `bun run check`) runs it without
 any extra step on your part; you only need to make the change conform.
 
 ## Pull Request Process
@@ -176,25 +176,25 @@ any extra step on your part; you only need to make the change conform.
 
 Release notes are generated automatically from commit/PR history when a
 version publishes (see [GitHub Releases](https://github.com/diegoaltoworks/chatter/releases))
-— there's no CHANGELOG.md entry to add by hand.
+- there's no CHANGELOG.md entry to add by hand.
 
 ## Release Process
 
 Releases are automated. Merging a PR to `main` runs CI; when CI is green the
 publish workflow opens a release PR carrying the version bump, waits for CI on
-that PR to pass, and merges it itself — routed through a PR rather than pushed
+that PR to pass, and merges it itself - routed through a PR rather than pushed
 straight to `main` so main-protection never sees a commit without a passed
 check. Once merged, the same run re-runs the gates, builds, verifies the
 packed tarball and the built package under Node, tags the commit, publishes to
 npm with provenance, and cuts the GitHub release with its notes. Do not bump
-`package.json` by hand — the workflow owns the version. See
+`package.json` by hand - the workflow owns the version. See
 [docs/packaging.md](./docs/packaging.md#the-release-chain) for the full chain.
 
 The bump type is derived from the conventional-commit type of every commit
 since the last release tag (not just the one that triggered the run): any
 `feat` commit ships a minor, everything else (`fix`, `chore`, `docs`, etc.)
-ships a patch. A breaking change — a `!` before the colon (`feat!:`) or a
-`BREAKING CHANGE:` / `BREAKING-CHANGE:` footer in the commit body — ships a
+ships a patch. A breaking change - a `!` before the colon (`feat!:`) or a
+`BREAKING CHANGE:` / `BREAKING-CHANGE:` footer in the commit body - ships a
 major once the package is past 1.0; before 1.0 it still only reaches minor,
 since semver leaves 0.x compatibility undefined and minor is already the
 strongest signal available. See `scripts/next-version.ts` for the
@@ -206,8 +206,8 @@ and merged by bots, so releasing off one would ship an upstream change nobody
 read. The publish job declines when dependabot authored the triggering commit,
 and `scripts/release-guard.ts` scans everything since the last release tag so a
 change cannot ride along inside a later release either. That scan blocks on a
-bump that edits a workflow, a Dockerfile or source — anything that changes what
-*runs* — and lets a manifest- or lockfile-only bump through, since it ships no
+bump that edits a workflow, a Dockerfile or source - anything that changes what
+*runs* - and lets a manifest- or lockfile-only bump through, since it ships no
 upstream code and the gates run against it like any other commit. To ship a
 blocked change, review it and run the **Publish to NPM** workflow from the
 Actions tab; dispatching is the approval, and it moves the tag past the commit.

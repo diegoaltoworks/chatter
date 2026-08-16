@@ -3,7 +3,7 @@
 Minimal example of using the [Deep Chat](https://deepchat.dev) web component as
 the UI for a Chatter server, via the OpenAI-compatible endpoint.
 
-No build step — Deep Chat is loaded from a CDN and works in any framework (or
+No build step - Deep Chat is loaded from a CDN and works in any framework (or
 none, as here).
 
 ## Run it

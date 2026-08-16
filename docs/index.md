@@ -67,7 +67,7 @@ Welcome to the Chatter documentation! This guide will help you set up and deploy
 10. **[Matrix Channel](./matrix.md)** - Run a bot on the client-server API
    - No dependency at all: JSON over HTTPS via `fetch`
    - Sync loop with backoff, `since`-token persistence and restart semantics
-   - E2EE unsupported — unencrypted rooms only
+   - E2EE unsupported - unencrypted rooms only
 
 11. **[Flows](./flows.md)** - Multi-turn, schema-driven slot-filling flows
     - Directory-loaded flow contract (flow.json/handler.ts/instructions.md)
@@ -132,7 +132,7 @@ Welcome to the Chatter documentation! This guide will help you set up and deploy
 We recommend following the documentation in this order:
 
 ```
-Requirements → Server Setup → Client Setup → Deployment
+Requirements -> Server Setup -> Client Setup -> Deployment
                                               ↓
                                             FAQs
 ```
@@ -179,11 +179,11 @@ Chatter is an embeddable AI chatbot framework with:
 ### How It Works
 
 ```
-User Message → Chatter Server → OpenAI (Embeddings) → Turso (Vector Search)
+User Message -> Chatter Server -> OpenAI (Embeddings) -> Turso (Vector Search)
                     ↓
-        Configured Model's Response ← Context from Knowledge Base
+        Configured Model's Response <- Context from Knowledge Base
                     ↓
-              Streaming Response → User
+              Streaming Response -> User
 ```
 
 ### Two Chat Modes
@@ -206,19 +206,19 @@ User Message → Chatter Server → OpenAI (Embeddings) → Turso (Vector Search
 - Public chat mode
 - Knowledge base with FAQs, documentation
 - Embedded on website with ChatButton widget
-- See: [Requirements](./requirements.md) → [Server Setup](./server.md) → [Client Setup](./client.md)
+- See: [Requirements](./requirements.md) -> [Server Setup](./server.md) -> [Client Setup](./client.md)
 
 ### Internal Knowledge Assistant
 - Private chat mode
 - Knowledge base with runbooks, procedures
 - Authenticated with Clerk or custom JWT
-- See: [Requirements](./requirements.md) → [Server Setup](./server.md) → [Deployment](./deployment.md)
+- See: [Requirements](./requirements.md) -> [Server Setup](./server.md) -> [Deployment](./deployment.md)
 
 ### Product Documentation Chat
 - Public chat mode
 - Knowledge base with product docs
 - Inline Chat widget on documentation site
-- See: [Server Setup](./server.md) → [Client Setup](./client.md)
+- See: [Server Setup](./server.md) -> [Client Setup](./client.md)
 
 ## Resources
 
@@ -241,4 +241,4 @@ MIT License - see [LICENSE](https://github.com/diegoaltoworks/chatter/blob/main/
 
 ---
 
-**Ready to get started?** Begin with [Requirements](./requirements.md) →
+**Ready to get started?** Begin with [Requirements](./requirements.md) ->

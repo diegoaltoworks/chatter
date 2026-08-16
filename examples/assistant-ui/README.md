@@ -6,7 +6,7 @@ for a Chatter server, via the OpenAI-compatible endpoint.
 A custom `ChatModelAdapter` (see `src/App.tsx`) streams from
 `POST /v1/chat/completions`; assistant-ui's primitives render the thread. The
 example uses unstyled primitives with a small CSS file so it has no extra
-dependencies — for a production look, use assistant-ui's styled `Thread`
+dependencies - for a production look, use assistant-ui's styled `Thread`
 component (shadcn setup) with the same adapter.
 
 ## Run it

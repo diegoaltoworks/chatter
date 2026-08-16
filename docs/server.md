@@ -131,7 +131,7 @@ only once such a proxy is guaranteed to be in front:
 ```typescript
 {
   rateLimit: {
-    trustProxy: true // Default: false — opt in once a trusted proxy sets XFF
+    trustProxy: true // Default: false - opt in once a trusted proxy sets XFF
   }
 }
 ```
@@ -149,7 +149,7 @@ referer/origin check instead of the normal per-key limit:
 ```
 
 Demo routes (`/api/demo/*`) restrict access to `server.allowedOrigins` via the
-`Origin`/`Referer` headers — never `Host`, which a direct (non-browser)
+`Origin`/`Referer` headers - never `Host`, which a direct (non-browser)
 client can set to anything. For local development against a restricted
 `allowedOrigins`, opt in to an any-port localhost allowance explicitly:
 
@@ -162,12 +162,12 @@ client can set to anything. For local development against a restricted
 }
 ```
 
-`Origin`/`Referer` are themselves only browser-enforced, so this — like
-`allowedOrigins` on the demo routes generally — is a convenience against
+`Origin`/`Referer` are themselves only browser-enforced, so this - like
+`allowedOrigins` on the demo routes generally - is a convenience against
 browser-driven abuse, not a substitute for authentication.
 
 Every limiter (`rateLimit.public`/`private`, the demo session/chat limits) is
-a fixed-window counter held in process memory — see
+a fixed-window counter held in process memory - see
 [Deployment: Rate limiting and multiple instances](./deployment.md#rate-limiting-and-multiple-instances)
 for what that means once you run more than one instance.
 
@@ -191,8 +191,8 @@ parsing JSON:
 ```
 
 The default CSP allows `'unsafe-inline'` scripts/styles (this repo's own
-example pages use inline `<script>` blocks), so it's a baseline — not
-XSS-proof — and only governs pages Chatter itself renders (demo pages,
+example pages use inline `<script>` blocks), so it's a baseline - not
+XSS-proof - and only governs pages Chatter itself renders (demo pages,
 `chat.html`, `private.html`, not a consumer site that merely embeds the
 widget script). Override it if your own `publicDir` pages load a script from
 an external host, which `script-src 'self'` would otherwise block.
@@ -200,7 +200,7 @@ an external host, which `script-src 'self'` would otherwise block.
 ### Brain
 
 Replace the completion call on every chat surface with your own answer
-function — an agent framework, a graph runtime, a remote service — while
+function - an agent framework, a graph runtime, a remote service - while
 Chatter keeps retrieval, prompt assembly, auth, rate limiting, transports and
 output guardrails:
 
@@ -233,7 +233,7 @@ the pipeline mode and, where it knows one, the sender's identity:
 
 Omit it and each mode retrieves from `base` plus its own bucket. For a caller
 the surface could not identify, the hook's answer is filtered down to those
-same defaults, so it can narrow retrieval but never widen it — private
+same defaults, so it can narrow retrieval but never widen it - private
 knowledge stays out of reach of the public pipeline. See
 [integrations.md](./integrations.md) for the full rules, which surfaces consult
 the hook, and the `resolveBuckets` helper channels and custom routes should
@@ -242,7 +242,7 @@ use.
 ### Retrieval Shaping
 
 Rewrite the retrieval query before it runs, and rerank the chunks it returns
-before they reach the prompt — the seams a hybrid-RAG setup plugs into:
+before they reach the prompt - the seams a hybrid-RAG setup plugs into:
 
 ```typescript
 {
@@ -253,7 +253,7 @@ before they reach the prompt — the seams a hybrid-RAG setup plugs into:
 
 Both are optional and fail open: a throw, rejection, or malformed return
 value falls back to the unmodified query/chunks rather than breaking the
-chat path. `rerankContext` is not an access-control seam — a hook that drops
+chat path. `rerankContext` is not an access-control seam - a hook that drops
 chunks on purpose would silently un-drop them on its own failure, so scope
 decisions belong in `bucketsFor` instead. See
 [integrations.md](./integrations.md) for the full rules and which surfaces
@@ -261,7 +261,7 @@ consult each hook.
 
 ### Outbound Reply Hook
 
-Modify or veto a reply after it's already been produced — past `answerFn` (or
+Modify or veto a reply after it's already been produced - past `answerFn` (or
 the built-in completion) and guardrails:
 
 ```typescript
@@ -274,9 +274,9 @@ the built-in completion) and guardrails:
 ```
 
 Return a string to replace the reply, or `null` to veto it (treated as an
-empty answer — nothing sent, and the channel pipeline never records an
+empty answer - nothing sent, and the channel pipeline never records an
 assistant turn for it; the user's own turn stays recorded either way). A
-throw sends the original reply instead. Non-streaming surfaces only — the
+throw sends the original reply instead. Non-streaming surfaces only - the
 channel pipeline and the widget/demo/OpenAI-compatible/MCP surfaces; a
 streaming reply has no final answer to transform. See
 [integrations.md](./integrations.md) for the full per-surface `channel`
@@ -284,8 +284,8 @@ identifiers.
 
 ### Logging
 
-Every library log call — startup banners, channel lifecycle, auth/session
-decisions, retrieval progress, the scheduler and flows engine — goes through
+Every library log call - startup banners, channel lifecycle, auth/session
+decisions, retrieval progress, the scheduler and flows engine - goes through
 an injectable, leveled logger instead of raw `console.*`:
 
 ```typescript
@@ -296,7 +296,7 @@ an injectable, leveled logger instead of raw `console.*`:
 ```
 
 Unset `logger`: a console-backed logger is used, writing every level via
-`console.error` (stderr) — never stdout, so hosting the MCP server on the
+`console.error` (stderr) - never stdout, so hosting the MCP server on the
 stdio transport (which reserves stdout for its JSON-RPC stream) stays clean
 without any extra configuration. `logLevel` (default `"info"`) controls that
 default logger; it's ignored once a custom `logger` is supplied, since a
@@ -304,11 +304,11 @@ custom implementation owns its own filtering.
 
 Per-request detail that would otherwise flood the log on every call (auth/session
 key checks, demo session creation) logs at `debug`, which the default logger
-suppresses — set `logLevel: "debug"` or a custom logger to see it.
+suppresses - set `logLevel: "debug"` or a custom logger to see it.
 Route factories and channels receive the resolved logger as `deps.logger`.
-Standalone module factories called directly by the host — `createWhatsAppChannel`,
+Standalone module factories called directly by the host - `createWhatsAppChannel`,
 `createPersonaResolver`, `createScheduler`, `createFlowEngine`, `createWhatsAppInboundHandler`,
-`createWhatsAppMessageRouter` — each take their own optional `logger`, since
+`createWhatsAppMessageRouter` - each take their own optional `logger`, since
 they may be constructed before `deps` exists; pass `deps.logger` in
 explicitly (from `customRoutes`, or a channel's own `start(deps)`) to route
 their output through the same logger as the rest of the server. See
@@ -338,7 +338,7 @@ Custom routes receive the same dependencies the built-in route factories use:
 ```
 
 `deps.db` is the ready libsql client the server opened for the vector store.
-Custom routes should use it rather than calling `createClient` again — the
+Custom routes should use it rather than calling `createClient` again - the
 process then holds one connection to the database instead of one per consumer.
 
 Constructing a `VectorStore` yourself follows the same rule: pass an existing
@@ -360,7 +360,7 @@ own connection; either way the client it ends up using is available as
 #### Async mounting
 
 `customRoutes` may be async, and `createServer` awaits it. Set-up the routes
-depend on — schema migrations, plugin registries, connecting to a transport —
+depend on - schema migrations, plugin registries, connecting to a transport -
 can therefore be done inline, and the app is only handed back once it has
 finished. There is no need for a readiness flag that handlers re-check on every
 request:
@@ -393,14 +393,14 @@ pipeline:
 }
 ```
 
-A channel is anything matching the `Channel` SPI — `{ name, start(deps), stop?() }`.
+A channel is anything matching the `Channel` SPI - `{ name, start(deps), stop?() }`.
 `createServer` starts every configured channel after routes (and
 `customRoutes`) are mounted, with the same `deps` custom routes receive
 (including `deps.senders`, below), so a channel can call
 `prepareChat`/`answerFn`, share `deps.db`, etc. A channel that throws on
 `start` is logged and skipped; the server and the other channels keep
 running. `start(deps)` also works when called directly, without
-`createServer`, for standalone use (a pairing script, a one-off worker) —
+`createServer`, for standalone use (a pairing script, a one-off worker) -
 just return once the transport is *initiated* (a socket opened), not once a
 slow handshake or pairing flow completes, since `createServer` awaits it
 before the app starts serving requests.
@@ -408,7 +408,7 @@ before the app starts serving requests.
 #### Shutdown
 
 `createServer` never installs its own process signal handlers or calls
-`process.exit` — a library doing that would race a host's own shutdown logic
+`process.exit` - a library doing that would race a host's own shutdown logic
 (draining in-flight requests, closing other resources) and override its exit
 code. Instead the returned app carries a `stopChannels()` disposer that stops
 every channel `createServer` started; wire it into whatever shutdown path the
@@ -455,16 +455,16 @@ customRoutes: (app, deps) => {
 };
 ```
 
-`sendText`/`sendVoice`/`sendMedia`/`sendReaction` all resolve to `false` —
-never throw — when the name is unregistered, the channel omits that
+`sendText`/`sendVoice`/`sendMedia`/`sendReaction` all resolve to `false` -
+never throw - when the name is unregistered, the channel omits that
 capability, or the underlying send fails. `sendReaction`'s `messageRef` is
 whatever the transport put on `ChannelMessage.messageRef` for the message
-being reacted to — opaque and transport-defined (the WhatsApp channel's is a
+being reacted to - opaque and transport-defined (the WhatsApp channel's is a
 Baileys message key).
 
-The full channel toolkit — the `Channel` type, the channel-agnostic reply
+The full channel toolkit - the `Channel` type, the channel-agnostic reply
 gates (allowlist, mute/unmute, rate limits, cross-session loop guard), and
-`createSenderRegistry` — also lives behind the `./channels` subpath for
+`createSenderRegistry` - also lives behind the `./channels` subpath for
 transports that want it without pulling in the rest of the core package:
 
 ```typescript
@@ -474,9 +474,9 @@ import { createSenderRegistry, decideChannelAction } from '@diegoaltoworks/chatt
 Three built-in transports dogfood this same SPI: WhatsApp behind `./whatsapp`
 (see [WhatsApp Channel](./channels.md) for setup, pairing, and its ToS
 warning), Telegram behind `./telegram` (see
-[Telegram Channel](./telegram.md) — official Bot API, no extra dependency,
+[Telegram Channel](./telegram.md) - official Bot API, no extra dependency,
 configured from a bot token alone), and Matrix behind `./matrix` (see
-[Matrix Channel](./matrix.md) — client-server API, no extra dependency,
+[Matrix Channel](./matrix.md) - client-server API, no extra dependency,
 unencrypted rooms only). [Building a Channel](./build-a-channel.md) is the
 guide for adding another.
 
@@ -496,7 +496,7 @@ Set a secret for signing/verifying JWT-based API keys:
 
 `auth.secret` takes precedence over the `CHATTER_SECRET` env var when both are
 set. Either way the secret must be at least 16 characters (32+ recommended,
-as above) — a shorter or empty value throws at startup instead of silently
+as above) - a shorter or empty value throws at startup instead of silently
 signing with a weak key.
 
 #### Clerk (Optional, for Private Chat)
@@ -747,7 +747,7 @@ bun run start
 2. Server authenticates request (API key or JWT)
 3. Server embeds the query using OpenAI
 4. Relevant knowledge chunks are retrieved from Turso
-5. System prompt + context + user message → the configured model
+5. System prompt + context + user message -> the configured model
 6. Response is streamed back to the client
 7. Client displays the message in real-time
 

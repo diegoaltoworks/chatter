@@ -3,7 +3,7 @@
 ## Supported Versions
 
 Chatter is pre-1.0 (currently 0.x). Only the latest published version receives
-security fixes — there is no maintained back-branch.
+security fixes - there is no maintained back-branch.
 
 ## Security Scanning
 
@@ -20,7 +20,7 @@ security fixes — there is no maintained back-branch.
    [Packaging](docs/packaging.md)).
 
 CodeQL, TruffleHog secret scanning, and a dedicated dependency-review action
-are not currently wired up in this repo — don't assume they're catching
+are not currently wired up in this repo - don't assume they're catching
 anything until a workflow exists to prove it.
 
 ### Manual Security Checks

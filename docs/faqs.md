@@ -369,7 +369,7 @@ Bottlenecks are usually:
 
 **Cost scaling**:
 - **OpenAI API**: ~$0.03 per conversation (GPT-4o-mini)
-- **Turso**: Free tier → $5/mo → scales with usage
+- **Turso**: Free tier -> $5/mo -> scales with usage
 - **Hosting**: Varies by platform (many offer generous free tiers)
 
 **Cost optimization**:

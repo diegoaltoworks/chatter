@@ -61,7 +61,7 @@ Chatter requires a few external services to function. This guide walks through w
 **Setup**:
 1. Sign up: https://clerk.com
 2. Create application in Clerk Dashboard
-3. Get credentials from Dashboard → API Keys
+3. Get credentials from Dashboard -> API Keys
 
 **Environment Variables**:
 - `CLERK_PUBLISHABLE_KEY` - Frontend publishable key (starts with `pk_...`)
@@ -113,13 +113,13 @@ That floor isn't arbitrary: `jose` (the JWT/JWK dependency behind API keys and
 JWT auth) ships ESM-only, with no CJS build of its own. Chatter's own CJS
 entry points (`require("@diegoaltoworks/chatter")`, the `create-apikey` CLI)
 externalise `jose` and `require()` it directly, which only works on a Node
-whose `require(esm)` support is unflagged by default — true since Node 22.12
+whose `require(esm)` support is unflagged by default - true since Node 22.12
 (see the version check in `scripts/verify-node.mjs`). `engines.node:
 ">=24.0.0"` sits comfortably above that line; pinned to an older Node, the
 CJS entry points fail to load `jose`.
 
-Node needs one extra package — [`@hono/node-server`](https://github.com/honojs/node-server),
-an optional peer dependency — for both serving the app and serving static
+Node needs one extra package - [`@hono/node-server`](https://github.com/honojs/node-server),
+an optional peer dependency - for both serving the app and serving static
 files:
 
 ```bash
@@ -133,7 +133,7 @@ serve({ port: 8181, fetch: app.fetch });
 
 Chatter picks the matching static-file adapter from the runtime it finds itself
 in, so no configuration is needed. A Node server started with
-`features: { headless: true }` serves no files and needs no adapter — in that
+`features: { headless: true }` serves no files and needs no adapter - in that
 mode `@hono/node-server` is only required for `serve()` itself.
 
 ### Platform Requirements

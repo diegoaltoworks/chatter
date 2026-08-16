@@ -1,6 +1,6 @@
 # Usage Metering
 
-Daily spend guards for anything that costs money per call — image generation,
+Daily spend guards for anything that costs money per call - image generation,
 speech synthesis, a premium model tier. Published as a subpath so the core
 install is unaffected by it:
 
@@ -22,8 +22,8 @@ Every metered resource gets two ceilings: how much one caller may spend per
 day, and how much everyone together may spend per day. A limiter enforces both
 in a single call.
 
-Build the store on `deps.db` — the libsql handle chatter already opened for
-retrieval, passed to `customRoutes` and channels — rather than opening a second
+Build the store on `deps.db` - the libsql handle chatter already opened for
+retrieval, passed to `customRoutes` and channels - rather than opening a second
 connection of your own:
 
 ```ts
@@ -55,7 +55,7 @@ await createServer({
 });
 ```
 
-Outside a chatter server, any `@libsql/client` `Client` works — construct one
+Outside a chatter server, any `@libsql/client` `Client` works - construct one
 with `createClient` and pass it in the same way.
 
 The key is whatever identifies a caller on your surface: a channel sender id, a
@@ -69,7 +69,7 @@ features compete for a single global counter.
 ### Reserve once, before you spend
 
 `checkAndReserve` increments permanently and unconditionally. There is no
-release path, by design — a reservation that could be released is a
+release path, by design - a reservation that could be released is a
 read-then-write, and a read-then-write across instances races.
 
 The consequences are worth stating plainly:
@@ -81,7 +81,7 @@ The consequences are worth stating plainly:
   key's units, and a call blocked by the *global* cap has already consumed one
   of the caller's own units on the way there.
 - **Check your cache first.** If a result can be served without paying for it,
-  a cache hit should never reach the limiter — otherwise free answers cost
+  a cache hit should never reach the limiter - otherwise free answers cost
   quota.
 
 ### Why per-key increments first
@@ -99,7 +99,7 @@ is what makes the ordering worth relying on.
 
 `createTursoUsageStore(client, tableName)` is the shipped binding. It creates
 its table idempotently on first use (once per client *and* table), then counts
-with a single atomic `INSERT ... ON CONFLICT ... RETURNING` statement — so
+with a single atomic `INSERT ... ON CONFLICT ... RETURNING` statement - so
 concurrent instances each receive a distinct number and the cap holds across a
 multi-instance deployment. Table names are interpolated into SQL and are
 therefore restricted to plain identifiers; anything else throws at construction
@@ -109,7 +109,7 @@ Counter state lives in the database rather than process memory precisely
 because deployments run more than one instance, and a restart must not reset
 anyone's daily spend.
 
-Any other backing store works too — `DailyLimitsStore` is a structural
+Any other backing store works too - `DailyLimitsStore` is a structural
 interface with one method:
 
 ```ts
@@ -135,11 +135,11 @@ includes whitespace-only, which is the dangerous case: `Number(" ")` is `0`, so
 a stray space in a `.env` line would otherwise read as a cap of zero and switch
 the feature off entirely.
 
-This matters more than it looks in the other direction too — an unguarded
+This matters more than it looks in the other direction too - an unguarded
 `Number(...)` yields `NaN`, which compares false against every count and would
 silently disable the cap. `createDailyLimiter` does not validate its config, so
 caps must be finite non-negative integers by the time they reach it;
 `pickDailyLimit` is the supported way to get there.
 
-A cap of `0` is honoured as zero — it blocks the very first call, which is the
+A cap of `0` is honoured as zero - it blocks the very first call, which is the
 usual way to switch a paid feature off deliberately.

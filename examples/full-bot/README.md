@@ -3,7 +3,7 @@
 A complete, config-driven wiring of chatter's server with every optional
 seam this sprint added: the WhatsApp channel, a persona registry, reply
 gates (allowlist, DM/group rate limits), image requests, and a scheduler
-tick. No real credentials are included — every value comes from the
+tick. No real credentials are included - every value comes from the
 environment.
 
 > **ToS warning.** The WhatsApp channel is built on
@@ -44,16 +44,16 @@ bunx wa-pair
 ## What's wired up
 
 - **WhatsApp channel** (`createWhatsAppChannel` + `createWhatsAppInboundHandler`)
-  — every inbound message is gated (allowlist, DM/group rate limits, loop
+  - every inbound message is gated (allowlist, DM/group rate limits, loop
   guard) and answered through the same `prepareChat`/`answerFn` seam every
   other chatter surface uses.
-- **Personas** (`config/personas.json`) — a neutral, two-persona registry:
+- **Personas** (`config/personas.json`) - a neutral, two-persona registry:
   `assistant` (default) and `formal` (for a specific contact). Swap in your
   own contacts and prompt files; this module ships no content of its own.
-- **Images** — optional; inert unless `CLOUDINARY_*` and `OPENAI_API_KEY`
+- **Images** - optional; inert unless `CLOUDINARY_*` and `OPENAI_API_KEY`
   are set. A drawing request routes through `./images` with a daily
   per-sender cap.
-- **Scheduler** — starts ticking with an empty `fetchPending`; replace it
+- **Scheduler** - starts ticking with an empty `fetchPending`; replace it
   with your own store of due reminders/nudges (chatter stores no schedule
   content of its own).
 
