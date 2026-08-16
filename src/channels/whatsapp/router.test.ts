@@ -379,7 +379,7 @@ describe("createWhatsAppMessageRouter", () => {
     expect(fallbackCalls).toHaveLength(0);
   });
 
-  test("ctx carries the own-mention-stripped text and this session's own ids, resolved once", async () => {
+  test("ctx carries the own-mention-stripped text, this session's own ids, and the message ref, resolved once", async () => {
     let seenCtx: WaDetectorContext | undefined;
     const capture: ReplaceDetector = {
       name: "capture",
@@ -392,15 +392,92 @@ describe("createWhatsAppMessageRouter", () => {
     };
     const { router } = createRouter([capture]);
     const sock = fakeSocket();
+    const key = { remoteJid: "447700900123@s.whatsapp.net", fromMe: false, id: "ABC123" };
 
     await router(
       waEvent(sock, {
-        key: { remoteJid: "447700900123@s.whatsapp.net", fromMe: false },
+        key,
         message: { extendedTextMessage: { text: "@447700900000 hello", contextInfo: {} } },
       }),
     );
 
     expect(seenCtx?.text).toBe("hello");
     expect(seenCtx?.ownIds).toEqual(["447700900000@s.whatsapp.net"]);
+    expect(seenCtx?.msg.messageRef).toEqual(key);
+  });
+
+  test("ctx.react sends a Baileys reaction keyed to the current message", async () => {
+    let seenCtx: WaDetectorContext | undefined;
+    const capture: ReplaceDetector = {
+      name: "capture",
+      mode: "replace",
+      test: (ctx) => {
+        seenCtx = ctx;
+        return false;
+      },
+      handle: async () => {},
+    };
+    const { router } = createRouter([capture]);
+    const sock = fakeSocket();
+    const key = { remoteJid: "447700900123@s.whatsapp.net", fromMe: false, id: "ABC123" };
+
+    await router(waEvent(sock, { key }));
+
+    const ok = await seenCtx?.react("👍");
+
+    expect(ok).toBe(true);
+    expect(sock.sendMessage).toHaveBeenCalledWith("447700900123@s.whatsapp.net", {
+      react: { text: "👍", key },
+    });
+  });
+
+  test("ctx.react failures are caught, logged, and resolve false instead of throwing", async () => {
+    let seenCtx: WaDetectorContext | undefined;
+    const capture: ReplaceDetector = {
+      name: "capture",
+      mode: "replace",
+      test: (ctx) => {
+        seenCtx = ctx;
+        return false;
+      },
+      handle: async () => {},
+    };
+    const detectorErrors: Array<[string, unknown]> = [];
+    const registry: SessionIdentityRegistry = new Map();
+    const router = createWhatsAppMessageRouter({
+      registry,
+      detectors: [capture],
+      fallback: async () => {},
+      onDetectorError: (name, error) => detectorErrors.push([name, error]),
+    });
+    const sock = {
+      user: { id: "447700900000@s.whatsapp.net" },
+      sendMessage: mock(async () => {
+        throw new Error("socket closed");
+      }),
+    } as unknown as WASocket;
+
+    await router(waEvent(sock));
+    const ok = await seenCtx?.react("👍");
+
+    expect(ok).toBe(false);
+    expect(detectorErrors).toEqual([["react", expect.any(Error)]]);
+  });
+
+  test("a message from the bot's own session never reaches a detector, so it can never react either", async () => {
+    const reactCalls: string[] = [];
+    const detectors: MessageDetector[] = [
+      replaceDetector("reactor", true, (ctx) => {
+        void ctx.react("👍").then(() => reactCalls.push("reacted"));
+      }),
+    ];
+    const { router } = createRouter(detectors);
+    const sock = fakeSocket();
+
+    await router(waEvent(sock, { key: { remoteJid: "chat@g.us", fromMe: true } }));
+    await Promise.resolve();
+
+    expect(reactCalls).toEqual([]);
+    expect(sock.sendMessage).not.toHaveBeenCalled();
   });
 });

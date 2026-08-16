@@ -13,6 +13,7 @@ function fakeSenders(overrides: Partial<ChannelSenderRegistry> = {}): ChannelSen
     sendText: async () => true,
     sendVoice: async () => false,
     sendMedia: async () => false,
+    sendReaction: async () => false,
     ...overrides,
   };
 }

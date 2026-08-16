@@ -151,6 +151,31 @@ describe("API surface", () => {
     expect(sent).toEqual(["hi"]);
   });
 
+  test("sendReaction targets a ChannelMessage's messageRef through the sender registry", async () => {
+    const registry = createSenderRegistry();
+    const reactions: Array<{ chatId: string; messageRef: unknown; emoji: string }> = [];
+    registry.register("example", {
+      sendText: async () => {},
+      sendReaction: async (chatId: string, messageRef: unknown, emoji: string) => {
+        reactions.push({ chatId, messageRef, emoji });
+      },
+    });
+
+    const msg: ChannelMessage = {
+      chatId: "chat-1",
+      senderId: "user-1",
+      text: "hi",
+      isDirectMessage: true,
+      mentionsBot: false,
+      isReplyToBot: false,
+      fromBot: false,
+      messageRef: { id: "wamid.abc" },
+    };
+
+    expect(await registry.sendReaction("example", msg.chatId, msg.messageRef, "👍")).toBe(true);
+    expect(reactions).toEqual([{ chatId: "chat-1", messageRef: { id: "wamid.abc" }, emoji: "👍" }]);
+  });
+
   test("bucketsFor is consulted with {mode, sender?} and its answer reaches resolveBuckets", async () => {
     const seen: Array<{ mode: string; sender?: string }> = [];
     const bucketsFor: BucketsFor = async (ctx) => {

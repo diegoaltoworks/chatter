@@ -70,6 +70,17 @@ export interface WaDetectorContext {
    * unless the same mute inputs are also configured on the router.
    */
   action: ChannelAction;
+  /**
+   * Reacts to the current message. Bound to `msg.chatId` and the Baileys
+   * message key already resolved onto `ctx` — a detector never re-derives
+   * the targeting. Only ever reachable for a message that already cleared
+   * the loop guard and `allowedChats` (the router resolves `ctx`, and
+   * therefore this, only after those checks pass), so it can never fire
+   * where a reply would be gated on those grounds. A failed send is caught
+   * and logged (same path as a detector error) and resolves `false` —
+   * never throws, never affects the reply path.
+   */
+  react: (emoji: string) => Promise<boolean>;
 }
 
 interface DetectorBase {
@@ -207,6 +218,15 @@ export function createWhatsAppMessageRouter(
         senderId: msg.senderId,
         text: msg.text,
         action,
+        react: async (emoji) => {
+          try {
+            await sock.sendMessage(chatId, { react: { text: emoji, key: message.key } });
+            return true;
+          } catch (error) {
+            await logDetectorError(config, logger, "react", error);
+            return false;
+          }
+        },
       };
     } catch (error) {
       await logDetectorError(config, logger, "resolve", error);

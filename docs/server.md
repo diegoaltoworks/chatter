@@ -412,9 +412,12 @@ customRoutes: (app, deps) => {
 };
 ```
 
-`sendText`/`sendVoice`/`sendMedia` all resolve to `false` — never throw — when
-the name is unregistered, the channel omits that capability, or the
-underlying send fails.
+`sendText`/`sendVoice`/`sendMedia`/`sendReaction` all resolve to `false` —
+never throw — when the name is unregistered, the channel omits that
+capability, or the underlying send fails. `sendReaction`'s `messageRef` is
+whatever the transport put on `ChannelMessage.messageRef` for the message
+being reacted to — opaque and transport-defined (the WhatsApp channel's is a
+Baileys message key).
 
 The full channel toolkit — the `Channel` type, the channel-agnostic reply
 gates (allowlist, mute/unmute, rate limits, cross-session loop guard), and

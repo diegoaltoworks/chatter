@@ -28,8 +28,15 @@ A transport is responsible for exactly three things:
      mentionsBot: boolean;
      isReplyToBot: boolean;
      fromBot: boolean;
+     messageRef?: unknown; // opaque per-message handle, if the wire format has one
    }
    ```
+
+   `messageRef` is optional and transport-defined — set it when the wire
+   format has a stable handle for "this exact message" (WhatsApp's is the
+   Baileys message key) so a caller can later target it, e.g. via
+   `ChannelSenderRegistry.sendReaction(name, chatId, messageRef, emoji)`. A
+   transport with nothing to put there just omits it.
 
 2. **Delivering a reply through an `InboundReplySender`** — two methods, one
    for the eventual chat answer and one for a mute/unmute acknowledgement.
