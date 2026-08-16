@@ -702,10 +702,10 @@ Generate API keys using the CLI:
 
 ```bash
 # Create a key that expires in 1 year
-npx chatter create-apikey --name "mobile-app" --expires-in 365d
+npx chatter --name "mobile-app" --expires-in 365d
 
 # Create a short-lived test key
-npx chatter create-apikey --name "test" --expires-in 1h
+npx chatter --name "test" --expires-in 1h
 ```
 
 Output:

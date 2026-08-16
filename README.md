@@ -56,7 +56,7 @@ const app = await createServer({
 Bun.serve({ port: 8181, fetch: app.fetch });
 
 # Create API key for clients
-npx chatter create-apikey --name "my-app" --expires-in 365d
+npx chatter --name "my-app" --expires-in 365d
 ```
 
 **Requirements:** OpenAI API key, Turso database, and Bun >= 1.2 or Node >= 24. See [Requirements Guide](./docs/requirements.md) for setup instructions.
@@ -125,7 +125,7 @@ Complete guides for setup, deployment, and integration - see
 
 ### Archive
 
-- **[Sprint Review](./docs/sprint-review.md)** - A dated, point-in-time
+- **[Cross-Module Review](./docs/sprint-review.md)** - A dated, point-in-time
   audit (v0.40) of cross-module paths and security invariants, not a
   standing guarantee about the current codebase.
 

@@ -4,9 +4,8 @@
  * A flow is a directory-loaded contract: `flow.json` (id/name/description/
  * triggerKeywords/schema), `handler.ts` (an `execute` export) and
  * `instructions.md` (the prompt fed to parameter extraction), with an
- * optional `prefill.ts` (`prefillFromContext` export). This is the same
- * on-disk shape the reference implementation used — existing flow
- * directories load unchanged.
+ * optional `prefill.ts` (`prefillFromContext` export). A stable on-disk
+ * contract, versioned via `contractVersion` below.
  */
 
 export interface FlowSchemaProperty {

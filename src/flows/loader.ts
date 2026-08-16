@@ -3,8 +3,7 @@
  *
  * Discovers flow directories on disk and loads each one's contract, validated
  * against the versioned flow.json contract (see {@link CURRENT_FLOW_CONTRACT_VERSION}
- * in ./types). Kept compatible with the reference implementation's on-disk
- * shape, so existing flow directories load unchanged.
+ * in ./types).
  */
 
 import { existsSync, readdirSync, readFileSync } from "node:fs";
@@ -97,17 +96,16 @@ async function loadFlow(flowsDir: string, flowName: string, logger: Logger): Pro
   const instructionsPath = join(flowPath, "instructions.md");
 
   if (!existsSync(definitionPath)) {
-    throw new Error(`flow.json not found for ${flowName}`);
+    throw new Error(`flow.json not found for ${flowName} (looked for ${definitionPath})`);
   }
   if (!existsSync(instructionsPath)) {
-    throw new Error(`instructions.md not found for ${flowName}`);
+    throw new Error(`instructions.md not found for ${flowName} (looked for ${instructionsPath})`);
   }
 
   const handlerPath = findModulePath(flowPath, "handler");
   if (!handlerPath) {
-    throw new Error(
-      `no handler found for ${flowName} (looked for ${MODULE_EXTENSIONS.map((ext) => `handler.${ext}`).join(", ")})`,
-    );
+    const candidates = MODULE_EXTENSIONS.map((ext) => join(flowPath, `handler.${ext}`)).join(", ");
+    throw new Error(`no handler found for ${flowName} (looked for ${candidates})`);
   }
 
   const rawDefinition = JSON.parse(readFileSync(definitionPath, "utf-8"));

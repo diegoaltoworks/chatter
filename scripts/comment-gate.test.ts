@@ -5,6 +5,7 @@ import {
   emDashCount,
   type FileLookup,
   fileLineAnchorViolations,
+  referenceImplementationViolations,
   releaseVersionPinViolations,
   ticketIdViolations,
 } from "./comment-gate";
@@ -113,6 +114,45 @@ describe("ticketIdViolations", () => {
   });
 });
 
+describe("referenceImplementationViolations", () => {
+  test("a comment naming the reference implementation is a violation", () => {
+    const violations = referenceImplementationViolations(
+      "src/foo.ts",
+      "// lifted from the reference implementation",
+    );
+    expect(violations).toHaveLength(1);
+    expect(violations[0]?.line).toBe(1);
+  });
+
+  test("matching is case-insensitive", () => {
+    expect(
+      referenceImplementationViolations("src/foo.ts", "// The Reference Implementation did this"),
+    ).toHaveLength(1);
+  });
+
+  test("an allowlisted file:line is not a violation", () => {
+    expect(
+      referenceImplementationViolations(
+        "docs/foo.md",
+        "Never name the reference implementation.",
+        new Set(["docs/foo.md:1"]),
+      ),
+    ).toEqual([]);
+  });
+
+  test("code (not a comment) is ignored", () => {
+    expect(
+      referenceImplementationViolations("src/foo.ts", 'const s = "reference implementation";'),
+    ).toEqual([]);
+  });
+
+  test("unrelated text is not a violation", () => {
+    expect(referenceImplementationViolations("src/foo.ts", "// see the docs for details")).toEqual(
+      [],
+    );
+  });
+});
+
 /** Build artefacts and dependency trees this repo's own code never wrote. */
 function isGenerated(path: string): boolean {
   return path.includes("node_modules/") || path.includes("/dist/") || path.startsWith("dist/");
@@ -167,7 +207,7 @@ const currentVersion: string = JSON.parse(readFileSync(join(root, "package.json"
  * predates the mechanical check and may only shrink as files get touched
  * and cleaned up - lower it whenever a change removes some, never raise it.
  */
-const EM_DASH_BASELINE = 493;
+const EM_DASH_BASELINE = 490;
 
 describe("this repo's tracked source and docs", () => {
   test("there are files to check", () => {
@@ -191,6 +231,13 @@ describe("this repo's tracked source and docs", () => {
   test("no comment references a tracker ticket id", () => {
     const violations = trackedFiles.flatMap((file) =>
       ticketIdViolations(file, readFileSync(join(root, file), "utf8")),
+    );
+    expect(violations).toEqual([]);
+  });
+
+  test("no comment names the reference implementation", () => {
+    const violations = trackedFiles.flatMap((file) =>
+      referenceImplementationViolations(file, readFileSync(join(root, file), "utf8")),
     );
     expect(violations).toEqual([]);
   });

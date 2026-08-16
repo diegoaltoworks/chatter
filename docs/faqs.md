@@ -4,7 +4,7 @@
 
 ### Can I use this in production?
 
-Yes! Chatter is production-ready. The [chatter-demo](https://github.com/diegoaltoworks/chatter-demo) repository shows a complete production implementation with deployment examples.
+Yes. The [chatter-demo](https://github.com/diegoaltoworks/chatter-demo) repository shows a complete implementation with deployment examples.
 
 ### Do I need to modify the source code?
 
@@ -16,17 +16,10 @@ No. Chatter is designed to be configured, not modified. All customization happen
 
 ### How much does it cost to run?
 
-Typical monthly costs for a small-to-medium deployment:
-
-| Service | Cost |
-|---------|------|
-| OpenAI API | $5-50 (usage-based) |
-| Turso Database | Free or $5+ |
-| Clerk Auth | Free or $25+ |
-| Hosting | Free-$20 |
-| **Total** | **$5-100/month** |
-
-Main variables:
+Costs scale with usage - OpenAI API calls (embeddings and completions),
+Turso storage, and hosting are all metered or tiered by the provider you
+pick. Check each provider's current pricing page rather than a number here,
+since none of it is fixed by Chatter itself. Main variables:
 - Number of messages
 - Knowledge base size
 - Number of users
@@ -124,8 +117,8 @@ Chatter will chunk and embed the content intelligently.
 ### How big can my knowledge base be?
 
 **Technical limits**: No hard limits, but consider:
-- OpenAI embedding costs (~$0.10 per 1M tokens)
-- Turso storage limits (free tier: 1GB)
+- OpenAI embedding costs, which scale with knowledge base size (check OpenAI's current pricing)
+- Your Turso plan's storage limit
 - Startup time (more files = longer initial embedding)
 
 **Practical recommendation**: 100-1000 markdown files works well.
@@ -167,7 +160,7 @@ Public users only get `base/` + `public/` knowledge.
 Use the CLI tool:
 
 ```bash
-npx chatter create-apikey --name "my-app" --expires-in 365d
+npx chatter --name "my-app" --expires-in 365d
 ```
 
 Or programmatically:
@@ -353,14 +346,8 @@ defaults to `["*"]`:
 
 ### How many concurrent users can it handle?
 
-Depends on your hosting platform and configuration:
-
-**Typical numbers**:
-- **VPS (2 CPU, 4GB RAM)**: 50-100 concurrent users
-- **Cloud Run (auto-scaling)**: 1000+ concurrent users
-- **Fly.io (multiple regions)**: 500+ concurrent users
-
-Bottlenecks are usually:
+Depends on your hosting platform and configuration - benchmark your own
+deployment rather than trusting a number here. Bottlenecks are usually:
 1. OpenAI API rate limits
 2. Database connections
 3. Memory for embedding searches
@@ -376,16 +363,13 @@ Bottlenecks are usually:
 
 ### What about costs at scale?
 
-**Cost scaling**:
-- **OpenAI API**: ~$0.03 per conversation (GPT-4o-mini)
-- **Turso**: Free tier -> $5/mo -> scales with usage
-- **Hosting**: Varies by platform (many offer generous free tiers)
-
-**Cost optimization**:
-- Use GPT-4o-mini instead of GPT-4 (20x cheaper)
+Costs track OpenAI API usage, Turso usage, and hosting, all billed by their
+own providers - check current pricing there rather than a number here. To
+manage cost as usage grows:
+- Pick a smaller/cheaper completion model where quality allows
 - Implement response caching
-- Set appropriate rate limits
-- Monitor usage dashboards
+- Set appropriate rate limits (see [Usage Metering](./usage.md))
+- Monitor your OpenAI and Turso usage dashboards
 
 ## Development
 

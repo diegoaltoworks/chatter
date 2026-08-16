@@ -32,7 +32,7 @@ steps - is free to build around it.
 # 1. Run a Chatter server (see the repo README), then create an API key
 # (needs the same CHATTER_SECRET the server was started with):
 export CHATTER_SECRET="your-secret-key"
-bunx chatter create-apikey
+bunx chatter
 
 # 2. Run the graph:
 export CHATTER_URL="http://localhost:8181"

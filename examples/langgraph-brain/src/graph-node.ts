@@ -10,7 +10,7 @@
  * Usage:
  *   1. Run a Chatter server (see repo README) with the OpenAI-compatible
  *      endpoint enabled (the default) and an API key created via
- *      `bunx chatter create-apikey`.
+ *      `bunx chatter`.
  *   2. CHATTER_URL=http://localhost:8181 CHATTER_API_KEY=<key> \
  *        bun run src/graph-node.ts
  */

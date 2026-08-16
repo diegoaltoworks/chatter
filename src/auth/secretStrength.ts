@@ -7,7 +7,10 @@
 
 const MIN_SECRET_LENGTH = 16;
 
-export function assertStrongSecret(secret: string | undefined, label: string): void {
+export function assertStrongSecret(
+  secret: string | undefined,
+  label: string,
+): asserts secret is string {
   if (!secret) {
     throw new Error(`${label} is required and cannot be empty.`);
   }

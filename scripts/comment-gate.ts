@@ -1,9 +1,9 @@
 /**
  * Pure logic behind the comment-hygiene gate (`bun test scripts/comment-gate`).
  *
- * A comment that explains a non-obvious constraint is only as good as its
- * claims staying true. This turns four ways a comment silently goes stale
- * into mechanical checks:
+ * A comment is only as good as its claims staying true, and only as safe as
+ * what it leaks about how the code came to be. This turns five ways a
+ * comment goes bad into mechanical checks:
  *
  *  - An em-dash anywhere in tracked source/docs. Banned by the project style
  *    rule (see CONTRIBUTING.md), but the existing count predates the rule
@@ -22,6 +22,11 @@
  *    ticket reference baked into a comment rots the moment the ticket
  *    closes or gets renumbered, and this repo's own ticket ids must never
  *    appear in committed source (see process.md).
+ *  - A source-code comment naming where lifted code came from, using the
+ *    term process.md sanctions for that provenance. Fine in prose describing
+ *    the naming rule itself (see docs/ARCHITECTURE.md's invariant 10); a
+ *    code comment stating it is development history that belongs in the PR
+ *    description that lifted the code, not a comment that outlives it.
  *
  * comment-gate.test.ts feeds these every `.ts` file (including `*.test.ts`
  * - a stray ticket id or stale anchor in a test file is just as much a
@@ -210,6 +215,48 @@ export function ticketIdViolations(
         file: relativePath,
         line: index + 1,
         reason: `comment references ticket id "${match[0]}" - tracker state belongs in the PR/commit that closes it, not in a comment that outlives the ticket`,
+      });
+    }
+  });
+  return violations;
+}
+
+const REFERENCE_IMPLEMENTATION = /\breference implementation\b/i;
+
+/**
+ * `file:line` locations pre-approved to spell out the naming rule this check
+ * enforces (see process.md's naming gotcha) - stating the rule is not a leak
+ * of what it forbids.
+ */
+export const REFERENCE_IMPLEMENTATION_ALLOWLIST: ReadonlySet<string> = new Set([
+  "docs/ARCHITECTURE.md:99",
+  "docs/ARCHITECTURE.md:106",
+]);
+
+/**
+ * A comment naming where lifted code came from, using the term process.md
+ * sanctions for that (this docstring avoids spelling it out so this file
+ * doesn't flag itself). Fine in prose describing the naming rule itself, but
+ * a code comment stating that provenance is development history, not
+ * something a reader needs to understand the current code; it belongs in
+ * the PR description that lifted the code, not a comment that outlives it.
+ */
+export function referenceImplementationViolations(
+  relativePath: string,
+  contents: string,
+  allowlist: ReadonlySet<string> = REFERENCE_IMPLEMENTATION_ALLOWLIST,
+): CommentGateViolation[] {
+  const isMarkdown = relativePath.endsWith(".md");
+
+  const violations: CommentGateViolation[] = [];
+  contents.split("\n").forEach((text, index) => {
+    const comment = commentPortion(text, isMarkdown);
+    if (REFERENCE_IMPLEMENTATION.test(comment) && !allowlist.has(`${relativePath}:${index + 1}`)) {
+      violations.push({
+        file: relativePath,
+        line: index + 1,
+        reason:
+          'comment names "the reference implementation" - provenance belongs in the PR description that lifted the code, not a comment that outlives it',
       });
     }
   });

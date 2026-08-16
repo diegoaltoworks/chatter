@@ -15,7 +15,7 @@ import { resolveLogger } from "./core/logger";
 import { lastUserMessage } from "./core/messages";
 import { prepareChat } from "./core/pipeline";
 import { DEFAULT_PROMPTS_DIR, PromptLoader } from "./core/prompts";
-import type { Retriever } from "./core/retrieval";
+import { DATABASE_CONFIG_REQUIRED_MESSAGE, type Retriever } from "./core/retrieval";
 import { getOrGenerateConversationId } from "./mcp-server/conversation-id";
 import { calculateCost } from "./mcp-server/cost-tracker";
 import { createLogger } from "./mcp-server/logger";
@@ -112,11 +112,7 @@ export async function createMCPServer(config: MCPServerOptions) {
     store = config.retriever;
   } else {
     if (!config.database) {
-      throw new Error(
-        "config.database is required unless config.retriever is set - Chatter's default " +
-          "knowledge store (VectorStore) needs a Turso/libsql connection. Set config.database, " +
-          "or supply config.retriever to use your own retrieval backend instead.",
-      );
+      throw new Error(DATABASE_CONFIG_REQUIRED_MESSAGE);
     }
     const { DEFAULT_KNOWLEDGE_DIR, VectorStore, createOpenAIEmbedder, openLibsqlClient } =
       await import("./core/retrieval");

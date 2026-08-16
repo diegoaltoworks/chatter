@@ -19,7 +19,7 @@ none, as here).
 2. Create an API key:
 
    ```bash
-   bunx chatter create-apikey
+   bunx chatter
    ```
 
 3. Edit `index.html` and set `CHATTER_URL` and `CHATTER_API_KEY`.

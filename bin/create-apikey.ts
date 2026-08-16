@@ -2,64 +2,63 @@
  * CLI tool for creating Chatter API keys
  *
  * Usage:
- *   npx chatter create-apikey --name "my-key" --expires-in 365d
+ *   npx chatter --name "my-key" --expires-in 365d
  *   bun run bin/create-apikey.ts --name "test" --expires-in 1y
+ *
+ * `chatter` is this single-purpose binary (see package.json's `bin` map),
+ * not a multi-command CLI - there is no `create-apikey` subcommand to type.
+ *
+ * Argument parsing is pure and unit-tested separately - see
+ * create-apikey-args.ts and its test file.
  */
 
 import { ApiKeyManager } from "../src/auth/apikeys";
 import { assertStrongSecret } from "../src/auth/secretStrength";
+import { parseArgs } from "./create-apikey-args";
 
-async function main() {
-  // Parse command line arguments
-  const args = process.argv.slice(2);
-  const options: { name?: string; expiresIn?: string } = {};
-
-  for (let i = 0; i < args.length; i++) {
-    if (args[i] === "--name" && args[i + 1]) {
-      options.name = args[i + 1];
-      i++;
-    } else if (args[i] === "--expires-in" && args[i + 1]) {
-      options.expiresIn = args[i + 1];
-      i++;
-    } else if (args[i] === "--help" || args[i] === "-h") {
-      console.log(`
+const HELP_TEXT = `
 Chatter API Key Generator
 
 Usage:
-  npx chatter create-apikey [options]
+  npx chatter [options]
 
 Options:
   --name <name>          Name/label for the API key (default: "api-key")
   --expires-in <time>    Expiration time (default: "365d")
                          Formats: s=seconds, m=minutes, h=hours, d=days, M=months, y=years
                          Examples: 30d, 12h, 1y, 6M
+  --help, -h             Show this help.
 
 Environment:
   CHATTER_SECRET         Required. Secret key for signing JWT tokens
 
 Examples:
-  npx chatter create-apikey --name "mobile-app" --expires-in 365d
-  npx chatter create-apikey --name "test-key" --expires-in 1h
-      `);
-      process.exit(0);
-    }
-  }
+  npx chatter --name "mobile-app" --expires-in 365d
+  npx chatter --name "test-key" --expires-in 1h
+`;
 
-  // Check for CHATTER_SECRET
-  const secret = process.env.CHATTER_SECRET;
-  if (!secret) {
-    console.error("❌ Error: CHATTER_SECRET environment variable is not set");
-    console.error("\n   Please set it before running this command:");
-    console.error("   export CHATTER_SECRET=your-secret-key-here");
-    console.error("\n   Or prefix the command:");
-    console.error("   CHATTER_SECRET=your-secret npx chatter create-apikey\n");
+async function main() {
+  const parsed = parseArgs(process.argv.slice(2));
+
+  if (!parsed.ok) {
+    console.error(`❌ ${parsed.error}`);
+    console.log(HELP_TEXT);
     process.exit(1);
   }
+  if (parsed.help) {
+    console.log(HELP_TEXT);
+    process.exit(0);
+  }
 
+  const secret = process.env.CHATTER_SECRET;
   try {
     assertStrongSecret(secret, "CHATTER_SECRET");
   } catch (error) {
     console.error(`❌ ${(error as Error).message}`);
+    console.error("\n   Set it before running this command:");
+    console.error("   export CHATTER_SECRET=your-secret-key-here");
+    console.error("\n   Or prefix the command:");
+    console.error("   CHATTER_SECRET=your-secret npx chatter\n");
     process.exit(1);
   }
 
@@ -67,8 +66,8 @@ Examples:
   const manager = new ApiKeyManager(secret);
 
   // Default values
-  const keyName = options.name || "api-key";
-  const expiresIn = options.expiresIn || "365d";
+  const keyName = parsed.name || "api-key";
+  const expiresIn = parsed.expiresIn || "365d";
 
   try {
     // Create the API key
@@ -95,12 +94,12 @@ Examples:
     console.log(`\n   API Key:\n   ${apiKey}\n`);
     console.log("   Usage:");
     console.log("   curl -X POST https://your-bot.example.com/api/public/chat \\");
-    console.log(`     -H "x-api-key: ${apiKey.slice(0, 50)}..." \\`);
+    console.log(`     -H "x-api-key: ${apiKey}" \\`);
     console.log('     -H "Content-Type: application/json" \\');
     console.log('     -d \'{"message": "Hello"}\'');
     console.log("");
   } catch (error) {
-    console.error("❌ Error creating API key:", error);
+    console.error(`❌ Error creating API key: ${(error as Error).message}`);
     process.exit(1);
   }
 }

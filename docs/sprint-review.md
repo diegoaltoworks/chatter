@@ -1,9 +1,9 @@
-# Sprint review: brain + sockets (v0.40)
+# Cross-module review: brain + sockets (v0.40)
 
-A read-mostly audit of the "brain + sockets" sprint (pipeline hooks, the
-shared db handle, async `customRoutes`, the channel SPI, the WhatsApp
+A read-mostly audit of the "brain + sockets" body of work (pipeline hooks,
+the shared db handle, async `customRoutes`, the channel SPI, the WhatsApp
 channel, `./personas`, `./flows`, `./images`, `./usage`, the scheduler, the
-shortener, and the proveout example), as of the release this ticket shipped
+shortener, and the proveout example), as of the release this audit shipped
 in. Scope: confirm cross-module paths and security invariants are actually
 exercised end to end, not just covered by per-module unit tests, and file any
 gaps found. This is a point-in-time snapshot - re-audit rather than trust it
@@ -23,7 +23,7 @@ once the modules it names have moved on.
   reserve-once are directly and thoroughly unit tested. The limiter is
   currently wired into production code only through the WhatsApp image
   handler - no core HTTP route calls it yet, which is expected since nothing
-  in this sprint required it there.
+  so far requires it there.
 - **Flows contract.** A fixture-based test loads real flow directories
   (`flow.json` + `handler.ts` + `instructions.md`) through the full
   loader -> registry -> intent -> params -> manager chain, including a
@@ -79,6 +79,6 @@ wasn't asserted at the cross-module boundary):
 
 ## Deferred
 
-Nothing rose to the level of a new backlog ticket - no bugs or invariant
+Nothing rose to the level of a new tracked follow-up - no bugs or invariant
 violations were found during this review, only test-coverage gaps, which are
 closed above.

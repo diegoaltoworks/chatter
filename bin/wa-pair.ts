@@ -42,16 +42,9 @@ import {
   runPairing,
 } from "../src/channels/whatsapp/pairing";
 import { resolveQrGenerate } from "../src/channels/whatsapp/qr";
+import { parseArgs } from "./wa-pair-args";
 
-const args = process.argv.slice(2);
-
-function flagValue(name: string): string | undefined {
-  const index = args.indexOf(name);
-  return index >= 0 ? args[index + 1] : undefined;
-}
-
-if (args.includes("--help") || args.includes("-h")) {
-  console.log(`
+const HELP_TEXT = `
 WhatsApp pairing CLI
 
 Usage:
@@ -65,22 +58,26 @@ Options:
   --code <phoneNumber>    Pair via pairing code instead of QR (digits only,
                            e.g. 447700900123). For headless setups.
   --reset                 Wipe the stored session first, then pair fresh.
-  --help, -h               Show this help.
+  --help, -h              Show this help.
 
 Environment:
-  TURSO_URL, TURSO_AUTH_TOKEN   Required. The database auth state is stored in.
+  TURSO_URL, TURSO_AUTH_TOKEN   Required. The database the auth state is stored in.
   WA_SESSION_SECRET             Required. Encrypts the stored session at rest.
-`);
+`;
+
+const parsed = parseArgs(process.argv.slice(2));
+
+if (!parsed.ok) {
+  console.error(`❌ ${parsed.error}`);
+  console.log(HELP_TEXT);
+  process.exit(1);
+}
+if (parsed.help) {
+  console.log(HELP_TEXT);
   process.exit(0);
 }
 
-const sessionId = args.find((a, i) => !a.startsWith("--") && args[i - 1] !== "--code") ?? "default";
-if (args.includes("--code") && !flagValue("--code")) {
-  console.error("❌ --code requires a phone number, e.g. --code 447700900123");
-  process.exit(1);
-}
-const phoneNumber = flagValue("--code")?.replace(/[^0-9]/g, "");
-const reset = args.includes("--reset");
+const { sessionId, phoneNumber, reset } = parsed;
 
 const sessionSecret = process.env.WA_SESSION_SECRET;
 try {
@@ -93,10 +90,14 @@ if (!process.env.TURSO_URL) {
   console.error("❌ TURSO_URL is required.");
   process.exit(1);
 }
+if (!process.env.TURSO_AUTH_TOKEN) {
+  console.error("❌ TURSO_AUTH_TOKEN is required.");
+  process.exit(1);
+}
 
 const db = createClient({
   url: process.env.TURSO_URL,
-  authToken: process.env.TURSO_AUTH_TOKEN || "",
+  authToken: process.env.TURSO_AUTH_TOKEN,
 });
 
 // A dying socket can hand back several QR refreshes before it settles; print
@@ -246,6 +247,6 @@ async function start(): Promise<void> {
 }
 
 start().catch((error) => {
-  console.error("❌ Unexpected error:", error);
+  console.error(`❌ Unexpected error: ${(error as Error).message}`);
   process.exit(1);
 });
