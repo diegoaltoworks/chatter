@@ -8,16 +8,20 @@
 
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { join, resolve } from "node:path";
+import { createConsoleLogger, type Logger } from "../core/logger";
 import type { FlowDefinition, FlowHandler, FlowPrefill, LoadedFlow } from "./types";
 
 const SKIPPED_DIR_NAMES = new Set(["lib", "tests", "registry"]);
 
 /** Loads every flow directory under `flowsDir`. A flow that fails to load is skipped, not fatal to the rest. */
-export async function loadFlowsFromDirectory(flowsDir: string): Promise<Map<string, LoadedFlow>> {
+export async function loadFlowsFromDirectory(
+  flowsDir: string,
+  logger: Logger = createConsoleLogger(),
+): Promise<Map<string, LoadedFlow>> {
   const flows = new Map<string, LoadedFlow>();
 
   if (!existsSync(flowsDir)) {
-    console.warn(`[flows] directory does not exist: ${flowsDir}`);
+    logger.warn(`[flows] directory does not exist: ${flowsDir}`);
     return flows;
   }
 
@@ -28,9 +32,9 @@ export async function loadFlowsFromDirectory(flowsDir: string): Promise<Map<stri
 
   for (const flowName of flowDirs) {
     try {
-      flows.set(flowName, await loadFlow(flowsDir, flowName));
+      flows.set(flowName, await loadFlow(flowsDir, flowName, logger));
     } catch (error) {
-      console.warn(
+      logger.warn(
         `[flows] failed to load "${flowName}": ${error instanceof Error ? error.message : String(error)}`,
       );
     }
@@ -39,7 +43,7 @@ export async function loadFlowsFromDirectory(flowsDir: string): Promise<Map<stri
   return flows;
 }
 
-async function loadFlow(flowsDir: string, flowName: string): Promise<LoadedFlow> {
+async function loadFlow(flowsDir: string, flowName: string, logger: Logger): Promise<LoadedFlow> {
   // Resolve to an absolute path: dynamic import() treats a relative path like
   // "config/flows/x/handler.ts" as a bare module specifier (a package name),
   // which fails at runtime in bundled deployments even when existsSync passes.
@@ -83,9 +87,7 @@ async function loadFlow(flowsDir: string, flowName: string): Promise<LoadedFlow>
     if (typeof prefillModule.prefillFromContext === "function") {
       prefill = prefillModule.prefillFromContext as FlowPrefill;
     } else {
-      console.warn(
-        `[flows] "${flowName}" prefill.ts does not export a prefillFromContext function`,
-      );
+      logger.warn(`[flows] "${flowName}" prefill.ts does not export a prefillFromContext function`);
     }
   }
 

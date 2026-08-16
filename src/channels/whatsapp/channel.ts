@@ -19,6 +19,7 @@
 import type { Client } from "@libsql/client";
 import type { WAMessage, WASocket } from "@whiskeysockets/baileys";
 import { assertStrongSecret } from "../../auth/secretStrength";
+import { createConsoleLogger, type Logger } from "../../core/logger";
 import type { Channel } from "../index";
 import type { ChannelSender } from "../senders";
 import type { AuthStateRuntime } from "./authState";
@@ -69,6 +70,8 @@ export interface WhatsAppChannelConfig {
   staleMs?: number;
   heartbeatMs?: number;
   waitMs?: number;
+  /** Logger for connection/lease lifecycle events. Default: a console logger writing to stderr. */
+  logger?: Logger;
 }
 
 /** A live, leased session: what `stop()` (or losing the lease) must tear down. */
@@ -117,6 +120,7 @@ export interface LeaseGatedConnectDeps {
   heartbeatMs?: number;
   waitMs?: number;
   schedule?: (fn: () => void, ms: number) => void;
+  logger?: Logger;
 }
 
 /**
@@ -138,6 +142,7 @@ export async function acquireSessionLease(
   const heartbeatMs = deps.heartbeatMs ?? LEASE_HEARTBEAT_MS;
   const waitMs = deps.waitMs ?? LEASE_WAIT_MS;
   const schedule = deps.schedule ?? ((fn, ms) => void setTimeout(fn, ms));
+  const logger = deps.logger ?? createConsoleLogger();
 
   if (isStopped()) return;
 
@@ -145,7 +150,7 @@ export async function acquireSessionLease(
     schedule(
       () =>
         void acquireSessionLease(sessionId, deps).catch((error) =>
-          console.error(`WhatsApp[${sessionId}]: lease re-check failed:`, error),
+          logger.error(`WhatsApp[${sessionId}]: lease re-check failed:`, error),
         ),
       waitMs,
     );
@@ -155,12 +160,12 @@ export async function acquireSessionLease(
   try {
     acquired = await leaseStore.tryAcquire(sessionId, instanceId, now(), staleMs);
   } catch (error) {
-    console.warn(`WhatsApp[${sessionId}]: lease acquire failed, retrying:`, error);
+    logger.warn(`WhatsApp[${sessionId}]: lease acquire failed, retrying:`, error);
     retry();
     return;
   }
   if (!acquired) {
-    console.warn(`WhatsApp[${sessionId}]: lease held by another instance, re-checking later`);
+    logger.warn(`WhatsApp[${sessionId}]: lease held by another instance, re-checking later`);
     retry();
     return;
   }
@@ -170,10 +175,10 @@ export async function acquireSessionLease(
       .tryAcquire(sessionId, instanceId, now(), staleMs)
       .then((stillHeld) => {
         if (stillHeld || isStopped()) return;
-        console.error(`WhatsApp[${sessionId}]: lost the lease to another instance — disconnecting`);
+        logger.error(`WhatsApp[${sessionId}]: lost the lease to another instance — disconnecting`);
         void loseSession(sessionId, sessions).then(retry);
       })
-      .catch((error) => console.warn(`WhatsApp[${sessionId}]: lease heartbeat failed:`, error));
+      .catch((error) => logger.warn(`WhatsApp[${sessionId}]: lease heartbeat failed:`, error));
   }, heartbeatMs);
   if (typeof heartbeat === "object" && "unref" in heartbeat) heartbeat.unref();
 
@@ -186,7 +191,7 @@ export async function acquireSessionLease(
   try {
     await connect(sessionId);
   } catch (error) {
-    console.error(`WhatsApp[${sessionId}]: connect failed right after acquiring the lease:`, error);
+    logger.error(`WhatsApp[${sessionId}]: connect failed right after acquiring the lease:`, error);
     await loseSession(sessionId, sessions);
     retry();
   }
@@ -219,6 +224,12 @@ export function createWhatsAppChannel(config: WhatsAppChannelConfig): Channel {
   return {
     name: channelName,
     async start(deps) {
+      // `config.logger` wins when set — otherwise fall back to the host's
+      // resolved `deps.logger` (same precedence as `config.answerFn ??
+      // deps.config.answerFn` elsewhere) so a `ChatterConfig.logger` reaches
+      // this channel's connection/lease lifecycle without every caller
+      // having to also pass it into `createWhatsAppChannel` directly.
+      const log = config.logger ?? deps.logger ?? createConsoleLogger();
       const db: Client = deps.db;
       const leaseStore = createTursoWaLeaseStore(db);
       senders = deps.senders;
@@ -256,7 +267,7 @@ export function createWhatsAppChannel(config: WhatsAppChannelConfig): Channel {
         );
 
         if (!state.creds.registered) {
-          console.warn(
+          log.warn(
             `WhatsApp[${sessionId}]: no paired session found — pair it first (see docs/channels.md). Re-checking in 60s.`,
           );
           schedule(() => void connect(sessionId).catch(() => undefined), 60_000);
@@ -290,7 +301,7 @@ export function createWhatsAppChannel(config: WhatsAppChannelConfig): Channel {
           "creds.update",
           () =>
             void saveCreds().catch((error) =>
-              console.warn(`WhatsApp[${sessionId}]: creds save failed:`, error),
+              log.warn(`WhatsApp[${sessionId}]: creds save failed:`, error),
             ),
         );
 
@@ -298,7 +309,7 @@ export function createWhatsAppChannel(config: WhatsAppChannelConfig): Channel {
           const { connection, lastDisconnect } = update;
           if (connection === "open") {
             failureCounts.set(sessionId, 0);
-            console.log(`WhatsApp[${sessionId}]: connected as ${sock.user?.id ?? "unknown"}`);
+            log.info(`WhatsApp[${sessionId}]: connected as ${sock.user?.id ?? "unknown"}`);
             const senderName = senderNameFor(channelName, sessionId);
             const sender: ChannelSender = {
               sendText: async (chatId, text) => {
@@ -317,7 +328,7 @@ export function createWhatsAppChannel(config: WhatsAppChannelConfig): Channel {
             const statusCode = (lastDisconnect?.error as { output?: { statusCode?: number } })
               ?.output?.statusCode;
             if (statusCode === baileys.DisconnectReason.loggedOut) {
-              console.error(
+              log.error(
                 `WhatsApp[${sessionId}]: session logged out — re-pair to reconnect (see docs/channels.md).`,
               );
               // Dead session: stop renewing and free the lease.
@@ -332,13 +343,13 @@ export function createWhatsAppChannel(config: WhatsAppChannelConfig): Channel {
             if (!stopped && sessions.has(sessionId)) {
               const delay = reconnectDelayMs(failureCounts.get(sessionId) ?? 0);
               failureCounts.set(sessionId, (failureCounts.get(sessionId) ?? 0) + 1);
-              console.warn(
+              log.warn(
                 `WhatsApp[${sessionId}]: connection closed (${statusCode ?? "?"}), reconnecting in ${Math.round(delay / 1000)}s...`,
               );
               schedule(
                 () =>
                   void connect(sessionId).catch((error) =>
-                    console.error(`WhatsApp[${sessionId}]: reconnect failed:`, error),
+                    log.error(`WhatsApp[${sessionId}]: reconnect failed:`, error),
                   ),
                 delay,
               );
@@ -353,7 +364,7 @@ export function createWhatsAppChannel(config: WhatsAppChannelConfig): Channel {
               try {
                 await config.onMessage?.({ sessionId, sock, message });
               } catch (error) {
-                console.warn(`WhatsApp[${sessionId}]: onMessage handler failed:`, error);
+                log.warn(`WhatsApp[${sessionId}]: onMessage handler failed:`, error);
               }
             }
           });
@@ -372,7 +383,8 @@ export function createWhatsAppChannel(config: WhatsAppChannelConfig): Channel {
           heartbeatMs,
           waitMs,
           schedule,
-        }).catch((error) => console.error(`WhatsApp[${sessionId}]: failed to start:`, error));
+          logger: log,
+        }).catch((error) => log.error(`WhatsApp[${sessionId}]: failed to start:`, error));
       }
     },
     async stop() {

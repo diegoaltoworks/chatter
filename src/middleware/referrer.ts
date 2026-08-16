@@ -4,6 +4,7 @@
  */
 
 import type { Context, Next } from "hono";
+import { createConsoleLogger, type Logger } from "../core/logger";
 import { matchesAllowedOrigin } from "./originMatch";
 
 /**
@@ -13,7 +14,11 @@ import { matchesAllowedOrigin } from "./originMatch";
  * @param demoApiKeys - API key values treated as demo keys (see
  * `ChatterConfig.rateLimit.demoApiKeys`). Unset: no key is a demo key.
  */
-export function requireReferrer(allowedOrigins: string[], demoApiKeys: string[] = []) {
+export function requireReferrer(
+  allowedOrigins: string[],
+  demoApiKeys: string[] = [],
+  logger: Logger = createConsoleLogger(),
+) {
   return async (c: Context, next: Next) => {
     const apiKey = c.req.header("x-api-key");
 
@@ -25,15 +30,15 @@ export function requireReferrer(allowedOrigins: string[], demoApiKeys: string[] 
       const referer = c.req.header("referer");
       const origin = c.req.header("origin");
 
-      console.log(
+      logger.debug(
         `[Referrer] Checking ${isSessionKey ? "session" : "demo"} key: ${apiKey?.slice(0, 20)}...`,
       );
-      console.log(`[Referrer] Origin: ${origin || "none"}, Referer: ${referer || "none"}`);
+      logger.debug(`[Referrer] Origin: ${origin || "none"}, Referer: ${referer || "none"}`);
 
       const isAllowed = matchesAllowedOrigin(origin, referer, allowedOrigins);
 
       if (!isAllowed) {
-        console.log(`[Referrer] BLOCKED - not from allowed origins: ${allowedOrigins.join(", ")}`);
+        logger.debug(`[Referrer] BLOCKED - not from allowed origins: ${allowedOrigins.join(", ")}`);
         return c.json(
           {
             error:
@@ -43,7 +48,7 @@ export function requireReferrer(allowedOrigins: string[], demoApiKeys: string[] 
         );
       }
 
-      console.log("[Referrer] Allowed - origin matches");
+      logger.debug("[Referrer] Allowed - origin matches");
     }
 
     await next();

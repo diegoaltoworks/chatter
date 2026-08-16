@@ -63,7 +63,12 @@ export interface MCPServerOptions extends ChatterConfig {
 
   /** Logging and observability */
   logging?: {
-    /** Enable console logging. Default: true */
+    /**
+     * Emit an `mcp_chat` event (via `logger`, at `info`) for every tool call.
+     * Default: true. Still subject to `logLevel`/`logger` — e.g. `logLevel:
+     * "warn"` silences these events the same way it silences startup
+     * banners, even with `console: true`.
+     */
     console?: boolean;
     /** Custom logging callback for external monitoring */
     onChat?: MCPLogCallback;

@@ -8,6 +8,7 @@
 
 import { readFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
+import { createConsoleLogger, type Logger } from "../core/logger";
 
 export interface PersonaDefinition {
   name: string;
@@ -49,6 +50,8 @@ export interface PersonaResolverOptions {
   now?: () => number;
   /** Template vars (`{{name}}`) interpolated into loaded prompt files. */
   vars?: Record<string, string>;
+  /** Logger for registry/prompt load failures. Default: a console logger writing to stderr. */
+  logger?: Logger;
 }
 
 export interface PersonaResolver {
@@ -90,6 +93,7 @@ export function createPersonaResolver(options: PersonaResolverOptions = {}): Per
   const random = options.random ?? Math.random;
   const now = options.now ?? Date.now;
   const vars = options.vars ?? {};
+  const logger = options.logger ?? createConsoleLogger();
   const promptsDir =
     options.promptsDir ?? (options.registryPath ? dirname(options.registryPath) : process.cwd());
 
@@ -104,7 +108,7 @@ export function createPersonaResolver(options: PersonaResolverOptions = {}): Per
   function warnOnce(kind: string, message: string, error: unknown) {
     if (warned.has(kind)) return;
     warned.add(kind);
-    console.warn(message, error);
+    logger.warn(message, error);
   }
 
   function loadRegistry(): PersonaRegistry {

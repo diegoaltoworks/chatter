@@ -11,6 +11,7 @@ import OpenAI from "openai";
 import { ApiKeyManager } from "./auth/apikeys";
 import type { Channel } from "./channels";
 import { createSenderRegistry } from "./channels";
+import { resolveLogger } from "./core/logger";
 import { PromptLoader } from "./core/prompts";
 import { VectorStore } from "./core/retrieval";
 import { loadServeStatic, type ServeStaticFn } from "./core/serve-static";
@@ -47,7 +48,8 @@ export type ChatterApp = Hono & { stopChannels: () => Promise<void> };
  * @returns Configured Hono app instance, plus `stopChannels()` — see {@link ChatterApp}
  */
 export async function createServer(config: ChatterConfig): Promise<ChatterApp> {
-  console.log(`🚀 Starting ${config.bot.name}...`);
+  const logger = resolveLogger(config.logger, config.logLevel);
+  logger.info(`🚀 Starting ${config.bot.name}...`);
 
   // Set defaults
   const knowledgeDir = config.knowledgeDir || "./config/knowledge";
@@ -78,9 +80,10 @@ export async function createServer(config: ChatterConfig): Promise<ChatterApp> {
   const store = new VectorStore(client, {
     databaseClient: db,
     knowledgeDir,
+    logger,
   });
   await store.build();
-  console.log("✅ Knowledge base ready");
+  logger.info("✅ Knowledge base ready");
 
   // Create prompt loader
   const prompts = new PromptLoader(promptsDir, config.bot);
@@ -90,11 +93,11 @@ export async function createServer(config: ChatterConfig): Promise<ChatterApp> {
   const secret = config.auth?.secret || process.env.CHATTER_SECRET;
   if (secret) {
     apiKeyManager = new ApiKeyManager(secret);
-    console.log("✅ API key manager initialized");
+    logger.info("✅ API key manager initialized");
   } else if (config.auth?.apiKeyManager) {
     // Use custom manager if provided
     apiKeyManager = config.auth.apiKeyManager as ApiKeyManager;
-    console.log("✅ Custom API key manager configured");
+    logger.info("✅ Custom API key manager configured");
   }
 
   // Create Hono app
@@ -129,7 +132,7 @@ export async function createServer(config: ChatterConfig): Promise<ChatterApp> {
     try {
       serveStatic = await loadServeStatic();
     } catch (error) {
-      console.error(`❌ Static assets disabled: ${(error as Error).message}`);
+      logger.error(`❌ Static assets disabled: ${(error as Error).message}`);
     }
   }
 
@@ -191,8 +194,17 @@ export async function createServer(config: ChatterConfig): Promise<ChatterApp> {
   // Build dependencies for routes. `senders` is the one instance channels
   // register into and brain-side features (a scheduler, the flows engine)
   // send through by channel name, without importing a transport.
-  const senders = createSenderRegistry();
-  const deps: ServerDependencies = { client, store, db, config, prompts, apiKeyManager, senders };
+  const senders = createSenderRegistry(logger);
+  const deps: ServerDependencies = {
+    client,
+    store,
+    db,
+    config,
+    prompts,
+    apiKeyManager,
+    senders,
+    logger,
+  };
 
   // Mount API routes
   if (enablePublic) {
@@ -227,14 +239,14 @@ export async function createServer(config: ChatterConfig): Promise<ChatterApp> {
       try {
         await channel.start(deps);
         started.push(channel);
-        console.log(`✅ Channel "${channel.name}" started`);
+        logger.info(`✅ Channel "${channel.name}" started`);
       } catch (error) {
-        console.error(`❌ Channel "${channel.name}" failed to start:`, error);
+        logger.error(`❌ Channel "${channel.name}" failed to start:`, error);
       }
     }
   }
 
-  console.log(`✅ ${config.bot.name} server ready`);
+  logger.info(`✅ ${config.bot.name} server ready`);
 
   return Object.assign(app, {
     // Scoped to this call's started channels, not global — two servers in
@@ -247,7 +259,7 @@ export async function createServer(config: ChatterConfig): Promise<ChatterApp> {
           try {
             await channel.stop?.();
           } catch (error) {
-            console.error(`Channel "${channel.name}" failed to stop:`, error);
+            logger.error(`Channel "${channel.name}" failed to stop:`, error);
           }
         }),
       );

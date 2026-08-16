@@ -1,5 +1,6 @@
 import type { Client } from "@libsql/client";
 import type { ChannelSenderRegistry } from "../channels/senders";
+import { createConsoleLogger, type Logger } from "../core/logger";
 import {
   createTursoScheduleClaimStore,
   DEFAULT_CLAIM_TABLE,
@@ -31,6 +32,8 @@ export interface SchedulerConfig {
   schedule?: (fn: () => void, ms: number) => { stop: () => void };
   /** Injectable for tests; defaults to `Date.now`. */
   now?: () => number;
+  /** Logger for tick/delivery failures. Default: a console logger writing to stderr. */
+  logger?: Logger;
 }
 
 export interface Scheduler {
@@ -65,6 +68,7 @@ export function createScheduler(config: SchedulerConfig): Scheduler {
   const fallbackMessage = config.fallbackMessage ?? DEFAULT_FALLBACK_MESSAGE;
   const now = config.now ?? Date.now;
   const schedule = config.schedule ?? defaultSchedule;
+  const logger = config.logger ?? createConsoleLogger();
 
   let running: { stop: () => void } | undefined;
   let ticking = false;
@@ -79,6 +83,7 @@ export function createScheduler(config: SchedulerConfig): Scheduler {
       fallbackMessage,
       compose: config.compose,
       voiceAttempted: config.voiceAttempted,
+      logger,
     });
     config.onTick?.(result);
     return result;
@@ -94,7 +99,7 @@ export function createScheduler(config: SchedulerConfig): Scheduler {
         tickOnce()
           .catch((error) => {
             if (config.onError) config.onError(error);
-            else console.warn("Scheduler tick failed:", error);
+            else logger.warn("Scheduler tick failed:", error);
           })
           .finally(() => {
             ticking = false;

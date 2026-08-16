@@ -2,6 +2,7 @@
  * Logging for MCP Server
  */
 
+import { createConsoleLogger, type Logger } from "../core/logger";
 import { lastUserMessage } from "../core/messages";
 import type { ChatMessage, CostInfo, MCPLogCallback } from "./types";
 
@@ -11,10 +12,12 @@ import type { ChatMessage, CostInfo, MCPLogCallback } from "./types";
 export class MCPLogger {
   private enableConsole: boolean;
   private callback?: MCPLogCallback;
+  private logger: Logger;
 
-  constructor(enableConsole = true, callback?: MCPLogCallback) {
+  constructor(enableConsole = true, callback?: MCPLogCallback, logger?: Logger) {
     this.enableConsole = enableConsole;
     this.callback = callback;
+    this.logger = logger ?? createConsoleLogger();
   }
 
   /**
@@ -43,9 +46,10 @@ export class MCPLogger {
       cost,
     };
 
-    // Console logging
+    // Console logging (via the injected logger — never raw stdout, so the
+    // stdio MCP transport's JSON-RPC stream is never corrupted).
     if (this.enableConsole) {
-      console.log(
+      this.logger.info(
         JSON.stringify({
           event: "mcp_chat",
           ...logEvent,
@@ -58,7 +62,7 @@ export class MCPLogger {
       try {
         await this.callback(logEvent);
       } catch (err) {
-        console.error("Logging callback error:", err);
+        this.logger.error("Logging callback error:", err);
       }
     }
   }
@@ -69,8 +73,13 @@ export class MCPLogger {
  *
  * @param enableConsole - Enable console logging
  * @param callback - Custom logging callback
+ * @param logger - Logger implementation. Default: a console logger writing to stderr.
  * @returns MCPLogger instance
  */
-export function createLogger(enableConsole = true, callback?: MCPLogCallback): MCPLogger {
-  return new MCPLogger(enableConsole, callback);
+export function createLogger(
+  enableConsole = true,
+  callback?: MCPLogCallback,
+  logger?: Logger,
+): MCPLogger {
+  return new MCPLogger(enableConsole, callback, logger);
 }

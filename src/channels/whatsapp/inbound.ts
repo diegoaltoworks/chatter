@@ -37,6 +37,7 @@
  *       answerFn: deps.config.answerFn,
  *       bucketsFor: deps.config.bucketsFor,
  *       registry: new Map(),
+ *       logger: deps.logger,
  *     });
  *   },
  * });
@@ -47,6 +48,7 @@ import type { WAMessage, WASocket } from "@whiskeysockets/baileys";
 import type OpenAI from "openai";
 import type { AnswerFn } from "../../core/answer";
 import type { BucketsFor } from "../../core/buckets";
+import { createConsoleLogger, type Logger } from "../../core/logger";
 import type { PromptLoader } from "../../core/prompts";
 import type { VectorStore } from "../../core/retrieval";
 import type { HistoryStore } from "../../history/types";
@@ -346,6 +348,8 @@ export interface WhatsAppInboundConfig {
     limit?: number;
   };
   now?: () => number;
+  /** Logger for gate/dispatch diagnostics. Default: a console logger writing to stderr. */
+  logger?: Logger;
 }
 
 /** Builds the `onMessage` handler for `createWhatsAppChannel` (see `./channel`) — see the module docstring for how to wire `ServerDependencies` into it. Everything past turning a raw Baileys message into a `ChannelMessage` runs through `./channels`' `createInboundPipeline`, shared with every other channel. */
@@ -368,6 +372,7 @@ export function createWhatsAppInboundHandler(
   const allowedChats = config.allowedChats ?? [];
   const personaResolver = config.personaResolver;
   const images = config.images;
+  const logger = config.logger ?? createConsoleLogger();
 
   const pipeline = createInboundPipeline(
     { client: config.client, store: config.store, prompts: config.prompts },
@@ -411,7 +416,7 @@ export function createWhatsAppInboundHandler(
         const dedupKey = `${sessionId}:${chatId}`;
         if (!loggedUnallowedChats.has(dedupKey)) {
           loggedUnallowedChats.add(dedupKey);
-          console.log(`WhatsApp[${sessionId}]: skipped group ${chatId} - not in allowedChats`);
+          logger.warn(`WhatsApp[${sessionId}]: skipped group ${chatId} - not in allowedChats`);
         }
       }
 
@@ -441,7 +446,7 @@ export function createWhatsAppInboundHandler(
           : undefined,
       });
     } catch (error) {
-      console.warn(`WhatsApp[${sessionId}]: inbound message handling failed:`, error);
+      logger.warn(`WhatsApp[${sessionId}]: inbound message handling failed:`, error);
     }
   };
 }

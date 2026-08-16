@@ -19,7 +19,7 @@ function wantsStream(c: Context) {
 }
 
 export function publicRoutes(deps: ServerDependencies) {
-  const { client, store, config, prompts } = deps;
+  const { client, store, config, prompts, logger } = deps;
   const app = new Hono();
 
   // Create middleware instances from deps
@@ -33,10 +33,13 @@ export function publicRoutes(deps: ServerDependencies) {
     : [config.bot.publicUrl, "http://localhost:8181", "http://127.0.0.1:8181"];
 
   // Security middleware stack
-  app.use("/api/public/*", validateSessionKey()); // Validate session keys first
+  app.use("/api/public/*", validateSessionKey(logger)); // Validate session keys first
   app.use("/api/public/*", requirePublicKey); // Then check API key
   // Referrer checking for demo keys
-  app.use("/api/public/*", requireReferrer(referrerOrigins, config.rateLimit?.demoApiKeys ?? []));
+  app.use(
+    "/api/public/*",
+    requireReferrer(referrerOrigins, config.rateLimit?.demoApiKeys ?? [], logger),
+  );
   app.use("/api/public/*", limitPublic()); // Rate limiting (stricter for demo keys)
 
   app.post("/api/public/chat", async (c) => {

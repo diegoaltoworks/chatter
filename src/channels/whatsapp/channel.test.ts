@@ -1,5 +1,6 @@
 import { describe, expect, mock, test } from "bun:test";
 import { createClient } from "@libsql/client";
+import type { Logger } from "../../core/logger";
 import { createSenderRegistry } from "../senders";
 import { type AuthStateRuntime, useTursoAuthState } from "./authState";
 import {
@@ -273,6 +274,8 @@ function flush(ms = 20): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+const silentLogger: Logger = { debug() {}, info() {}, warn() {}, error() {} };
+
 function testDeps(db = createClient({ url: ":memory:" })) {
   const senders = createSenderRegistry();
   return {
@@ -283,6 +286,7 @@ function testDeps(db = createClient({ url: ":memory:" })) {
       config: {} as never,
       prompts: {} as never,
       senders,
+      logger: silentLogger,
     },
     senders,
     db,

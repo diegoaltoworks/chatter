@@ -104,6 +104,7 @@ await createServer({
       prompts: deps.prompts,
       answerFn: deps.config.answerFn,
       bucketsFor: deps.config.bucketsFor,
+      logger: deps.logger,
       // Share ONE registry across every WhatsApp channel instance in this
       // process — it's how the loop guard recognises another linked
       // number's own traffic as "us" rather than a stranger.

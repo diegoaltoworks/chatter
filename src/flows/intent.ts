@@ -5,6 +5,7 @@
  */
 
 import type OpenAI from "openai";
+import { createConsoleLogger, type Logger } from "../core/logger";
 import type { IntentDetection, LoadedFlow } from "./types";
 
 /** Detects which loaded flow (if any) a message expresses intent for. */
@@ -14,6 +15,7 @@ export async function detectIntent(
   message: string,
   flows: Map<string, LoadedFlow>,
   conversationContext?: string[],
+  logger: Logger = createConsoleLogger(),
 ): Promise<IntentDetection> {
   const contextStr =
     conversationContext && conversationContext.length > 0
@@ -66,7 +68,7 @@ Rules:
 
     return { intent, confidence, reasoning: raw.reasoning };
   } catch (error) {
-    console.warn(
+    logger.warn(
       `[flows] intent detection failed: ${error instanceof Error ? error.message : String(error)}`,
     );
     return { intent: "chatbot", confidence: 0, reasoning: "exception, defaulting to chatbot" };

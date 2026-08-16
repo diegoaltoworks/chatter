@@ -40,6 +40,7 @@
  */
 
 import type { WAMessage, WASocket } from "@whiskeysockets/baileys";
+import { createConsoleLogger, type Logger } from "../../core/logger";
 import {
   type ChannelAction,
   type ChannelMessage,
@@ -108,23 +109,26 @@ export interface WhatsAppMessageRouterConfig {
    * single-handler host plugs in unchanged.
    */
   fallback: (event: WhatsAppMessageEvent) => Promise<void>;
-  /** A throwing/rejecting callback here is itself caught and logged with `console.warn` — it can never produce an unhandled rejection. */
+  /** A throwing/rejecting callback here is itself caught and logged at `warn` — it can never produce an unhandled rejection. */
   onDetectorError?: (detectorName: string, error: unknown) => void;
+  /** Logger for detector failures. Default: a console logger writing to stderr. */
+  logger?: Logger;
 }
 
 async function logDetectorError(
   config: WhatsAppMessageRouterConfig,
+  logger: Logger,
   name: string,
   error: unknown,
 ): Promise<void> {
   if (!config.onDetectorError) {
-    console.warn(`WhatsApp router: detector "${name}" failed:`, error);
+    logger.warn(`WhatsApp router: detector "${name}" failed:`, error);
     return;
   }
   try {
     await config.onDetectorError(name, error);
   } catch (callbackError) {
-    console.warn(`WhatsApp router: onDetectorError itself failed:`, callbackError);
+    logger.warn(`WhatsApp router: onDetectorError itself failed:`, callbackError);
   }
 }
 
@@ -142,6 +146,7 @@ function isChatIneligible(msg: ChannelMessage, allowedChats: string[]): boolean 
 /** Fire-and-forget: internal errors are caught and logged so a `"parallel"` detector can never produce an unhandled rejection or block anything else. */
 function fireParallelDetector(
   config: WhatsAppMessageRouterConfig,
+  logger: Logger,
   detector: ParallelDetector,
   ctx: WaDetectorContext,
 ): void {
@@ -151,7 +156,7 @@ function fireParallelDetector(
         await detector.handle(ctx);
       }
     } catch (error) {
-      await logDetectorError(config, detector.name, error);
+      await logDetectorError(config, logger, detector.name, error);
     }
   })();
 }
@@ -162,6 +167,7 @@ export function createWhatsAppMessageRouter(
 ): (event: WhatsAppMessageEvent) => Promise<void> {
   const allowedChats = config.allowedChats ?? [];
   const mutedChats = config.mutedChats ?? new Set<string>();
+  const logger = config.logger ?? createConsoleLogger();
   const replaceDetectors = config.detectors.filter(
     (d): d is ReplaceDetector => d.mode === "replace",
   );
@@ -203,12 +209,12 @@ export function createWhatsAppMessageRouter(
         action,
       };
     } catch (error) {
-      await logDetectorError(config, "resolve", error);
+      await logDetectorError(config, logger, "resolve", error);
       return;
     }
 
     for (const detector of parallelDetectors) {
-      fireParallelDetector(config, detector, ctx);
+      fireParallelDetector(config, logger, detector, ctx);
     }
 
     for (const detector of replaceDetectors) {
@@ -216,14 +222,14 @@ export function createWhatsAppMessageRouter(
       try {
         matched = await detector.test(ctx);
       } catch (error) {
-        await logDetectorError(config, detector.name, error);
+        await logDetectorError(config, logger, detector.name, error);
         continue;
       }
       if (!matched) continue;
       try {
         await detector.handle(ctx);
       } catch (error) {
-        await logDetectorError(config, detector.name, error);
+        await logDetectorError(config, logger, detector.name, error);
       }
       return;
     }
@@ -231,7 +237,7 @@ export function createWhatsAppMessageRouter(
     try {
       await config.fallback(event);
     } catch (error) {
-      await logDetectorError(config, "fallback", error);
+      await logDetectorError(config, logger, "fallback", error);
     }
   };
 }

@@ -43,6 +43,10 @@ export { defaultBuckets, resolveBuckets } from "./core/buckets";
 export { detectLeakage, guardOutput, scrubOutput } from "./core/guardrails";
 export { completeOnce, completeStream, DEFAULT_MODEL } from "./core/llm";
 export { loadKnowledge } from "./core/loaders";
+export type { Logger, LogLevel } from "./core/logger";
+// Logging seam (ChatterConfig.logger) — the default console logger, for
+// hosts that want the same stderr-only behavior in their own code.
+export { createConsoleLogger } from "./core/logger";
 export type { NormalizedChatBody } from "./core/messages";
 // Inbound message normalization (the server owns the system prompt: client
 // system/tool turns never reach the pipeline)

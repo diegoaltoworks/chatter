@@ -1,6 +1,7 @@
 import { createClient, type Client as LibsqlClient } from "@libsql/client";
 import type OpenAI from "openai";
 import { type Bucket, loadKnowledge } from "./loaders";
+import { createConsoleLogger, type Logger } from "./logger";
 
 const EMB_MODEL = "text-embedding-3-large";
 
@@ -36,6 +37,8 @@ async function sha256(input: string) {
 export type VectorStoreOptions = {
   /** Directory of markdown knowledge files. Default: `./config/knowledge` */
   knowledgeDir?: string;
+  /** Logger for build progress. Default: a console logger writing to stderr. */
+  logger?: Logger;
 } & (
   | {
       /** Turso database URL */
@@ -60,6 +63,7 @@ export class VectorStore {
    */
   readonly db: LibsqlClient;
   private knowledgeDir: string;
+  private logger: Logger;
 
   constructor(
     private client: OpenAI,
@@ -72,11 +76,12 @@ export class VectorStore {
           authToken: options.databaseAuthToken,
         });
     this.knowledgeDir = options.knowledgeDir || "./config/knowledge";
+    this.logger = options.logger ?? createConsoleLogger();
   }
 
   // On boot: ingest new chunks and embed only missing ones.
   async build() {
-    console.log("🔄 Building knowledge base...");
+    this.logger.info("🔄 Building knowledge base...");
 
     // ensure tables exist (idempotent)
     await this.db.execute(`
@@ -88,7 +93,7 @@ export class VectorStore {
     await this.db.execute("CREATE INDEX IF NOT EXISTS idx_chunks_bucket ON chunks(bucket);");
 
     const docs = loadKnowledge(this.knowledgeDir);
-    console.log(`📚 Loaded ${docs.length} knowledge documents`);
+    this.logger.info(`📚 Loaded ${docs.length} knowledge documents`);
 
     const rows: { id: string; bucket: Bucket; source: string; text: string }[] = [];
     for (const d of docs) {
@@ -98,7 +103,7 @@ export class VectorStore {
       }
     }
 
-    console.log(`📦 Created ${rows.length} chunks from knowledge documents`);
+    this.logger.info(`📦 Created ${rows.length} chunks from knowledge documents`);
 
     // Cleanup: remove chunks that no longer exist in markdown files
     await this.cleanupStaleChunks(rows.map((r) => r.id));
@@ -140,11 +145,11 @@ export class VectorStore {
     }
 
     if (missing.length === 0) {
-      console.log("✅ No new chunks to embed - knowledge base is up to date");
+      this.logger.info("✅ No new chunks to embed - knowledge base is up to date");
       return;
     }
 
-    console.log(`🔮 Embedding ${missing.length} new/updated chunks with ${EMB_MODEL}...`);
+    this.logger.info(`🔮 Embedding ${missing.length} new/updated chunks with ${EMB_MODEL}...`);
 
     // Embed missing in batches of N
     const textById = new Map(rows.map((r) => [r.id, r.text]));
@@ -164,7 +169,7 @@ export class VectorStore {
       );
     }
 
-    console.log(`✅ Successfully embedded ${missing.length} new chunks`);
+    this.logger.info(`✅ Successfully embedded ${missing.length} new chunks`);
   }
 
   // Remove chunks from database that no longer exist in markdown files
@@ -181,7 +186,7 @@ export class VectorStore {
       return;
     }
 
-    console.log(`🧹 Cleaning up ${staleIds.length} stale chunks...`);
+    this.logger.info(`🧹 Cleaning up ${staleIds.length} stale chunks...`);
 
     // Delete stale chunks in batches (embeddings cascade delete automatically)
     const BATCH_SIZE = 500;
@@ -195,7 +200,7 @@ export class VectorStore {
       });
     }
 
-    console.log(`✓ Cleaned up ${staleIds.length} stale chunks and their embeddings`);
+    this.logger.info(`✓ Cleaned up ${staleIds.length} stale chunks and their embeddings`);
   }
 
   private static cosine(a: number[], b: number[]) {

@@ -208,6 +208,38 @@ knowledge stays out of reach of the public pipeline. See
 the hook, and the `resolveBuckets` helper channels and custom routes should
 use.
 
+### Logging
+
+Every library log call — startup banners, channel lifecycle, auth/session
+decisions, retrieval progress, the scheduler and flows engine — goes through
+an injectable, leveled logger instead of raw `console.*`:
+
+```typescript
+{
+  logger: myLogger,     // { debug, info, warn, error }, e.g. pino/winston
+  logLevel: "warn",     // only used by the default console logger
+}
+```
+
+Unset `logger`: a console-backed logger is used, writing every level via
+`console.error` (stderr) — never stdout, so hosting the MCP server on the
+stdio transport (which reserves stdout for its JSON-RPC stream) stays clean
+without any extra configuration. `logLevel` (default `"info"`) controls that
+default logger; it's ignored once a custom `logger` is supplied, since a
+custom implementation owns its own filtering.
+
+Per-request detail that would otherwise flood the log on every call (auth/session
+key checks, demo session creation) logs at `debug`, which the default logger
+suppresses — set `logLevel: "debug"` or a custom logger to see it.
+Route factories and channels receive the resolved logger as `deps.logger`.
+Standalone module factories called directly by the host — `createWhatsAppChannel`,
+`createPersonaResolver`, `createScheduler`, `createFlowEngine`, `createWhatsAppInboundHandler`,
+`createWhatsAppMessageRouter` — each take their own optional `logger`, since
+they may be constructed before `deps` exists; pass `deps.logger` in
+explicitly (from `customRoutes`, or a channel's own `start(deps)`) to route
+their output through the same logger as the rest of the server. See
+[channels.md](./channels.md) for a worked example.
+
 ### Custom Routes
 
 Custom routes receive the same dependencies the built-in route factories use:

@@ -1,5 +1,6 @@
-import { describe, expect, mock, spyOn, test } from "bun:test";
+import { describe, expect, mock, test } from "bun:test";
 import type { WAMessage, WASocket } from "@whiskeysockets/baileys";
+import type { Logger } from "../../core/logger";
 import type { SessionIdentityRegistry } from "../gates";
 import type { WhatsAppMessageEvent } from "./channel";
 import {
@@ -54,7 +55,7 @@ function parallelDetector(
 
 function createRouter(
   detectors: MessageDetector[],
-  overrides: { fallback?: () => Promise<void> } = {},
+  overrides: { fallback?: () => Promise<void>; logger?: Logger } = {},
 ) {
   const registry: SessionIdentityRegistry = new Map();
   const fallbackCalls: WhatsAppMessageEvent[] = [];
@@ -62,7 +63,12 @@ function createRouter(
     fallbackCalls.push(event);
     await overrides.fallback?.();
   };
-  const router = createWhatsAppMessageRouter({ registry, detectors, fallback });
+  const router = createWhatsAppMessageRouter({
+    registry,
+    detectors,
+    fallback,
+    logger: overrides.logger,
+  });
   return { router, fallbackCalls };
 }
 
@@ -331,26 +337,28 @@ describe("createWhatsAppMessageRouter", () => {
     releaseDetector();
   });
 
-  test("with no onDetectorError configured, a detector failure is logged via console.warn", async () => {
-    const warn = spyOn(console, "warn").mockImplementation(() => {});
-    try {
-      const throwing: ReplaceDetector = {
-        name: "unconfigured-error-detector",
-        mode: "replace",
-        test: () => true,
-        handle: async () => {
-          throw new Error("boom");
-        },
-      };
-      const { router } = createRouter([throwing]);
+  test("with no onDetectorError configured, a detector failure is logged via the router's logger", async () => {
+    const warnCalls: unknown[][] = [];
+    const logger: Logger = {
+      debug() {},
+      info() {},
+      warn: (...args) => warnCalls.push(args),
+      error() {},
+    };
+    const throwing: ReplaceDetector = {
+      name: "unconfigured-error-detector",
+      mode: "replace",
+      test: () => true,
+      handle: async () => {
+        throw new Error("boom");
+      },
+    };
+    const { router } = createRouter([throwing], { logger });
 
-      await router(waEvent(fakeSocket()));
+    await router(waEvent(fakeSocket()));
 
-      expect(warn).toHaveBeenCalled();
-      expect(String(warn.mock.calls[0]?.[0])).toContain("unconfigured-error-detector");
-    } finally {
-      warn.mockRestore();
-    }
+    expect(warnCalls.length).toBeGreaterThan(0);
+    expect(String(warnCalls[0]?.[0])).toContain("unconfigured-error-detector");
   });
 
   test("an async test function is awaited for both modes", async () => {

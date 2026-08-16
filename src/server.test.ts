@@ -13,6 +13,7 @@ import { join } from "node:path";
 import { ApiKeyManager } from "./auth/apikeys";
 import type { Channel } from "./channels";
 import { createSenderRegistry } from "./channels";
+import { createConsoleLogger } from "./core/logger";
 import { createServer } from "./server";
 import type { ChatterConfig, CustomRoutes } from "./types";
 
@@ -187,6 +188,7 @@ describe("createServer channels", () => {
       config: baseConfig(),
       prompts: {} as never,
       senders: createSenderRegistry(),
+      logger: createConsoleLogger(),
     });
 
     expect(calls).toEqual(["function"]);
