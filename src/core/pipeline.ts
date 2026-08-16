@@ -13,7 +13,7 @@ import { defaultBuckets } from "./buckets";
 import type { Logger } from "./logger";
 import { lastUserMessage } from "./messages";
 import type { PromptLoader } from "./prompts";
-import type { VectorStore } from "./retrieval";
+import type { Retriever } from "./retrieval";
 
 export type PipelineMode = "public" | "private";
 
@@ -114,7 +114,7 @@ export async function prepareChat({
   rerankContext,
   logger,
 }: {
-  store: VectorStore;
+  store: Retriever;
   prompts: PromptLoader;
   mode: PipelineMode;
   messages: PipelineMessage[];

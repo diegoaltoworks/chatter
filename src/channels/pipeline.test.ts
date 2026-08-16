@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import type { AnswerFnInput } from "../core/answer";
 import type { PromptLoader } from "../core/prompts";
-import type { VectorStore } from "../core/retrieval";
+import type { Retriever } from "../core/retrieval";
 import type { HistoryMessage, HistoryStore } from "../history/types";
 import type { ChannelMessage } from "./gates";
 import {
@@ -77,7 +77,7 @@ function harness(overrides: Partial<InboundPipelineConfig> = {}): Harness {
   const gateReplies: Array<{ chatId: string; text: string }> = [];
   const chatReplies: Array<{ chatId: string; text: string }> = [];
 
-  const store = { query: async () => ["some context"] } as unknown as VectorStore;
+  const store = { query: async () => ["some context"] } satisfies Retriever;
   const prompts = {
     baseSystemRules: "rules",
     publicPersona: "persona",
@@ -239,7 +239,7 @@ describe("createInboundPipeline", () => {
         queries.push(buckets);
         return ["context"];
       },
-    } as unknown as VectorStore;
+    } satisfies Retriever;
     let captured: AnswerFnInput | undefined;
 
     const handle = createInboundPipeline(
@@ -789,7 +789,7 @@ describe("createInboundPipeline", () => {
           queries.push(q);
           return ["context"];
         },
-      } as unknown as VectorStore;
+      } satisfies Retriever;
 
       const handle = createInboundPipeline(
         {
@@ -825,7 +825,7 @@ describe("createInboundPipeline", () => {
       let captured: AnswerFnInput | undefined;
       const store = {
         query: async () => ["first", "second"],
-      } as unknown as VectorStore;
+      } satisfies Retriever;
 
       const handle = createInboundPipeline(
         {
@@ -870,7 +870,7 @@ describe("createInboundPipeline", () => {
           queries.push(q);
           return ["context"];
         },
-      } as unknown as VectorStore;
+      } satisfies Retriever;
 
       const handle = createInboundPipeline(
         {

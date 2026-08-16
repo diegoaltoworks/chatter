@@ -314,6 +314,21 @@ function testDeps(db = createClient({ url: ":memory:" })) {
 }
 
 describe("createWhatsAppChannel", () => {
+  test("start() fails fast with an actionable message when deps.db is absent", async () => {
+    const channel = createWhatsAppChannel({
+      sessionSecret: "test-session-secret-value",
+      loadBaileys: async () => fakeBaileysModule({ registered: true, sockets: [] }),
+      schedule: () => undefined,
+    });
+    // A host running config.retriever with no config.database never opens
+    // deps.db (see ServerDependencies.db's doc comment) - this channel needs
+    // one for auth state and the session lease regardless of retriever.
+    const { deps } = testDeps();
+    (deps as { db: unknown }).db = undefined;
+
+    await expect(channel.start(deps)).rejects.toThrow(/needs a libsql client/);
+  });
+
   test("an unpaired session never connects and schedules a re-check instead", async () => {
     const sockets: FakeSocket[] = [];
     const schedule = mock(() => undefined);

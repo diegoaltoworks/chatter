@@ -65,9 +65,9 @@ export type {
 // Chat pipeline (RAG without any UI or transport)
 export { prepareChat } from "./core/pipeline";
 export { PromptLoader } from "./core/prompts";
-export type { VectorStoreOptions } from "./core/retrieval";
+export type { Embedder, Retriever, VectorStoreOptions } from "./core/retrieval";
 // Core modules (for advanced customization)
-export { VectorStore } from "./core/retrieval";
+export { createOpenAIEmbedder, VectorStore } from "./core/retrieval";
 export {
   createSession,
   getActiveSessions,

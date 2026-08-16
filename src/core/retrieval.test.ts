@@ -12,7 +12,13 @@ import { join } from "node:path";
 import { createClient, type Client as LibsqlClient } from "@libsql/client";
 import type OpenAI from "openai";
 import type { ServerDependencies } from "../types";
-import { VectorStore } from "./retrieval";
+import {
+  createOpenAIEmbedder,
+  type Embedder,
+  openLibsqlClient,
+  VectorStore,
+  wrapMissingLibsqlError,
+} from "./retrieval";
 
 interface ExecuteCall {
   sql: string;
@@ -34,26 +40,22 @@ function createFakeDb() {
   return { db, calls };
 }
 
-function createFakeOpenAI(embedding: number[]) {
-  return {
-    embeddings: {
-      create: async () => ({ data: [{ embedding }] }),
-    },
-  } as unknown as OpenAI;
+function fakeEmbedder(embedding: number[]): Embedder {
+  return async (input) => input.map(() => embedding);
 }
 
 describe("VectorStore connection", () => {
   test("exposes the injected client instead of opening a second connection", () => {
     const { db } = createFakeDb();
 
-    const store = new VectorStore(createFakeOpenAI([1, 0]), { databaseClient: db });
+    const store = new VectorStore(fakeEmbedder([1, 0]), { databaseClient: db });
 
     expect(store.db).toBe(db);
   });
 
   test("runs queries against the injected client", async () => {
     const { db, calls } = createFakeDb();
-    const store = new VectorStore(createFakeOpenAI([1, 0]), { databaseClient: db });
+    const store = new VectorStore(fakeEmbedder([1, 0]), { databaseClient: db });
 
     const results = await store.query("a question", 3, ["base"]);
 
@@ -66,15 +68,11 @@ describe("VectorStore connection", () => {
   test("retrieves nothing for an empty bucket list, without embedding the query", async () => {
     const { db, calls } = createFakeDb();
     const embedded: string[] = [];
-    const openai = {
-      embeddings: {
-        create: async ({ input }: { input: string[] }) => {
-          embedded.push(...input);
-          return { data: [{ embedding: [1, 0] }] };
-        },
-      },
-    } as unknown as OpenAI;
-    const store = new VectorStore(openai, { databaseClient: db });
+    const embed: Embedder = async (input) => {
+      embedded.push(...input);
+      return input.map(() => [1, 0]);
+    };
+    const store = new VectorStore(embed, { databaseClient: db });
 
     // A caller that scoped retrieval down to nothing gets nothing - not an
     // `IN ()` syntax error, and not a paid embedding call.
@@ -83,23 +81,13 @@ describe("VectorStore connection", () => {
     expect(embedded).toEqual([]);
   });
 
-  test("opens a connection of its own when given credentials", () => {
-    const openai = createFakeOpenAI([1, 0]);
-    const credentials = { databaseUrl: "file::memory:", databaseAuthToken: "" } as const;
-
-    const first = new VectorStore(openai, credentials);
-    const second = new VectorStore(openai, credentials);
-
-    // Each credentials-built store opens its own connection - which is exactly
-    // the duplication injecting a client avoids.
-    expect(typeof first.db.execute).toBe("function");
-    expect(first.db).not.toBe(second.db);
-  });
-
   test("satisfies the ServerDependencies db handle from the store's own client", () => {
     const { db } = createFakeDb();
-    const client = createFakeOpenAI([1, 0]);
-    const store = new VectorStore(client, { databaseClient: db, knowledgeDir: "./knowledge" });
+    const client = {} as ServerDependencies["client"];
+    const store = new VectorStore(fakeEmbedder([1, 0]), {
+      databaseClient: db,
+      knowledgeDir: "./knowledge",
+    });
 
     // Locks the contract createServer relies on: the handle it publishes is the
     // store's client, so consumers of deps.db reuse the one open connection.
@@ -110,6 +98,27 @@ describe("VectorStore connection", () => {
     };
 
     expect(deps.db).toBe(db);
+  });
+
+  test("createOpenAIEmbedder adapts an OpenAI client's embeddings.create to the Embedder shape", async () => {
+    const calls: { model: string; input: string[] }[] = [];
+    const openai = {
+      embeddings: {
+        create: async ({ model, input }: { model: string; input: string[] }) => {
+          calls.push({ model, input });
+          return { data: input.map((_, i) => ({ embedding: [i, i] })) };
+        },
+      },
+    } as unknown as OpenAI;
+
+    const embed = createOpenAIEmbedder(openai);
+    const vectors = await embed(["a", "b"]);
+
+    expect(vectors).toEqual([
+      [0, 0],
+      [1, 1],
+    ]);
+    expect(calls).toEqual([{ model: "text-embedding-3-large", input: ["a", "b"] }]);
   });
 
   test("build() keeps the connection alive for a subsequent query() against a real local database", async () => {
@@ -129,8 +138,7 @@ describe("VectorStore connection", () => {
 
     try {
       const db = createClient({ url: "file::memory:", authToken: "" });
-      const openai = createFakeOpenAI([1, 0]);
-      const store = new VectorStore(openai, { databaseClient: db, knowledgeDir });
+      const store = new VectorStore(fakeEmbedder([1, 0]), { databaseClient: db, knowledgeDir });
 
       await store.build();
       const results = await store.query("support hours", 3, ["base"]);
@@ -139,5 +147,30 @@ describe("VectorStore connection", () => {
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }
+  });
+});
+
+describe("wrapMissingLibsqlError", () => {
+  test("names the package, an install command, and the config.retriever escape hatch, and preserves the cause", () => {
+    const cause = new Error("Cannot find package '@libsql/client'");
+
+    const wrapped = wrapMissingLibsqlError(cause);
+
+    expect(wrapped.message).toContain("@libsql/client");
+    expect(wrapped.message).toContain("bun add @libsql/client");
+    expect(wrapped.message).toContain("config.retriever");
+    expect(wrapped.cause).toBe(cause);
+  });
+});
+
+describe("openLibsqlClient", () => {
+  // The optional peer dependency is installed in this repo's devDependencies
+  // (for types and tests), so this proves the happy path resolves; the
+  // missing-package path is covered by wrapMissingLibsqlError above without
+  // needing to simulate an actually-uninstalled package.
+  test("opens a client against the given credentials", async () => {
+    const db = await openLibsqlClient({ url: "file::memory:", authToken: "" });
+
+    expect(typeof db.execute).toBe("function");
   });
 });

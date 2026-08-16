@@ -27,7 +27,7 @@ import type { WhatsAppInboundConfig } from "../src/channels/whatsapp/inbound";
 import type { AnswerFnInput } from "../src/core/answer";
 import type { Logger } from "../src/core/logger";
 import type { PromptLoader } from "../src/core/prompts";
-import type { VectorStore } from "../src/core/retrieval";
+import type { Retriever } from "../src/core/retrieval";
 import type { HistoryMessage, HistoryStore } from "../src/history";
 import type { BrainHooks, ChatterConfig, ServerDependencies } from "../src/types";
 
@@ -106,7 +106,7 @@ function pipelineChannelAdapter<Api extends { sent: string[] }>(opts: {
         queries.push(q);
         return ["chunk-a", "chunk-b"];
       },
-    } as unknown as VectorStore;
+    } satisfies Retriever;
 
     const channel = opts.makeChannel(api, scenario);
     const deps = {
@@ -136,7 +136,7 @@ function pipelineChannelAdapter<Api extends { sent: string[] }>(opts: {
     const deps = {
       client: {} as ServerDependencies["client"],
       db: {} as ServerDependencies["db"],
-      store: { query: async () => [] } as unknown as VectorStore,
+      store: { query: async () => [] } satisfies Retriever,
       prompts: fakePrompts(),
       config: {} as ChatterConfig,
       senders: createSenderRegistry(silentLogger()),
@@ -344,7 +344,7 @@ function whatsappAdapter(): ConformanceAdapter {
         queries.push(q);
         return ["chunk-a", "chunk-b"];
       },
-    } as unknown as VectorStore;
+    } satisfies Retriever;
 
     const event = waEvent(text, opts.group ?? false);
     (event.sock as unknown as { sendMessage: (...a: unknown[]) => Promise<void> }).sendMessage =

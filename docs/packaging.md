@@ -63,16 +63,22 @@ fixtures cannot reach `dist`.
 
 ## Peer tiers
 
-`hono`, `openai` and `@libsql/client` are the only peers *not* marked
-`optional`. That is deliberate, not an oversight: `.` (`createServer`)
-imports and uses all three unconditionally, so per the rule above core cannot
-install and boot without them - marking them optional would let
-`npm install` succeed into a package that throws the moment it is used.
-Every other peer (`@hono/node-server`, `@modelcontextprotocol/sdk`,
-`@whiskeysockets/baileys`, `qrcode-terminal`, `zod`) is optional because the
-subpath that needs it reaches it through a dynamic import at call time and
-fails with an actionable, not a bare `MODULE_NOT_FOUND`, error when it is
-missing (`loadServeStatic`, `loadBaileys`, ...).
+`hono` and `openai` are the only peers *not* marked `optional`. That is
+deliberate, not an oversight: `.` (`createServer`) imports and uses both
+unconditionally, so per the rule above core cannot install and boot without
+them - marking them optional would let `npm install` succeed into a package
+that throws the moment it is used. Every other peer (`@hono/node-server`,
+`@libsql/client`, `@modelcontextprotocol/sdk`, `@whiskeysockets/baileys`,
+`qrcode-terminal`, `zod`) is optional because the subpath that needs it
+reaches it through a dynamic import at call time and fails with an
+actionable, not a bare `MODULE_NOT_FOUND`, error when it is missing
+(`loadServeStatic`, `loadBaileys`, ...).
+
+`@libsql/client` is the one conditional peer: `createServer`/`createMCPServer`
+import it only when `config.database` is set - required by default (the
+built-in `VectorStore` needs somewhere to keep chunks and embeddings), but
+skippable entirely by supplying `config.retriever` instead. See
+[patterns/adding-a-retriever.md](./patterns/adding-a-retriever.md).
 
 The one tier this cannot fix: `./client` (the widget) uses none of the above
 - `src/client/package.json` declares zero peers of its own - but npm's peer
@@ -109,11 +115,14 @@ Resolving isn't the same as running: each of the two consumers also boots a
 real server from the tarball and requests `/chatter.js`, under real Node (not
 Bun - see `scripts/boot-check.mjs` for why that distinction matters here,
 and why the module is shared verbatim with `bun run test:node`). The full
-consumer asserts the widget is actually served; the
-lean one asserts the missing `@hono/node-server` peer produces a logged,
-actionable error rather than a silent 404. `bun run test:node` cannot catch
-this on its own - it runs against the in-tree `dist/`, where devDependencies
-mean the optional peer is always present.
+consumer's server is built the default way (`config.database`) and asserts the
+widget is actually served; the lean one has no `@libsql/client` either, so it
+boots via `config.retriever` instead, asserting both that a config.retriever
+host needs none of the optional peers installed and that the missing
+`@hono/node-server` peer produces a logged, actionable error rather than a
+silent 404. `bun run test:node` cannot catch this on its own - it runs
+against the in-tree `dist/`, where devDependencies mean the optional peer is
+always present.
 
 Bins are checked too, since `package.json#bin` sits outside `exports` and
 nothing else touches it: the tarball must contain every declared bin target,

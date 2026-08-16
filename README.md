@@ -120,6 +120,7 @@ Complete guides for setup, deployment, and integration - see
 - **Patterns** - Worked "how do I add X" guides:
   [adding a capability](./docs/patterns/adding-a-capability.md),
   [adding a store](./docs/patterns/adding-a-store.md),
+  [adding a retriever](./docs/patterns/adding-a-retriever.md),
   [exemplars](./docs/patterns/exemplars.md)
 
 ### Archive
