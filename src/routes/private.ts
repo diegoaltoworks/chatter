@@ -5,6 +5,7 @@ import { answerOnce, answerStream } from "../core/answer";
 import { resolveBuckets } from "../core/buckets";
 import { normalizeChatBody } from "../core/messages";
 import { prepareChat } from "../core/pipeline";
+import { chatBodyLimit } from "../middleware/bodyLimit";
 import { createJWTMiddleware, jwtSubject } from "../middleware/jwt";
 import { createRateLimiter } from "../middleware/ratelimit";
 import type { ServerDependencies } from "../types";
@@ -24,6 +25,7 @@ export function privateRoutes(deps: ServerDependencies) {
   const requirePrivateJWT = createJWTMiddleware(config);
   const { limitPrivate } = createRateLimiter(config);
 
+  app.use("/api/private/*", chatBodyLimit(config.server?.maxRequestBytes)); // Reject oversized bodies first
   app.use("/api/private/*", requirePrivateJWT);
   app.use("/api/private/*", limitPrivate());
 

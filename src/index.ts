@@ -70,10 +70,12 @@ export { createMCPServer } from "./mcp-server";
 
 // Middleware (for custom routes)
 export { createAuthMiddleware } from "./middleware/auth";
+export { chatBodyLimit } from "./middleware/bodyLimit";
 export { cors } from "./middleware/cors";
 export { createJWTMiddleware, jwtSubject } from "./middleware/jwt";
 export { createRateLimiter } from "./middleware/ratelimit";
 export { createReferrerCheck } from "./middleware/referrer";
+export { securityHeaders } from "./middleware/securityHeaders";
 export { createSessionMiddleware } from "./middleware/session";
 export { demoRoutes } from "./routes/demo";
 // OpenAI-compatible route factory

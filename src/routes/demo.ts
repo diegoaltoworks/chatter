@@ -12,6 +12,7 @@ import { DEFAULT_MODEL } from "../core/llm";
 import { lastUserMessage, normalizeChatBody } from "../core/messages";
 import { prepareChat } from "../core/pipeline";
 import { createSession, getActiveSessions } from "../core/session";
+import { chatBodyLimit } from "../middleware/bodyLimit";
 import { clientRateLimitKey } from "../middleware/clientKey";
 import { matchesAllowedOrigin, matchesAllowedOriginOrLocalhost } from "../middleware/originMatch";
 import { createWindowBucketLimiter } from "../middleware/windowBucket";
@@ -154,63 +155,68 @@ export function demoRoutes(deps: ServerDependencies) {
    * Demo chat endpoint - no API key required
    * Ultra-strict rate limiting by IP (10 req/min)
    */
-  app.post("/api/demo/chat", limitDemo(trustProxy), async (c) => {
-    try {
-      const body = await c.req.json().catch(() => ({}));
+  app.post(
+    "/api/demo/chat",
+    chatBodyLimit(config.server?.maxRequestBytes), // Reject oversized bodies first
+    limitDemo(trustProxy),
+    async (c) => {
+      try {
+        const body = await c.req.json().catch(() => ({}));
 
-      // Accepts a single message or a conversation; client system/tool turns
-      // are dropped so the server keeps sole ownership of the system prompt.
-      const normalized = normalizeChatBody(body);
-      if (!normalized.ok) {
-        return c.json({ error: normalized.error }, 400);
-      }
-      const { messages } = normalized;
-      if (!lastUserMessage(messages)) {
-        return c.json({ error: "no user message found in conversation" }, 400);
-      }
+        // Accepts a single message or a conversation; client system/tool turns
+        // are dropped so the server keeps sole ownership of the system prompt.
+        const normalized = normalizeChatBody(body);
+        if (!normalized.ok) {
+          return c.json({ error: normalized.error }, 400);
+        }
+        const { messages } = normalized;
+        if (!lastUserMessage(messages)) {
+          return c.json({ error: "no user message found in conversation" }, 400);
+        }
 
-      // Retrieve context from knowledge base. The demo surface is anonymous,
-      // so the hook may narrow the scope but not widen it.
-      const buckets = await resolveBuckets({ mode: "public", bucketsFor: config.bucketsFor });
-      const { system } = await prepareChat({ store, prompts, mode: "public", messages, buckets });
-      const model = config.openai.model || DEFAULT_MODEL;
+        // Retrieve context from knowledge base. The demo surface is anonymous,
+        // so the hook may narrow the scope but not widen it.
+        const buckets = await resolveBuckets({ mode: "public", bucketsFor: config.bucketsFor });
+        const { system } = await prepareChat({ store, prompts, mode: "public", messages, buckets });
+        const model = config.openai.model || DEFAULT_MODEL;
 
-      // Check if streaming requested
-      const url = new URL(c.req.url);
-      const wantsStream = url.searchParams.get("stream") === "1";
+        // Check if streaming requested
+        const url = new URL(c.req.url);
+        const wantsStream = url.searchParams.get("stream") === "1";
 
-      if (wantsStream) {
-        return stream(c, async (s) => {
-          for await (const delta of answerStream({
-            answerFn: config.answerFn,
-            client,
-            system,
-            messages,
-            mode: "public",
-            model,
-          })) {
-            await s.write(`data: ${JSON.stringify({ delta })}\n\n`);
-          }
-          await s.write("event: end\ndata: {}\n\n");
+        if (wantsStream) {
+          return stream(c, async (s) => {
+            for await (const delta of answerStream({
+              answerFn: config.answerFn,
+              client,
+              system,
+              messages,
+              mode: "public",
+              model,
+            })) {
+              await s.write(`data: ${JSON.stringify({ delta })}\n\n`);
+            }
+            await s.write("event: end\ndata: {}\n\n");
+          });
+        }
+
+        // Non-streaming response
+        const out = await answerOnce({
+          answerFn: config.answerFn,
+          client,
+          system,
+          messages,
+          mode: "public",
+          model,
         });
+        return c.json({ reply: out.content });
+      } catch (error) {
+        const err = error as Error;
+        logger.error("Demo chat error:", err);
+        return c.json({ error: err.message || "Internal error" }, 500);
       }
-
-      // Non-streaming response
-      const out = await answerOnce({
-        answerFn: config.answerFn,
-        client,
-        system,
-        messages,
-        mode: "public",
-        model,
-      });
-      return c.json({ reply: out.content });
-    } catch (error) {
-      const err = error as Error;
-      logger.error("Demo chat error:", err);
-      return c.json({ error: err.message || "Internal error" }, 500);
-    }
-  });
+    },
+  );
 
   return app;
 }

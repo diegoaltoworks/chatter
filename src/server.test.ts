@@ -343,3 +343,33 @@ describe("createServer static assets", () => {
     expect((await app.request("/healthz")).status).toBe(200);
   });
 });
+
+describe("createServer security headers and body limits", () => {
+  test("emits CSP and X-Content-Type-Options on every response", async () => {
+    const app = await createServer(baseConfig());
+
+    const res = await app.request("/healthz");
+
+    expect(res.headers.get("content-security-policy")).toContain("default-src 'self'");
+    expect(res.headers.get("x-content-type-options")).toBe("nosniff");
+  });
+
+  test("rejects an oversized /api/public/chat body with 413 before auth runs", async () => {
+    const app = await createServer({
+      ...baseConfig(),
+      server: { maxRequestBytes: 16 },
+    });
+
+    // No API key is configured on this test bot, so an undersized/absent
+    // body would normally hit the 401 from requirePublicKey first — the 413
+    // proves the body limit runs ahead of it in the middleware stack.
+    const res = await app.request("/api/public/chat", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ message: "this body is well over sixteen bytes long" }),
+    });
+
+    expect(res.status).toBe(413);
+    expect((await res.json()).error).toContain("too large");
+  });
+});
