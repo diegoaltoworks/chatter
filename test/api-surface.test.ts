@@ -81,17 +81,24 @@ describe("API surface", () => {
 
   // Precedence over completeOnce/completeStream is covered by
   // src/core/answer.test.ts; this only locks the hook's shape — the
-  // system/messages/mode/sender fields a downstream brain can rely on.
-  test("the answerFn brain hook is called with system/messages/mode/sender", async () => {
-    const answerFn: AnswerFn = async ({ system, messages, mode, sender }) => {
+  // system/messages/mode/sender/conversationId fields a downstream brain can
+  // rely on.
+  test("the answerFn brain hook is called with system/messages/mode/sender/conversationId", async () => {
+    const answerFn: AnswerFn = async ({ system, messages, mode, sender, conversationId }) => {
       expect(typeof system).toBe("string");
       expect(Array.isArray(messages)).toBe(true);
       expect(mode === "public" || mode === "private").toBe(true);
       expect(sender === undefined || typeof sender === "string").toBe(true);
+      expect(conversationId === undefined || typeof conversationId === "string").toBe(true);
       return "answer";
     };
 
-    const result = await answerFn({ system: "sys", messages: [], mode: "public" });
+    const result = await answerFn({
+      system: "sys",
+      messages: [],
+      mode: "public",
+      conversationId: "conv-1",
+    });
     expect(result).toBe("answer");
   });
 

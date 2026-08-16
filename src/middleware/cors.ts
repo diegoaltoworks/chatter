@@ -1,7 +1,8 @@
 import type { Context, Next } from "hono";
 
-const ALLOWED_HEADERS = "content-type, x-api-key, authorization";
+const ALLOWED_HEADERS = "content-type, x-api-key, authorization, x-conversation-id";
 const ALLOWED_METHODS = "POST, GET, OPTIONS";
+const EXPOSED_HEADERS = "x-conversation-id";
 
 /**
  * CORS middleware that validates requests against allowed origins.
@@ -22,6 +23,7 @@ export const cors = (allowedOrigins?: string[]) => async (c: Context, next: Next
         "access-control-allow-origin": originHeader,
         "access-control-allow-headers": ALLOWED_HEADERS,
         "access-control-allow-methods": ALLOWED_METHODS,
+        "access-control-expose-headers": EXPOSED_HEADERS,
         ...(allowAll ? {} : { vary: "Origin" }),
       },
     });
@@ -30,6 +32,7 @@ export const cors = (allowedOrigins?: string[]) => async (c: Context, next: Next
   c.header("access-control-allow-origin", originHeader);
   c.header("access-control-allow-headers", ALLOWED_HEADERS);
   c.header("access-control-allow-methods", ALLOWED_METHODS);
+  c.header("access-control-expose-headers", EXPOSED_HEADERS);
   if (!allowAll) {
     c.header("vary", "Origin");
   }

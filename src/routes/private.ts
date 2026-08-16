@@ -39,9 +39,10 @@ export function privateRoutes(deps: ServerDependencies) {
     const { messages } = normalized;
 
     // The verified JWT subject is this surface's sender identity.
+    const sender = jwtSubject(c);
     const buckets = await resolveBuckets({
       mode: "private",
-      sender: jwtSubject(c),
+      sender,
       bucketsFor: config.bucketsFor,
     });
 
@@ -63,6 +64,7 @@ export function privateRoutes(deps: ServerDependencies) {
           system,
           messages,
           mode: "private",
+          sender,
           model,
         })) {
           await s.write(`data: ${JSON.stringify({ delta })}\n\n`);
@@ -71,7 +73,15 @@ export function privateRoutes(deps: ServerDependencies) {
       });
     }
 
-    const out = await answerOnce({ answerFn, client, system, messages, mode: "private", model });
+    const out = await answerOnce({
+      answerFn,
+      client,
+      system,
+      messages,
+      mode: "private",
+      sender,
+      model,
+    });
     return c.json({ reply: out.content });
   });
 

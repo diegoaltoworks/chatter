@@ -433,6 +433,7 @@ export function createWhatsAppInboundHandler(
         messages,
         mode: "public",
         sender: senderPhone,
+        conversationId: chatId,
         model: config.model,
       });
 

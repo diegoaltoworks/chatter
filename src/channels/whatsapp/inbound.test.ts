@@ -823,7 +823,7 @@ describe("createWhatsAppInboundHandler", () => {
         return ["context"];
       },
     } as unknown as VectorStore;
-    let capturedInput: { system: string; sender?: string } | undefined;
+    let capturedInput: { system: string; sender?: string; conversationId?: string } | undefined;
 
     const { handler, sock } = createHarness({
       store,
@@ -840,6 +840,9 @@ describe("createWhatsAppInboundHandler", () => {
     expect(queries).toEqual([["base", "public", "extra"]]);
     expect(capturedInput?.system).toContain("Channel: WhatsApp.");
     expect(capturedInput?.sender).toBe("+447700900123");
+    // The chat JID is a stable per-conversation key, handed to the brain so
+    // it can key threads/history without WhatsApp-specific knowledge.
+    expect(capturedInput?.conversationId).toBe("447700900123@s.whatsapp.net");
   });
 
   test("a personaResolver's output feeds prepareChat's personaLayer", async () => {

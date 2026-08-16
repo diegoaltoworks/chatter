@@ -181,6 +181,7 @@ export async function createMCPServer(config: MCPServerOptions) {
           system,
           messages: conversationMessages,
           mode: "public",
+          conversationId: convId,
           model,
         });
 
@@ -288,6 +289,7 @@ export async function createMCPServer(config: MCPServerOptions) {
           system,
           messages: conversationMessages,
           mode: "private",
+          conversationId: convId,
           model,
         });
 

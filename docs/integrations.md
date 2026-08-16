@@ -40,6 +40,11 @@ Notes:
 - The public endpoint requires a real JWT API key (create one with
   `bunx chatter create-apikey`). Widget session keys and demo keys are not
   valid here.
+- An optional `x-conversation-id` request header (or `conversation_id` body
+  field) threads a stable thread id to a configured `answerFn`; the resolved
+  id — the client's own, or a generated one when it sent neither — is always
+  echoed back via the `x-conversation-id` response header. See
+  [Bringing your own brain](#bringing-your-own-brain-answerfn).
 
 ### curl
 
@@ -197,19 +202,40 @@ downstream:
 ```ts
 const server = await createServer({
   // ...
-  answerFn: async ({ system, messages, mode, sender }) => {
-    const result = await myAgent.invoke({ system, messages });
+  answerFn: async ({ system, messages, mode, sender, conversationId }) => {
+    const result = await myAgent.invoke({ system, messages, threadId: conversationId });
     return result.text; // or { content, usage }
   },
 });
 ```
 
 `answerFn` is consulted by every chat surface: the widget chat routes, the
-OpenAI-compatible endpoints, and the MCP chat tools. It receives the system
-prompt exactly as `prepareChat` assembled it, the conversation, the pipeline
-`mode`, and — where the surface knows one — a `sender` identity (the built-in
-HTTP surfaces do not pass one, even on the private routes, whose JWT subject is
-currently used only for retrieval scope).
+OpenAI-compatible endpoints, the MCP chat tools, and channels. It receives the
+system prompt exactly as `prepareChat` assembled it, the conversation, and the
+pipeline `mode`, plus two optional identifiers a surface populates with
+whatever it actually knows:
+
+- **`sender`** — who is asking. The private widget/OpenAI-compat routes supply
+  the verified JWT subject, the public OpenAI-compat route supplies the
+  calling API key's id, and channels supply their own sender identity (a
+  WhatsApp number, for example). The anonymous widget/demo routes and MCP
+  tools leave it unset.
+
+  On the private routes and channels this is the same identity `bucketsFor`
+  sees. The public OpenAI-compat route is the one deliberate exception: its
+  API key id reaches `answerFn` as "who is talking", but `bucketsFor` there
+  still sees no sender at all — the retrieval-scope security invariant
+  (anonymous surfaces cannot reach private buckets) does not bend just because
+  a brain now knows which key called. A `bucketsFor` hook expecting the API
+  key id to widen scope on that route will not see one.
+- **`conversationId`** — a stable per-thread key, for a brain that keeps its
+  own history or state. The OpenAI-compatible endpoints accept one from the
+  client (`x-conversation-id` header, or a `conversation_id` body field) and
+  generate one when neither is sent, echoing the resolved value back via the
+  `x-conversation-id` response header; channels supply their own natural
+  per-chat key (WhatsApp uses the chat JID); the MCP chat tools reuse the same
+  id they already track and return in `_meta.conversationId`. Surfaces with no
+  notion of a thread (the anonymous widget/demo routes) leave it unset.
 
 Return a string, or an object with `content` and optional `usage` for the
 surfaces that report token counts (a plain string reports zero usage). A

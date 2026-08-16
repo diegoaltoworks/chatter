@@ -72,7 +72,7 @@ describe("answerOnce", () => {
     expect(calls[0].messages[0]).toEqual({ role: "system", content: "assembled system" });
   });
 
-  test("hands the assembled prompt, conversation, mode and sender to answerFn", async () => {
+  test("hands the assembled prompt, conversation, mode, sender and conversationId to answerFn", async () => {
     const { client, calls } = createFakeClient();
     const seen: AnswerFnInput[] = [];
 
@@ -86,6 +86,7 @@ describe("answerOnce", () => {
       messages,
       mode: "private",
       sender: "+10000000000",
+      conversationId: "conv-1",
     });
 
     expect(out.content).toBe("brain answer");
@@ -95,6 +96,7 @@ describe("answerOnce", () => {
         messages,
         mode: "private",
         sender: "+10000000000",
+        conversationId: "conv-1",
       },
     ]);
     // The brain replaces the completion entirely — no upstream call is made.
@@ -249,6 +251,36 @@ describe("answerStream", () => {
 
     expect(chunks).toEqual(["brain answer"]);
     expect(calls).toEqual([]);
+  });
+
+  test("hands sender and conversationId to a streaming answerFn", async () => {
+    const { client } = createFakeClient();
+    const seen: AnswerFnInput[] = [];
+
+    await collect(
+      answerStream({
+        answerFn: async (input) => {
+          seen.push(input);
+          return "brain answer";
+        },
+        client,
+        system: "s",
+        messages,
+        mode: "public",
+        sender: "+10000000000",
+        conversationId: "conv-1",
+      }),
+    );
+
+    expect(seen).toEqual([
+      {
+        system: "s",
+        messages,
+        mode: "public",
+        sender: "+10000000000",
+        conversationId: "conv-1",
+      },
+    ]);
   });
 
   test("yields nothing when the brain answers with an empty string", async () => {

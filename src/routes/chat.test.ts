@@ -184,6 +184,44 @@ describe("POST /api/private/chat", () => {
     expect(await res.json()).toEqual({ reply: "built-in reply" });
     expect(requestedModels).toEqual(["gpt-4o-mini"]);
   });
+
+  test("hands the verified JWT subject to the brain as sender", async () => {
+    const { publicKeyPem, token } = await createPrivateJWT();
+    const seen: AnswerFnInput[] = [];
+    const { deps } = createFakeDeps({
+      auth: { jwt: { publicKeyPem } },
+      answerFn: async (input) => {
+        seen.push(input);
+        return "brain reply";
+      },
+    });
+    const app = privateRoutes(deps);
+
+    await app.fetch(
+      chatRequest("/api/private/chat", message, { Authorization: `Bearer ${token}` }),
+    );
+
+    expect(seen[0].sender).toBe("staff-1");
+  });
+
+  test("hands the verified JWT subject to the brain as sender on the streaming path too", async () => {
+    const { publicKeyPem, token } = await createPrivateJWT();
+    const seen: AnswerFnInput[] = [];
+    const { deps } = createFakeDeps({
+      auth: { jwt: { publicKeyPem } },
+      answerFn: async (input) => {
+        seen.push(input);
+        return "brain reply";
+      },
+    });
+    const app = privateRoutes(deps);
+
+    await app.fetch(
+      chatRequest("/api/private/chat?stream=1", message, { Authorization: `Bearer ${token}` }),
+    );
+
+    expect(seen[0].sender).toBe("staff-1");
+  });
 });
 
 describe("the server owns the system prompt on every chat route", () => {
