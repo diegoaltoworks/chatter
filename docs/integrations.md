@@ -1,13 +1,13 @@
 # UI Integrations & OpenAI-Compatible API
 
 Chatter's value lives on the server: RAG retrieval, guardrails, auth, and rate
-limiting. The built-in widget is optional — any chat UI that speaks the OpenAI
+limiting. The built-in widget is optional - any chat UI that speaks the OpenAI
 chat-completions wire format can be the front end.
 
 **The server owns the system prompt on every chat surface.** Whatever a client
 sends is normalized before it reaches the pipeline: only `user` and `assistant`
 turns survive (`system`, `developer` and `tool` messages are dropped), and
-content is reduced to text — a plain string, or the text parts of an
+content is reduced to text - a plain string, or the text parts of an
 OpenAI-style content-part array. This holds for the widget routes
 (`/api/public/chat`, `/api/private/chat`, `/api/demo/chat`) and the
 OpenAI-compatible routes alike. Custom routes can apply the same rule with the
@@ -31,8 +31,8 @@ Notes:
 - **The server picks the model.** A client-supplied `model` field is accepted
   for wire compatibility but ignored; the upstream model is always
   `config.openai.model` (default `gpt-4o`). Clients must not control your
-  spend. Every built-in chat surface — the widget routes, the demo route, and
-  the MCP chat tools — honors this same setting; none of them fall back to a
+  spend. Every built-in chat surface - the widget routes, the demo route, and
+  the MCP chat tools - honors this same setting; none of them fall back to a
   hardcoded model.
 - **The server owns the system prompt.** Incoming `system`/`tool` messages are
   dropped; guardrails, persona, and retrieved context are assembled
@@ -42,7 +42,7 @@ Notes:
   valid here.
 - An optional `x-conversation-id` request header (or `conversation_id` body
   field) threads a stable thread id to a configured `answerFn`; the resolved
-  id — the client's own, or a generated one when it sent neither — is always
+  id - the client's own, or a generated one when it sent neither - is always
   echoed back via the `x-conversation-id` response header. See
   [Bringing your own brain](#bringing-your-own-brain-answerfn).
 
@@ -68,7 +68,7 @@ const client = new OpenAI({
 });
 
 const res = await client.chat.completions.create({
-  model: "chatter", // ignored — the server chooses the model
+  model: "chatter", // ignored - the server chooses the model
   messages: [{ role: "user", content: "Hello!" }],
 });
 ```
@@ -114,8 +114,8 @@ personas, guardrails) is identical.
 
 ### Shaping the prompt per caller
 
-`prepareChat` assembles the system prompt in layers — base rules, persona,
-channel hint, retrieved context — and two optional parameters let a caller
+`prepareChat` assembles the system prompt in layers - base rules, persona,
+channel hint, retrieved context - and two optional parameters let a caller
 adjust the middle layers without rebuilding the sandwich itself:
 
 ```ts
@@ -154,7 +154,7 @@ const server = await createServer({
 
 The hook is consulted by the widget chat routes, the OpenAI-compatible
 endpoints, the MCP chat tools and the demo route. It receives the pipeline
-`mode` plus, where the surface knows one, a `sender` identity — the private
+`mode` plus, where the surface knows one, a `sender` identity - the private
 routes supply the verified JWT subject; the API-key, MCP and demo surfaces have
 no per-user identity, so they leave it unset. Return `undefined` to leave the
 mode defaults in place, or a list of buckets to use instead. An empty list
@@ -172,12 +172,12 @@ out of reach of the public pipeline.
 Note the granularity this operates at. `base`, `public` and `private` are the
 buckets `config/knowledge` ingests, and those are the ones a stock deployment
 can gate. Additional bucket names resolve and query fine, but nothing ingests
-them — the knowledge builder only walks the three directories, and prunes rows
-it did not write — so a custom bucket needs its own ingestion and its own
+them - the knowledge builder only walks the three directories, and prunes rows
+it did not write - so a custom bucket needs its own ingestion and its own
 pruning strategy before it holds anything.
 
 The same resolution is exported for channels and custom routes, which should
-use it rather than hand-rolling the check — it is the single place the ceiling
+use it rather than hand-rolling the check - it is the single place the ceiling
 is enforced:
 
 ```ts
@@ -194,7 +194,7 @@ whatever it is given, so anything derived from request input belongs on the
 ### Shaping retrieval itself (`rewriteQuery`, `rerankContext`)
 
 `bucketsFor` decides *where* a turn may retrieve from; `rewriteQuery` and
-`rerankContext` decide *how well* that retrieval performs — the seams a
+`rerankContext` decide *how well* that retrieval performs - the seams a
 hybrid-RAG setup (query expansion, a cross-encoder reranker, a keyword-search
 merge) plugs into without hand-rolling retrieval around `prepareChat`:
 
@@ -213,18 +213,18 @@ const server = await createServer({
 ```
 
 `rewriteQuery` runs first, before `store.query`, and receives the latest
-user message as `query` plus the pipeline `mode` and — where the surface
-knows one — a `sender` identity. Unlike `bucketsFor`, this identity is never
+user message as `query` plus the pipeline `mode` and - where the surface
+knows one - a `sender` identity. Unlike `bucketsFor`, this identity is never
 security-restricted: rewriting a query cannot widen what it retrieves, so it
 carries the same broader identity `answerFn` sees (the public
 OpenAI-compatible route's API key id included). `rerankContext` runs after
-`store.query`, and receives the query retrieval actually ran with — the
-rewritten one, if `rewriteQuery` changed it — plus the `chunks` the store
+`store.query`, and receives the query retrieval actually ran with - the
+rewritten one, if `rewriteQuery` changed it - plus the `chunks` the store
 returned, in its own order.
 
 Both hooks are consulted everywhere `bucketsFor` is: the widget routes, the
 OpenAI-compatible endpoints, the MCP chat tools, the demo route, and
-channels. Both fail open — a throw, rejection, or a return value that isn't
+channels. Both fail open - a throw, rejection, or a return value that isn't
 the expected shape (a non-blank string for `rewriteQuery`, a string array for
 `rerankContext`) falls back to what retrieval would have produced unmodified,
 logging the failure when a logger is configured. A broken hook degrades
@@ -234,14 +234,14 @@ and retrieval behaves exactly as it does today.
 **`rerankContext` is not the access-control seam.** Because a failure falls
 back to the unfiltered chunks, a hook that drops chunks a sender shouldn't
 see would silently un-drop them on its own error. Scope decisions belong in
-`bucketsFor`, which fails closed by design — use `rerankContext` only for
+`bucketsFor`, which fails closed by design - use `rerankContext` only for
 relevance and ordering.
 
 ## Bringing your own brain (`answerFn`)
 
 Prompt shaping stops at the completion call. `answerFn` replaces the call
 itself, so an agent framework, a graph runtime, or a remote service can produce
-the answer while Chatter keeps everything around it — retrieval and prompt
+the answer while Chatter keeps everything around it - retrieval and prompt
 assembly upstream, and auth, rate limiting, transports and output guardrails
 downstream:
 
@@ -261,7 +261,7 @@ system prompt exactly as `prepareChat` assembled it, the conversation, and the
 pipeline `mode`, plus two optional identifiers a surface populates with
 whatever it actually knows:
 
-- **`sender`** — who is asking. The private widget/OpenAI-compat routes supply
+- **`sender`** - who is asking. The private widget/OpenAI-compat routes supply
   the verified JWT subject, the public OpenAI-compat route supplies the
   calling API key's id, and channels supply their own sender identity (a
   WhatsApp number, for example). The anonymous widget/demo routes and MCP
@@ -270,11 +270,11 @@ whatever it actually knows:
   On the private routes and channels this is the same identity `bucketsFor`
   sees. The public OpenAI-compat route is the one deliberate exception: its
   API key id reaches `answerFn` as "who is talking", but `bucketsFor` there
-  still sees no sender at all — the retrieval-scope security invariant
+  still sees no sender at all - the retrieval-scope security invariant
   (anonymous surfaces cannot reach private buckets) does not bend just because
   a brain now knows which key called. A `bucketsFor` hook expecting the API
   key id to widen scope on that route will not see one.
-- **`conversationId`** — a stable per-thread key, for a brain that keeps its
+- **`conversationId`** - a stable per-thread key, for a brain that keeps its
   own history or state. The OpenAI-compatible endpoints accept one from the
   client (`x-conversation-id` header, or a `conversation_id` body field) and
   generate one when neither is sent, echoing the resolved value back via the
@@ -288,7 +288,7 @@ surfaces that report token counts (a plain string reports zero usage). A
 rejection surfaces as a normal completion error rather than silently falling
 back to the built-in completion.
 
-Guardrails still apply to whatever comes back — and because a brain's answer
+Guardrails still apply to whatever comes back - and because a brain's answer
 arrives whole, it gets the leakage check as well as credential scrubbing, where
 the built-in stream can only scrub each delta as it passes. A streamed brain
 answer is therefore held to the stricter of the two checks.
@@ -324,13 +324,13 @@ const server = await createServer({
 });
 ```
 
-Return a string to replace the reply, or `null` to veto it — a deliberate
+Return a string to replace the reply, or `null` to veto it - a deliberate
 drop, treated the same as an empty answer: the channel pipeline sends
 nothing and never records an assistant turn for it (the user's own turn,
 already appended before answering, stays recorded either way); the HTTP and
 MCP surfaces report an empty `content`/`reply`/tool result rather than
 failing the request. A throw/rejection is logged and the ORIGINAL reply is
-sent instead — a bug in this hook must never silently swallow an answer the
+sent instead - a bug in this hook must never silently swallow an answer the
 model already produced.
 
 `transformReply` is consulted by the channel pipeline and every non-streaming
@@ -340,11 +340,11 @@ chat surface: the widget and demo routes (`channel: "widget-public"` /
 tools (`channel: "mcp-public"` / `"mcp-private"`), and each channel under its
 own name (`"whatsapp"`, `"telegram"`, `"matrix"`, or a channel's configured `name`).
 `sender`/`conversationId` carry the same identifiers `answerFn` sees, where
-the surface has them — the demo and MCP surfaces are anonymous, so neither
+the surface has them - the demo and MCP surfaces are anonymous, so neither
 populates `sender`.
 
 **Streaming responses are not covered.** A streaming reply is delivered
-incrementally, chunk by chunk, as it's produced — there is no final answer to
+incrementally, chunk by chunk, as it's produced - there is no final answer to
 transform until the stream has already been sent. `transformReply` is never
 consulted on `stream: true` requests; a hook that needs to see or block every
 reply cannot rely on streaming clients being disabled.
@@ -377,7 +377,7 @@ multi-turn structured interactions handled by [flows](./flows.md)
 (Chatter's own designated home for schema-driven, multi-turn slot filling).
 
 Reach for a graph framework instead when a single turn needs multiple
-LLM or tool-calling steps that don't reduce to "retrieve, then answer" — a
+LLM or tool-calling steps that don't reduce to "retrieve, then answer" - a
 research agent that plans and re-plans, a turn that fans out to several
 tools before composing a reply, or orchestration shared with other
 graph-based systems you already run. Chatter's core stays framework-free
@@ -388,12 +388,12 @@ package, so choosing one costs nothing for deployments that don't.
 
 Two runnable sample apps live in `examples/`:
 
-- **[`examples/deep-chat`](../examples/deep-chat/)** — [Deep Chat](https://deepchat.dev)
+- **[`examples/deep-chat`](../examples/deep-chat/)** - [Deep Chat](https://deepchat.dev)
   web component (framework-agnostic, no build step). A `connect.handler`
   streams from `/v1/chat/completions`.
-- **[`examples/assistant-ui`](../examples/assistant-ui/)** — [assistant-ui](https://www.assistant-ui.com)
+- **[`examples/assistant-ui`](../examples/assistant-ui/)** - [assistant-ui](https://www.assistant-ui.com)
   React app (Vite). A custom `ChatModelAdapter` streams from the same
   endpoint.
 
-Both use only the standard endpoint — no Chatter-specific client code — so the
+Both use only the standard endpoint - no Chatter-specific client code - so the
 same pattern works for any other OpenAI-compatible UI or SDK.

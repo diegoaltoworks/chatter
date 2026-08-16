@@ -1,7 +1,7 @@
 # Flows
 
 A directory-loaded slot-filling engine for multi-turn, structured
-interactions — "book an appointment", "file a return", anything that needs a
+interactions - "book an appointment", "file a return", anything that needs a
 few pieces of information gathered across several messages before it can run.
 Published as a subpath so the core install is unaffected by it:
 
@@ -11,17 +11,17 @@ import { createFlowEngine, createTursoFlowSessionStore } from "@diegoaltoworks/c
 
 Nothing in this module is chat-surface- or channel-specific, and it adds no
 required dependencies beyond the OpenAI client and libsql client chatter
-already expects. It ships **no flows** — a flows directory, its trigger
+already expects. It ships **no flows** - a flows directory, its trigger
 keywords, its schema and its handler logic are always supplied by the caller.
 
-This is also the designated future home for graph-based flow orchestration —
+This is also the designated future home for graph-based flow orchestration -
 today's engine is intentionally the simplest thing that fills a schema over a
 few turns.
 
 ## Presentation stays out
 
-`process()` returns a structured `FlowResult` — one `message` string plus an
-optional `result` payload — never per-channel text (no SMS body, no WhatsApp
+`process()` returns a structured `FlowResult` - one `message` string plus an
+optional `result` payload - never per-channel text (no SMS body, no WhatsApp
 body, no TwiML). Rendering the result for voice, SMS, WhatsApp or a web widget
 is the calling plugin's job, not the engine's. This is what makes the engine
 channel-agnostic: it never assumes how its answer will be delivered.
@@ -34,19 +34,19 @@ this module's, for two reasons:
 
 1. **Zero-parameter flows.** This loader requires `schema.properties` to be
    non-empty (a flow with no extractable params can never complete, so an
-   empty schema here is almost always a mistake). Talker needs to allow it —
+   empty schema here is almost always a mistake). Talker needs to allow it -
    a keyword-triggered flow like "hand off to a human" runs with no params at
-   all — so its loader relaxes that one check instead of adopting this one.
+   all - so its loader relaxes that one check instead of adopting this one.
 2. **Rendering.** This engine's `FlowHandler` returns
-   `{ success, message, result? }` — a single presentation-free string,
+   `{ success, message, result? }` - a single presentation-free string,
    deliberately (see above). Talker needs distinct spoken vs. SMS vs.
    WhatsApp renderings of one outcome, so its handlers return
    `{ success, say, sms?, whatsapp?, result? }` instead, and its
    `FlowHandlerContext`/`FlowPrefill` carry `phoneNumber` where this module's
    carry `sessionKey`.
 
-Talker never routes its flows through this engine's `process()` — it invokes
-handlers directly — and adapts only the read-only fields
+Talker never routes its flows through this engine's `process()` - it invokes
+handlers directly - and adapts only the read-only fields
 (`definition`/`instructionsPath`/`prefill`) back to this module's types,
 through a narrow structural adapter, where it does need to satisfy this
 module's shape (e.g. handing a loaded flow to code that expects this
@@ -86,9 +86,9 @@ flows/
 ```
 
 `flow.json` is validated on load; a malformed field fails with an actionable
-error naming the offending field. `contractVersion` is optional —
+error naming the offending field. `contractVersion` is optional -
 omitted, it defaults to `1`, so every flow written before this field existed
-still loads unchanged — but when present it's checked against
+still loads unchanged - but when present it's checked against
 `CURRENT_FLOW_CONTRACT_VERSION` (exported alongside the other flow types) so a
 directory written for a newer contract than this loader understands fails
 loudly instead of being silently misinterpreted.
@@ -98,7 +98,7 @@ loudly instead of being silently misinterpreted.
 handler.
 
 `handler.ts` runs once every required param is collected, and returns the
-structured result — never presentation:
+structured result - never presentation:
 
 ```ts
 import type { FlowHandler } from "@diegoaltoworks/chatter/flows";
@@ -113,7 +113,7 @@ export const execute: FlowHandler = async (params, { sessionKey }) => {
 };
 ```
 
-`prefill.ts` is optional — seed params from context the caller already knows
+`prefill.ts` is optional - seed params from context the caller already knows
 (a caller id resolved from the channel, say) before extraction runs. The
 `context` argument is whatever the caller passes as `prefillContext` to
 `engine.process()` (empty object when omitted):
@@ -127,12 +127,12 @@ export const prefillFromContext: FlowPrefill = (sessionKey, context) => {
 ```
 
 `id` must match the directory name. `triggerKeywords` and `schema.properties`
-must both be non-empty — a flow with neither can never be reached or ever
+must both be non-empty - a flow with neither can never be reached or ever
 complete. A directory that fails to load (a validation failure, a missing
 file, an unrecognized `contractVersion`) is skipped (logged, not fatal) so one
 malformed flow does not take the rest down with it. Directories named `lib`,
 `tests` or `registry` are always skipped (reserved for a flows directory's own
-shared code/fixtures) — don't name a flow one of those three.
+shared code/fixtures) - don't name a flow one of those three.
 
 ## The engine
 
@@ -151,13 +151,13 @@ await engine.loadFlows();
 
 const result = await engine.process(sessionKey, message);
 if (result.isFlowActive || result.flowCompleted || result.cancelled) {
-  // a flow is handling this turn — send result.message and stop here
+  // a flow is handling this turn - send result.message and stop here
 } else {
   // nothing matched; fall through to the normal chat pipeline
 }
 ```
 
-`sessionKey` is whatever identifies a conversation on your surface — a phone
+`sessionKey` is whatever identifies a conversation on your surface - a phone
 number, a WhatsApp JID, a web session id. The engine is channel-agnostic: it
 never inspects or interprets the key, only uses it to key session state.
 
@@ -165,10 +165,10 @@ never inspects or interprets the key, only uses it to key session state.
 
 Two steps, checked in order:
 
-1. **Critical keywords** — an optional `keyword -> flowId` map checked first.
+1. **Critical keywords** - an optional `keyword -> flowId` map checked first.
    A match triggers instantly, with no LLM round-trip. Unset, this step is
    disabled entirely.
-2. **LLM intent detection** — when no keyword matches (or none are
+2. **LLM intent detection** - when no keyword matches (or none are
    configured), the message and every loaded flow's description/keywords are
    sent to the model for classification. A detection has to clear
    `minConfidence` (default `0.7`) to trigger; anything lower falls through to
@@ -184,12 +184,12 @@ session clears. Until then, `result.message` carries a prompt for whatever's
 still missing.
 
 A message matching a cancel keyword as a whole word/phrase (`cancel`,
-`nevermind`, "never mind", `stop`, "forget it", `quit` by default — override
+`nevermind`, "never mind", `stop`, "forget it", `quit` by default - override
 with `cancelKeywords`) exits the active flow immediately: `{ cancelled: true }`,
 no handler call, session cleared.
 
 A transient failure mid-flow (an extraction call that throws) returns
-`{ error: true }` but **keeps** the session — the params collected so far
+`{ error: true }` but **keeps** the session - the params collected so far
 survive, and the next message retries rather than starting over. Set
 `sessionTtlMs` to bound how long an abandoned or stuck session may sit before
 it's dropped and the next message is matched fresh instead of resumed; unset,
@@ -199,18 +199,18 @@ sessions only end via completion or a cancel keyword.
 
 `FlowSessionStore` is a structural interface with three methods
 (`get`/`set`/`clear`); `createTursoFlowSessionStore(deps.db)` is the shipped
-binding. Build it on `deps.db` — the libsql handle chatter already opened —
+binding. Build it on `deps.db` - the libsql handle chatter already opened -
 rather than a second connection of your own. State lives in the database, not
 process memory, because a deployment's next message for a given `sessionKey`
-is not guaranteed to land on the same instance that handled the last one — a
+is not guaranteed to land on the same instance that handled the last one - a
 session written by instance A is visible to instance B's next `process()`
 call.
 
 That's a visibility guarantee, not a concurrency one: two messages for the
 same `sessionKey` processed at the same time can both read "no active
 session" and both trigger a flow, or both read the same in-progress state and
-race to complete it. This is expected to be rare — messaging channels
-typically process one sender's messages in order — but a host expecting true
+race to complete it. This is expected to be rare - messaging channels
+typically process one sender's messages in order - but a host expecting true
 concurrent messages per session should serialize `process()` calls per
 `sessionKey` itself.
 
@@ -229,12 +229,12 @@ Any other backing store works too, as long as it satisfies the interface.
 `createFlowEngine` is a thin orchestration layer over pieces exported
 individually, for callers who want to assemble their own flow:
 
-- `loadFlowsFromDirectory(flowsDir)` — the loader alone.
-- `createFlowRegistry(flows, criticalKeywords?)` — lookup plus the pure
+- `loadFlowsFromDirectory(flowsDir)` - the loader alone.
+- `createFlowRegistry(flows, criticalKeywords?)` - lookup plus the pure
   keyword-matching step.
-- `detectIntent(client, model, message, flows, conversationContext?)` — the
+- `detectIntent(client, model, message, flows, conversationContext?)` - the
   LLM classification step alone.
-- `extractParameters(client, model, flow, message, existingParams, now?)` —
+- `extractParameters(client, model, flow, message, existingParams, now?)` -
   the LLM extraction step alone; `now` is injectable for deterministic
   date-relative prompt context in tests.
-- `shouldExitFlow(message, cancelKeywords?)` — the pure cancellation check.
+- `shouldExitFlow(message, cancelKeywords?)` - the pure cancellation check.

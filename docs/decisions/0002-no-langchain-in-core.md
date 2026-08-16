@@ -1,4 +1,4 @@
-# ADR 0002: No agent/graph framework in core — `answerFn` is the seam
+# ADR 0002: No agent/graph framework in core - `answerFn` is the seam
 
 ## Status
 
@@ -7,8 +7,8 @@ Accepted.
 ## Context
 
 Chatter's chat pipeline is deliberately linear: retrieve, assemble a prompt,
-answer once (`prepareChat` → `answerOnce`/`answerStream` →
-`completeOnce`/`completeStream`). Some deployments need more than that —
+answer once (`prepareChat` -> `answerOnce`/`answerStream` ->
+`completeOnce`/`completeStream`). Some deployments need more than that -
 multi-step tool calling, a research agent that plans and re-plans, a turn
 that fans out to several tools before composing a reply. A graph or agent
 framework (LangGraph and similar) is the right tool for that, and consumers
@@ -25,7 +25,7 @@ chatter's.
 `answerFn` is the entire seam. `src/core/answer.ts`'s `answerOnce` and
 `answerStream` check for a configured `answerFn` first and only fall back to
 `completeOnce`/`completeStream` (`src/core/llm.ts`) when none is set. A graph
-framework — or any other way of producing an answer — plugs in by
+framework - or any other way of producing an answer - plugs in by
 implementing `answerFn`; chatter keeps owning retrieval, prompt assembly,
 auth, rate limiting, transports, and output guardrails around it. See
 [integrations.md](../integrations.md#graph-frameworks-langgraph-and-similar)
@@ -45,11 +45,11 @@ looks most like it wants to live inside core.
 
 - Every chat surface (routes, channels, programmatic use) must call
   `answerOnce`/`answerStream`, never `completeOnce`/`completeStream`
-  directly — a direct call bypasses `answerFn` silently. Enforced by
+  directly - a direct call bypasses `answerFn` silently. Enforced by
   `scripts/architecture-invariants.test.ts`; see
   [ARCHITECTURE.md](../ARCHITECTURE.md), invariant 1.
 - A deployment that wants a graph framework pays for it in its own
-  dependencies, not chatter's — `examples/langgraph-brain` shows the wiring
+  dependencies, not chatter's - `examples/langgraph-brain` shows the wiring
   without chatter depending on LangGraph at all.
 - The same restraint applies to any future "obviously useful" framework a
   brain implementation might want: it goes behind `answerFn`, not into

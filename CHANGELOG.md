@@ -1,7 +1,7 @@
 # Changelog
 
 Per-release notes are generated automatically from commit/PR history when a
-version is published — see [GitHub Releases](https://github.com/diegoaltoworks/chatter/releases)
+version is published - see [GitHub Releases](https://github.com/diegoaltoworks/chatter/releases)
 for the current and complete history. This file is not kept in sync with that
 automation; entries below stop shortly after 0.5.0 and are retained only as a
 historical record of changes made before releases were automated.
@@ -11,11 +11,11 @@ and this project adhered to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Changes after 0.5.0
 
-All released — see GitHub Releases for exact version numbers.
+All released - see GitHub Releases for exact version numbers.
 
 ### Added
 - **OpenAI-compatible endpoints**: `POST /v1/chat/completions` (public pipeline, API key auth) and `POST /api/private/v1/chat/completions` (private pipeline, JWT auth), with SSE streaming (`chat.completion.chunk` + `[DONE]`) and non-streaming responses. Any OpenAI-format chat UI or SDK can now be the front end. Disable with `features.enableOpenAICompat: false`.
-- **Headless mode**: `features.headless: true` runs the server as a pure API — widget assets and static/demo pages are not served.
+- **Headless mode**: `features.headless: true` runs the server as a pure API - widget assets and static/demo pages are not served.
 - **Exported chat pipeline**: `prepareChat` (RAG retrieval + system prompt assembly) is exported for programmatic use, fully decoupled from HTTP and the widget.
 - **UI integration examples**: runnable sample apps for [Deep Chat](https://deepchat.dev) (`examples/deep-chat`) and [assistant-ui](https://www.assistant-ui.com) (`examples/assistant-ui`), plus a new [integrations guide](./docs/integrations.md).
 

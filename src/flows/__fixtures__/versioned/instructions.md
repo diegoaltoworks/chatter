@@ -1,1 +1,1 @@
-Unused — this fixture exists to test an explicit `contractVersion`.
+Unused - this fixture exists to test an explicit `contractVersion`.

@@ -4,13 +4,13 @@ A **channel** plugs a transport (WhatsApp, Telegram, Matrix, SMS, ...) into a
 chatter server through the `Channel` SPI (see
 [Server Setup](./server.md#channels)). The built-in
 [WhatsApp](./channels.md), [Telegram](./telegram.md) and [Matrix](./matrix.md)
-channels are three implementations; this doc is the other half — everything a
+channels are three implementations; this doc is the other half - everything a
 channel needs from `./channels` to answer a message, worked through Telegram
 so nothing here is WhatsApp-specific by accident.
 
 The Telegram walkthrough below is deliberately a *sketch*: it is the shortest
 thing that works, not the shipped channel. The real one lives in
-`src/channels/telegram/` and adds what a sketch skips — long-poll backoff,
+`src/channels/telegram/` and adds what a sketch skips - long-poll backoff,
 message splitting, allowlist logging, token redaction, and a second transport
 (a webhook route, alongside the long poll) sharing the same update-handling
 logic. Read this for the SPI, read that for the precedent.
@@ -24,7 +24,7 @@ import { createInboundPipeline } from "@diegoaltoworks/chatter/channels";
 A transport is responsible for exactly three things:
 
 1. **Turning its own wire format into a `ChannelMessage`.** Every channel
-   resolves the same shape — chat id, sender id, text, whether it's a DM,
+   resolves the same shape - chat id, sender id, text, whether it's a DM,
    whether the bot was addressed, whether the bot sent it itself:
 
    ```ts
@@ -40,13 +40,13 @@ A transport is responsible for exactly three things:
    }
    ```
 
-   `messageRef` is optional and transport-defined — set it when the wire
+   `messageRef` is optional and transport-defined - set it when the wire
    format has a stable handle for "this exact message" (WhatsApp's is the
    Baileys message key) so a caller can later target it, e.g. via
    `ChannelSenderRegistry.sendReaction(name, chatId, messageRef, emoji)`. A
    transport with nothing to put there just omits it.
 
-2. **Delivering a reply through an `InboundReplySender`** — two methods, one
+2. **Delivering a reply through an `InboundReplySender`** - two methods, one
    for the eventual chat answer and one for a mute/unmute acknowledgement.
    Splitting them lets a transport that supports reply-threading (Telegram's
    `reply_to_message_id`, WhatsApp's `quoted`) use it only for the answer,
@@ -60,17 +60,17 @@ A transport is responsible for exactly three things:
    ```
 
 3. **Anything transport-specific that has to run before the normal chat
-   turn** — an image request, a slash command, a payment callback — via the
+   turn** - an image request, a slash command, a payment callback - via the
    pipeline's optional `intercept` hook (below).
 
-Everything else — the allowlist/mute/mention gate, DM/group rate limits,
+Everything else - the allowlist/mute/mention gate, DM/group rate limits,
 persona resolution, retrieval bucket scoping, loading and appending
-conversation history, and the `prepareChat`/`answerOnce` call itself — is
+conversation history, and the `prepareChat`/`answerOnce` call itself - is
 `createInboundPipeline`. It is the exact code the WhatsApp channel runs
 after it has built a `ChannelMessage`, extracted once so a second channel
 never re-derives it.
 
-Each `handle(msg, turn)` call resolves to an `InboundPipelineOutcome` —
+Each `handle(msg, turn)` call resolves to an `InboundPipelineOutcome` -
 `{ action: "reply", content }` when an answer was actually delivered, or
 `{ action: "ignore" | "mute" | "unmute" | "rate-limited" | "intercepted" }`
 otherwise (an empty answer from `answerFn` reports `"ignore"`, not
@@ -81,7 +81,7 @@ a typing indicator only while a reply is actually in flight.
 ## Wiring it up: a Telegram channel
 
 Telegram's Bot API delivers updates as `{ update_id, message: { chat, from,
-text, entities, reply_to_message } }`, over long polling or a webhook — the
+text, entities, reply_to_message } }`, over long polling or a webhook - the
 transport detail chatter doesn't care about. Assume a small `TelegramClient`
 wrapper (`getUpdates`/`sendMessage`, however you fetch it) and build the
 `Channel`:
@@ -195,31 +195,31 @@ Walking through what each piece is doing:
 
 - **One pipeline per channel start, one `handle()` call per message.**
   `createInboundPipeline`'s gates, mute-state `Set`, and rate limiters are
-  stateful and live in its closure — build it once in `start()`, not inside
+  stateful and live in its closure - build it once in `start()`, not inside
   the update handler.
 - **`ChannelMessage` construction is the transport's whole job.** Telegram
   has no separate "own mention" stripping step the way WhatsApp does (bot
   usernames arrive as ordinary `@mention` entities a model can already
-  read), so there's nothing to clean here — a channel with WhatsApp's
+  read), so there's nothing to clean here - a channel with WhatsApp's
   problem would strip it the same way, before building `msg.text`.
 - **The reply object is built fresh per message** (not stored in config)
-  because the answer needs to thread onto *this* incoming message —
+  because the answer needs to thread onto *this* incoming message -
   `reply_to_message_id`/`quoted` is per-reply state, not per-channel state.
 - **`sender` is per-call, not per-channel**, because it identifies who's
   talking, not who's listening. Pass a plain string when it's already
   known; pass a thunk (`() => Promise<string>`) when resolving it takes
   work (an API call, a lookup) so the pipeline only pays for it once gates
-  and rate limits have already let the message through — exactly what the
+  and rate limits have already let the message through - exactly what the
   WhatsApp channel does to resolve a LID identity to a phone number.
 - **Outbound-without-a-transport** (a scheduler, a flow) is a separate
   concern from inbound: register a plain `ChannelSender` (`sendText`) into
   `deps.senders` so brain-side features can send by channel name without
-  knowing this is Telegram — see [Server Setup](./server.md#sending-without-a-transport).
+  knowing this is Telegram - see [Server Setup](./server.md#sending-without-a-transport).
 
 ## The `intercept` hook
 
 `InboundTurn.intercept` runs after gates and rate-limiting pass, before
-persona/buckets/history/`answerOnce` — for a feature that fully owns the
+persona/buckets/history/`answerOnce` - for a feature that fully owns the
 reply for the messages it claims (WhatsApp's image-request routing is the
 shipped example: `./channels/whatsapp/images.ts`). Returning `true` stops
 the turn there; `false`/`undefined` falls through to the normal chat
@@ -241,11 +241,11 @@ so an intercepted feature never has to re-resolve identity itself.
 
 ## Conversation history
 
-Pass `history: { store, limit?, historyEnabledFor? }` (any `HistoryStore` —
+Pass `history: { store, limit?, historyEnabledFor? }` (any `HistoryStore` -
 see [history.md](./history.md)) to load prior turns ahead of the new message
 and append both turns after. Off by default, so a new channel starts
 single-turn exactly like WhatsApp did before it opted in. `historyEnabledFor`
-excludes specific senders from memory entirely — see "Privacy controls" in
+excludes specific senders from memory entirely - see "Privacy controls" in
 [history.md](./history.md).
 
 ```ts
@@ -257,14 +257,14 @@ const handle = createInboundPipeline(deps, {
 });
 ```
 
-History is keyed by `conversationId` (defaulting to `msg.chatId`) — pass an
+History is keyed by `conversationId` (defaulting to `msg.chatId`) - pass an
 explicit one per call if a channel's thread identity differs from its chat
 id.
 
 ## Observability: a rejected group is easy to miss
 
 A group chat id isn't guessable in advance, so if you use `allowedChats`,
-log it the same way WhatsApp does — `isBlockedByAllowlist` (also exported
+log it the same way WhatsApp does - `isBlockedByAllowlist` (also exported
 from `./channels`) is the exact predicate the pipeline uses internally, so
 calling it yourself on the same `ChannelMessage` tells you precisely when
 that's the reason a message was dropped:
@@ -278,7 +278,7 @@ if (isBlockedByAllowlist(msg, { allowedChats: config.allowedChats ?? [] })) {
 ```
 
 Dedup this yourself if a chatty non-allowlisted group could flood your logs
-— the WhatsApp channel keeps a small `Set` of chat ids it has already
+- the WhatsApp channel keeps a small `Set` of chat ids it has already
 logged, for exactly that reason.
 
 ## Loop guards across multiple bot identities
@@ -287,36 +287,36 @@ If your transport can run multiple identities in one process the way the
 WhatsApp channel can (several linked numbers sharing one deployment), reuse
 `SessionIdentityRegistry`/`isEffectivelyFromSelf` from `./channels` so one
 identity's own traffic is never mistaken for a stranger's by another. A
-single-bot-token channel like the Telegram example above has no such case —
+single-bot-token channel like the Telegram example above has no such case -
 `fromBot` is a plain equality check against the one bot id it knows about.
 
 ## From sketch to shipped channel
 
 `./telegram` is the same shape as the code above, with the parts a real
 deployment needs. If you are building a third transport, these are the
-questions the sketch does not answer for you — each with where the shipped
+questions the sketch does not answer for you - each with where the shipped
 channel answers it:
 
 | Concern | Where `./telegram` handles it |
 | --- | --- |
-| A remote API that is down, or rate-limiting | `poll.ts` — exponential backoff, plus Telegram's own `retry_after` |
-| One update whose handling throws | `poll.ts` — offset advances first, so a poison message can't repeat forever |
-| Credentials in error text | `api.ts` — `redactToken` before anything is logged |
-| A transport message-size limit | `api.ts` — `splitTelegramText` at 4096 chars, threading the first chunk only |
-| Shutdown while a request is in flight | `channel.ts` — an `AbortController` cuts the long poll in `stop()` |
-| Sender identity that isn't a phone number | `updates.ts` — a namespaced `tg:<id>` key, never a bare numeral |
-| A non-allowlisted group nobody can see | `handler.ts` — `isBlockedByAllowlist`, logged once per chat |
-| A second way to receive updates, without duplicating the logic above | `handler.ts` — the same update handler feeds both `channel.ts`'s long poll and `webhook.ts`'s `customRoutes` mount |
+| A remote API that is down, or rate-limiting | `poll.ts` - exponential backoff, plus Telegram's own `retry_after` |
+| One update whose handling throws | `poll.ts` - offset advances first, so a poison message can't repeat forever |
+| Credentials in error text | `api.ts` - `redactToken` before anything is logged |
+| A transport message-size limit | `api.ts` - `splitTelegramText` at 4096 chars, threading the first chunk only |
+| Shutdown while a request is in flight | `channel.ts` - an `AbortController` cuts the long poll in `stop()` |
+| Sender identity that isn't a phone number | `updates.ts` - a namespaced `tg:<id>` key, never a bare numeral |
+| A non-allowlisted group nobody can see | `handler.ts` - `isBlockedByAllowlist`, logged once per chat |
+| A second way to receive updates, without duplicating the logic above | `handler.ts` - the same update handler feeds both `channel.ts`'s long poll and `webhook.ts`'s `customRoutes` mount |
 
 Its tests (`src/channels/telegram/*.test.ts`) drive the full inbound path
-against a fake Bot API — no network, no token — which is also the pattern to
+against a fake Bot API - no network, no token - which is also the pattern to
 copy for your own.
 
 ## What you get for free
 
 Everything routed through `createInboundPipeline` automatically honours a
 configured `answerFn`, `bucketsFor`, `rewriteQuery` and `rerankContext` (the
-same seams every other chatter surface uses — see
+same seams every other chatter surface uses - see
 [integrations.md](./integrations.md)), applies output guardrails, and answers
 through `prepareChat`, so a new channel never hand-rolls its own prompt
 assembly or drifts from the model/config the rest of the server uses.

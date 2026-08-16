@@ -1,1 +1,1 @@
-Unused — this fixture exists to test the handler.js fallback.
+Unused - this fixture exists to test the handler.js fallback.

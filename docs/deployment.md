@@ -31,7 +31,7 @@ base image becomes a Node one. See the runtime section of
 
 ### Dockerfile
 
-Chatter is a library — it ships a server *factory*, not a runnable bot — so the
+Chatter is a library - it ships a server *factory*, not a runnable bot - so the
 `Dockerfile` in this repository only builds the package and its production
 dependencies as a base image. Your app supplies the entry point that calls
 `createServer` and the `CMD` that runs it.
@@ -273,11 +273,11 @@ primary_region = "iad"
 
 1. **Connect GitHub repo**:
    - Visit [railway.app](https://railway.app)
-   - Click "New Project" → "Deploy from GitHub repo"
+   - Click "New Project" -> "Deploy from GitHub repo"
    - Select your repository
 
 2. **Configure environment variables**:
-   - Go to project → Variables
+   - Go to project -> Variables
    - Add all required environment variables
 
 3. **Deploy**:
@@ -437,7 +437,7 @@ Monitor:
 - **Fly.io**: Configure `min_machines_running` in `fly.toml`
 - **Railway**: Increase `numReplicas` in config
 
-Chat itself is stateless — retrieval, prompt assembly and completions don't
+Chat itself is stateless - retrieval, prompt assembly and completions don't
 depend on which instance handles a request. Two things are per-instance
 in-process state, though: see
 [Rate limiting and multiple instances](#rate-limiting-and-multiple-instances)
@@ -447,10 +447,10 @@ issued them is the only one that can validate.
 ### Rate limiting and multiple instances
 
 `rateLimit.public`/`private` and the demo session/chat limits are fixed-window
-counters (not sliding-window — a caller can get up to 2x the configured limit
+counters (not sliding-window - a caller can get up to 2x the configured limit
 across a window boundary) held in each process's memory, not in Turso or any
 shared store. Behind a load balancer with more than one instance running,
-each instance enforces its own limit independently — effective per-caller
+each instance enforces its own limit independently - effective per-caller
 throughput scales with instance count instead of staying capped at the
 configured number. If that matters for your deployment, put the limiting
 in front of Chatter instead (an API gateway, Cloudflare rate limiting, an
@@ -475,12 +475,12 @@ rotate a fake `X-Forwarded-For` per request and evade the limit entirely.
 - [ ] Monitor for suspicious activity
 - [ ] Set appropriate rate limits
 - [ ] Behind a TLS-terminating proxy, set `rateLimit.trustProxy: true` (default
-      `false`) — besides per-IP rate-limit keying, it's also what lets HSTS be
+      `false`) - besides per-IP rate-limit keying, it's also what lets HSTS be
       sent for a request the proxy terminated as HTTPS outside of
       `NODE_ENV=production`
 - [ ] Review the default Content-Security-Policy and Strict-Transport-Security
       headers (`server.contentSecurityPolicy`, `server.strictTransportSecurity`)
-      against your own deployment — see [Server: Security Headers and Body
+      against your own deployment - see [Server: Security Headers and Body
       Limits](./server.md#security-headers-and-body-limits)
 
 ## Troubleshooting

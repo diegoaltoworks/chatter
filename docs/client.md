@@ -11,7 +11,7 @@ Chatter provides two ways to integrate chat:
 
 ## Using Widgets (Vanilla JavaScript)
 
-Every Chatter server automatically serves ready-to-use widgets at `/chatter.js` and `/chatter.css` —
+Every Chatter server automatically serves ready-to-use widgets at `/chatter.js` and `/chatter.css` -
 on Bun always, and on Node once the optional peer `@hono/node-server` is installed. Without it (or
 `features: { headless: true }`), those two routes 404 and the server logs why. See
 [Runtime](../README.md#runtime) in the README for the full story.

@@ -8,7 +8,7 @@ graph, matching the two seams Chatter exposes for graph frameworks.
 A tool-using LangGraph agent (`createReactAgent`) answers every chat turn via
 [`answerFn`](../../docs/integrations.md#bringing-your-own-brain-answerfn).
 Chatter still owns retrieval, prompt assembly, auth, rate limiting and output
-guardrails — the agent only receives the assembled system prompt and the
+guardrails - the agent only receives the assembled system prompt and the
 conversation, and returns the answer text.
 
 ```bash
@@ -25,8 +25,8 @@ bun run brain-server
 
 A `ChatOpenAI` model pointed at Chatter's `/v1/chat/completions` endpoint acts
 as one node in a larger graph. Chatter contributes a RAG-grounded,
-guardrailed answer; the rest of the graph — other models, tools, formatting
-steps — is free to build around it.
+guardrailed answer; the rest of the graph - other models, tools, formatting
+steps - is free to build around it.
 
 ```bash
 # 1. Run a Chatter server (see the repo README), then create an API key
@@ -42,12 +42,12 @@ bun run graph-node
 
 ## Which one do I want?
 
-See [docs/integrations.md](../../docs/integrations.md) for the full writeup —
+See [docs/integrations.md](../../docs/integrations.md) for the full writeup -
 short version: reach for a graph when a turn needs multiple LLM/tool steps
 that Chatter's linear pipeline doesn't model; when a turn is "retrieve, then
 answer," Chatter's built-in pipeline (optionally with
 [flows](../../docs/flows.md) for multi-turn slot filling) is enough on
 its own, no graph framework required.
 
-Chatter's core has no LangGraph dependency — `@langchain/*` only appears in
+Chatter's core has no LangGraph dependency - `@langchain/*` only appears in
 this example's own `package.json`.

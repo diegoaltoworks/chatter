@@ -17,7 +17,7 @@ import {
 ```
 
 Nothing in this module is chat-, persona- or bot-specific, and it adds no
-required dependencies — the OpenAI client reuses the `openai` peer dependency
+required dependencies - the OpenAI client reuses the `openai` peer dependency
 chatter already has, and the Cloudinary client talks to Cloudinary's signed
 upload API over plain `fetch`, so no SDK is needed. **Prompt composition is
 entirely the caller's job.** `ImageRequest.prompt` arrives fully composed;
@@ -40,13 +40,13 @@ const image = await generator.generateImage({ prompt: composeYourOwnPrompt(reque
 A request with neither `baseImage` nor `inputImages` calls a pure
 text-to-image generate; supplying either calls an edit instead, with input
 photos sent ahead of the base image. Both are `{ bytes: Uint8Array, mimeType?:
-string }` — `mimeType` defaults to `image/png`, so set it explicitly for a
+string }` - `mimeType` defaults to `image/png`, so set it explicitly for a
 JPEG or WebP photo. Failures come back as a typed `ImageGenerationError` with
 one of four codes: `not_configured`, `invalid_request` (empty prompt),
 `moderation`, or `api_error`.
 
 `IMAGE_MODEL` defaults to a GPT image model (`gpt-image-1`), which always
-returns base64 and ignores `response_format`. Pointing it at a DALL·E model
+returns base64 and ignores `response_format`. Pointing it at a DALL-E model
 (`dall-e-2`/`dall-e-3`) works too - the client sets `response_format:
 "b64_json"` automatically in that case - but their `quality` values differ
 (`standard`/`hd` rather than `low`/`medium`/`high`), so set `IMAGE_QUALITY`
@@ -71,7 +71,7 @@ const { url, cached } = await uploader.getOrCreateImage(request);
 ```
 
 Call `uploader.peekCached(request)` first if you want to skip a
-[usage](./usage.md) spend-guard reservation on a cache hit — a cached result
+[usage](./usage.md) spend-guard reservation on a cache hit - a cached result
 costs nothing, so it must never touch a daily cap:
 
 ```ts
@@ -92,14 +92,14 @@ const { url } = await uploader.getOrCreateImage(request);
 ```
 
 This module ships its own cache (deterministic keying is an images concern)
-but no spend limiter of its own — compose with `./usage`, which already has
+but no spend limiter of its own - compose with `./usage`, which already has
 one.
 
 `createTursoImageCacheStore(client, tableName)` is the shipped cache binding:
 same idempotent-table-creation and plain-identifier-only table name pattern
-as `./usage`'s Turso store. Any other backing store works too — `ImageCacheStore`
+as `./usage`'s Turso store. Any other backing store works too - `ImageCacheStore`
 is a two-method structural interface (`get`/`set`). It does not prune expired
-rows itself — an entry past `CACHE_TTL_MS` is simply treated as a miss and
+rows itself - an entry past `CACHE_TTL_MS` is simply treated as a miss and
 overwritten on the next regenerate; a host that wants the table bounded should
 sweep old rows on its own schedule.
 
@@ -113,14 +113,14 @@ an API key.
 `resolveCloudinaryConfig(env, overrides?)` reads `CLOUDINARY_CLOUD_NAME`,
 `CLOUDINARY_API_KEY`, `CLOUDINARY_API_SECRET`, `CLOUDINARY_FOLDER`.
 `isCloudinaryConfigured(config)` is false unless all three credentials are
-set. Neither resolver touches `process.env` itself — a host passes an
+set. Neither resolver touches `process.env` itself - a host passes an
 env-shaped record in, which keeps the module liftable and lets tests describe
 configured and unconfigured worlds without touching the real environment.
 
 ## Captions
 
 `createCaptionComposer` is an optional helper for a caption to send alongside
-a generated image. It ships no content — the pool and the compose step are
+a generated image. It ships no content - the pool and the compose step are
 both caller-supplied:
 
 ```ts

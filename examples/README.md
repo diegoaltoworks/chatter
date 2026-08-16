@@ -242,7 +242,7 @@ node examples/dist/http-server-basic.js
 ## UI Integrations (bring your own chat UI)
 
 Chatter exposes an OpenAI-compatible endpoint (`POST /v1/chat/completions`), so
-any chat UI or SDK that speaks the OpenAI wire format can be the front end —
+any chat UI or SDK that speaks the OpenAI wire format can be the front end -
 see the [integrations guide](../docs/integrations.md).
 
 ### Deep Chat (framework-agnostic web component)
@@ -269,7 +269,7 @@ cd examples/assistant-ui && bun install && bun run dev
 
 Chatter also has two seams for graph-based agent frameworks such as
 [LangGraph](https://langchain-ai.github.io/langgraphjs/): as Chatter's brain,
-or with Chatter as a node inside a larger graph — see
+or with Chatter as a node inside a larger graph - see
 [docs/integrations.md](../docs/integrations.md#graph-frameworks-langgraph-and-similar).
 
 ### LangGraph
@@ -289,7 +289,7 @@ cd examples/langgraph-brain && bun install && bun run brain-server
 **Directory:** `full-bot/`
 
 A complete, config-driven server wiring the WhatsApp channel, a persona
-registry, reply gates, image requests and a scheduler tick together — see
+registry, reply gates, image requests and a scheduler tick together - see
 [docs/channels.md](../docs/channels.md) and
 [docs/personas.md](../docs/personas.md).
 
