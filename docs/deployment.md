@@ -44,7 +44,7 @@ WORKDIR /app
 
 # Install dependencies
 FROM base AS deps
-COPY package.json bun.lockb ./
+COPY package.json bun.lock ./
 RUN bun install --frozen-lockfile
 
 # Build application
@@ -89,7 +89,7 @@ services:
       - PORT=8181
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8181/health"]
+      test: ["CMD", "curl", "-f", "http://localhost:8181/healthz"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -169,7 +169,7 @@ gcloud run deploy chatter \
   --region your-region \
   --allow-unauthenticated \
   --set-secrets OPENAI_API_KEY=OPENAI_API_KEY:latest,CHATTER_SECRET=CHATTER_SECRET:latest,TURSO_URL=TURSO_URL:latest,TURSO_AUTH_TOKEN=TURSO_AUTH_TOKEN:latest,CLERK_PUBLISHABLE_KEY=CLERK_PUBLISHABLE_KEY:latest,CLERK_FRONTEND_URL=CLERK_FRONTEND_URL:latest,CLERK_JWKS_URL=CLERK_JWKS_URL:latest,CLERK_ISSUER=CLERK_ISSUER:latest \
-  --update-env-vars NODE_ENV=production,RATE_LIMIT_RPM_PUBLIC=60,RATE_LIMIT_RPM_PRIVATE=120
+  --update-env-vars NODE_ENV=production
 ```
 
 #### Automation with GitHub Actions
@@ -371,21 +371,26 @@ CLERK_PUBLISHABLE_KEY=pk_live_...
 CLERK_FRONTEND_URL=https://...
 CLERK_JWKS_URL=https://.../.well-known/jwks.json
 CLERK_ISSUER=https://...
-
-# Rate limits
-RATE_LIMIT_RPM_PUBLIC=60
-RATE_LIMIT_RPM_PRIVATE=120
 ```
+
+Rate limits are not environment-driven: set `rateLimit.public` /
+`rateLimit.private` in the config object you pass to `createServer`. There are
+no `RATE_LIMIT_*` variables.
+
+More generally, most of the names above are read by *your* entry point and
+passed to `createServer` as config. The library itself reads only
+`CHATTER_SECRET` (fallback for `auth.secret`) and `NODE_ENV` (relaxes the
+security headers outside production). The optional channels add their own
+(`WA_SESSION_SECRET`, `WA_SESSION_IDS`, `TELEGRAM_BOT_TOKEN`,
+`TELEGRAM_WEBHOOK_SECRET`, `MATRIX_HOMESERVER_URL`, `MATRIX_ACCESS_TOKEN`), and
+the `chatter` / `wa-pair` CLIs read `CHATTER_SECRET`, `WA_SESSION_SECRET`,
+`TURSO_URL` and `TURSO_AUTH_TOKEN`.
 
 ## Health Checks
 
-Add a health endpoint to your server:
-
-```typescript
-app.get('/health', (c) => {
-  return c.json({ status: 'ok', timestamp: new Date().toISOString() });
-});
-```
+`createServer` already registers `GET /healthz`, which returns `200 ok` as
+plain text. Point your platform's health check at that; there is nothing to
+add.
 
 Configure health checks in your deployment:
 

@@ -683,11 +683,14 @@ CLERK_PUBLISHABLE_KEY=pk_live_...
 CLERK_FRONTEND_URL=https://clerk.example.com
 CLERK_JWKS_URL=https://clerk.example.com/.well-known/jwks.json
 CLERK_ISSUER=https://clerk.example.com
-
-# Rate Limits
-RATE_LIMIT_RPM_PUBLIC=60
-RATE_LIMIT_RPM_PRIVATE=120
 ```
+
+Only `CHATTER_SECRET` (fallback for `auth.secret`) and `NODE_ENV` (relaxes the
+security headers outside production) are read by the library itself. The rest
+your entry point reads and threads through: `OPENAI_API_KEY` into
+`openai.apiKey`, `PORT` into your own `Bun.serve({ port })` call, and so on.
+Rate limits have no environment variables at all - set `rateLimit.public` /
+`rateLimit.private` in the config object.
 
 ## API Key Management
 

@@ -529,5 +529,4 @@ Rate limiting and quota tests validate:
 
 For testing questions:
 - 📚 [Main Documentation](../README.md)
-- 💬 [GitHub Discussions](https://github.com/diegoaltoworks/chatter/discussions)
-- 🐛 [Report Issues](https://github.com/diegoaltoworks/chatter/issues)
+- 🐛 [GitHub Issues](https://github.com/diegoaltoworks/chatter/issues) - Discussions are not enabled; questions and bugs both go here

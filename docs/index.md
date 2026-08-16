@@ -238,8 +238,7 @@ User Message -> Chatter Server -> OpenAI (Embeddings) -> Turso (Vector Search)
 - **[NPM Package](https://www.npmjs.com/package/@diegoaltoworks/chatter)** - Install from npm
 
 ### Support
-- **[GitHub Discussions](https://github.com/diegoaltoworks/chatter/discussions)** - Ask questions
-- **[GitHub Issues](https://github.com/diegoaltoworks/chatter/issues)** - Report bugs
+- **[GitHub Issues](https://github.com/diegoaltoworks/chatter/issues)** - Ask questions and report bugs. Discussions are not enabled on this repository.
 
 ## Contributing
 
