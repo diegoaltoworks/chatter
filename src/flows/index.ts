@@ -36,4 +36,5 @@ export type {
   IntentDetection,
   LoadedFlow,
 } from "./types";
+export { CURRENT_FLOW_CONTRACT_VERSION } from "./types";
 export { shouldExitFlow } from "./utils";
