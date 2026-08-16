@@ -9,7 +9,7 @@ import type { Client as LibsqlClient } from "@libsql/client";
 import type { Hono } from "hono";
 import type OpenAI from "openai";
 import type { Channel, ChannelSenderRegistry } from "./channels";
-import type { AnswerFn } from "./core/answer";
+import type { AnswerFn, TransformReply } from "./core/answer";
 import type { BucketsFor } from "./core/buckets";
 import type { Logger, LogLevel } from "./core/logger";
 import type { PromptLoader } from "./core/prompts";
@@ -254,6 +254,24 @@ export interface ChatterConfig {
    * errors. Unset: the built-in OpenAI completion is used.
    */
   answerFn?: AnswerFn;
+
+  // Outbound reply hook (advanced)
+  /**
+   * Modifies or vetoes an outgoing reply after it has already been produced
+   * (by `answerFn` or the built-in completion, past guardrails). Return a
+   * string to replace the reply, or `null` to veto it — a deliberate drop,
+   * treated the same as an empty answer: nothing is delivered, and the
+   * channel pipeline never records an assistant turn for it (the user's own
+   * turn, already appended before answering, stays recorded either way). A
+   * throw/rejection is logged and the ORIGINAL reply is sent.
+   *
+   * Consulted by the channel pipeline and every non-streaming HTTP chat
+   * surface (widget and demo routes, OpenAI-compatible endpoints, MCP chat
+   * tools). Streaming responses are delivered incrementally as they're
+   * produced, before a final answer exists to transform, so this hook is
+   * never consulted for them. Unset: replies pass through unchanged.
+   */
+  transformReply?: TransformReply;
 
   // Retrieval scope (advanced)
   /**

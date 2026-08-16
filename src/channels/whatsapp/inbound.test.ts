@@ -1108,4 +1108,59 @@ describe("createWhatsAppInboundHandler", () => {
       ]);
     });
   });
+
+  describe("transformReply hook", () => {
+    test('sees the channel identity as "whatsapp"', async () => {
+      const seen: string[] = [];
+      const { handler, sock } = createHarness({
+        transformReply: (ctx) => {
+          seen.push(ctx.channel);
+          return ctx.text;
+        },
+      });
+
+      await handler(waEvent(sock));
+
+      expect(seen).toEqual(["whatsapp"]);
+    });
+
+    test("a string result replaces the delivered reply", async () => {
+      const { handler, sock } = createHarness({ transformReply: () => "transformed" });
+
+      await handler(waEvent(sock));
+
+      expect(sock.sendMessage).toHaveBeenCalledWith(
+        "447700900123@s.whatsapp.net",
+        { text: "transformed" },
+        { quoted: expect.anything() },
+      );
+    });
+
+    test("null vetoes the reply: nothing is sent", async () => {
+      const { handler, sock } = createHarness({ transformReply: () => null });
+
+      await handler(waEvent(sock));
+
+      expect(sock.sendMessage).not.toHaveBeenCalled();
+    });
+
+    test("a throwing transformReply is logged and the original reply is delivered", async () => {
+      const { logger, allCalls } = fakeLogger();
+      const { handler, sock } = createHarness({
+        transformReply: () => {
+          throw new Error("plugin bug");
+        },
+        logger,
+      });
+
+      await handler(waEvent(sock));
+
+      expect(sock.sendMessage).toHaveBeenCalledWith(
+        "447700900123@s.whatsapp.net",
+        { text: "a reply" },
+        { quoted: expect.anything() },
+      );
+      expect(allCalls.some((call) => String(call[0]).includes("transformReply"))).toBe(true);
+    });
+  });
 });

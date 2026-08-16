@@ -25,7 +25,7 @@
 import type { Context, Next } from "hono";
 import { Hono } from "hono";
 import { stream } from "hono/streaming";
-import { answerOnce, answerStream } from "../core/answer";
+import { answerOnce, answerStream, applyTransformReply } from "../core/answer";
 import { resolveBuckets } from "../core/buckets";
 import { DEFAULT_MODEL } from "../core/llm";
 import { normalizeMessages } from "../core/messages";
@@ -88,7 +88,7 @@ function oversizedBodyError(message: string) {
 }
 
 export function openaiRoutes(deps: ServerDependencies) {
-  const { client, store, config, prompts, apiKeyManager } = deps;
+  const { client, store, config, prompts, apiKeyManager, logger } = deps;
   const app = new Hono();
 
   const { limitPublic, limitPrivate } = createRateLimiter(config);
@@ -218,13 +218,18 @@ export function openaiRoutes(deps: ServerDependencies) {
       temperature,
       model: serverModel,
     });
+    const reply = await applyTransformReply(
+      config.transformReply,
+      { channel: `openai-compat-${mode}`, sender, conversationId, text: out.content },
+      logger,
+    );
     return c.json({
       id,
       object: "chat.completion",
       created,
       model: serverModel,
       choices: [
-        { index: 0, message: { role: "assistant", content: out.content }, finish_reason: "stop" },
+        { index: 0, message: { role: "assistant", content: reply ?? "" }, finish_reason: "stop" },
       ],
       usage: out.usage,
     });

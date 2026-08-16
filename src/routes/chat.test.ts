@@ -226,6 +226,136 @@ describe("POST /api/private/chat", () => {
   });
 });
 
+describe("transformReply hook", () => {
+  test("a string result replaces the public route's reply", async () => {
+    const { deps } = createFakeDeps({
+      transformReply: () => "transformed",
+    });
+    const app = publicRoutes(deps);
+
+    const res = await app.fetch(
+      chatRequest("/api/public/chat", message, { "x-api-key": PUBLIC_KEY }),
+    );
+
+    expect(await res.json()).toEqual({ reply: "transformed" });
+  });
+
+  test("null vetoes the public route's reply, reported as empty", async () => {
+    const { deps } = createFakeDeps({
+      transformReply: () => null,
+    });
+    const app = publicRoutes(deps);
+
+    const res = await app.fetch(
+      chatRequest("/api/public/chat", message, { "x-api-key": PUBLIC_KEY }),
+    );
+
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ reply: "" });
+  });
+
+  test("a throwing transformReply keeps the public route's original reply", async () => {
+    const { deps } = createFakeDeps({
+      transformReply: () => {
+        throw new Error("plugin bug");
+      },
+    });
+    const app = publicRoutes(deps);
+
+    const res = await app.fetch(
+      chatRequest("/api/public/chat", message, { "x-api-key": PUBLIC_KEY }),
+    );
+
+    expect(await res.json()).toEqual({ reply: "built-in reply" });
+  });
+
+  test("the public route's streaming path is unaffected by transformReply", async () => {
+    const seen: unknown[] = [];
+    const { deps } = createFakeDeps({
+      answerFn: async () => "brain reply",
+      transformReply: (ctx) => {
+        seen.push(ctx);
+        return "transformed";
+      },
+    });
+    const app = publicRoutes(deps);
+
+    const res = await app.fetch(
+      chatRequest("/api/public/chat?stream=1", message, { "x-api-key": PUBLIC_KEY }),
+    );
+
+    const body = await res.text();
+    expect(body).toContain("brain reply");
+    expect(seen).toHaveLength(0);
+  });
+
+  test("a string result replaces the private route's reply", async () => {
+    const { publicKeyPem, token } = await createPrivateJWT();
+    const { deps } = createFakeDeps({
+      auth: { jwt: { publicKeyPem } },
+      transformReply: () => "transformed",
+    });
+    const app = privateRoutes(deps);
+
+    const res = await app.fetch(
+      chatRequest("/api/private/chat", message, { Authorization: `Bearer ${token}` }),
+    );
+
+    expect(await res.json()).toEqual({ reply: "transformed" });
+  });
+
+  test("null vetoes the private route's reply, reported as empty", async () => {
+    const { publicKeyPem, token } = await createPrivateJWT();
+    const { deps } = createFakeDeps({
+      auth: { jwt: { publicKeyPem } },
+      transformReply: () => null,
+    });
+    const app = privateRoutes(deps);
+
+    const res = await app.fetch(
+      chatRequest("/api/private/chat", message, { Authorization: `Bearer ${token}` }),
+    );
+
+    expect(await res.json()).toEqual({ reply: "" });
+  });
+
+  test("a throwing transformReply keeps the private route's original reply", async () => {
+    const { publicKeyPem, token } = await createPrivateJWT();
+    const { deps } = createFakeDeps({
+      auth: { jwt: { publicKeyPem } },
+      transformReply: () => {
+        throw new Error("plugin bug");
+      },
+    });
+    const app = privateRoutes(deps);
+
+    const res = await app.fetch(
+      chatRequest("/api/private/chat", message, { Authorization: `Bearer ${token}` }),
+    );
+
+    expect(await res.json()).toEqual({ reply: "built-in reply" });
+  });
+
+  test("transformReply sees the private route's sender", async () => {
+    const { publicKeyPem, token } = await createPrivateJWT();
+    let seenSender: string | undefined;
+    const { deps } = createFakeDeps({
+      auth: { jwt: { publicKeyPem } },
+      transformReply: (ctx) => {
+        seenSender = ctx.sender;
+        return ctx.text;
+      },
+    });
+    const app = privateRoutes(deps);
+
+    await app.fetch(
+      chatRequest("/api/private/chat", message, { Authorization: `Bearer ${token}` }),
+    );
+
+    expect(seenSender).toBe("staff-1");
+  });
+});
+
 describe("the server owns the system prompt on every chat route", () => {
   const injection = {
     messages: [

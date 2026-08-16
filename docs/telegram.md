@@ -53,7 +53,7 @@ Honest limits of the bot model, none of which chatter can work around:
 | `botToken` | *(required)* | From @BotFather. |
 | `name` | `"telegram"` | Channel and sender-registry name. Give each bot its own when running several in one process. |
 | `allowedChats` | `[]` (all) | Group chat ids eligible for a reply. DMs always reply. |
-| `answerFn` / `bucketsFor` | `deps.config.*` | The brain and retrieval-scope hooks; fall back to the server's own. |
+| `answerFn` / `bucketsFor` / `transformReply` | `deps.config.*` | The brain, retrieval-scope and outbound-reply hooks; fall back to the server's own. |
 | `model` | server default | Model override for this channel. |
 | `channelHint` | `"Channel: Telegram."` | Extra system-prompt section describing the delivery channel. |
 | `personaResolver` | none | Per-sender prompt layer; receives the `tg:<id>` sender key. |

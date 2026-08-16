@@ -34,9 +34,11 @@ export type {
   AnswerFnResult,
   AnswerOptions,
   AnswerUsage,
+  TransformReply,
+  TransformReplyInput,
 } from "./core/answer";
 // Brain hook (answerFn-aware completion used by every chat surface)
-export { answerOnce, answerStream } from "./core/answer";
+export { answerOnce, answerStream, applyTransformReply } from "./core/answer";
 export type { BucketsFor, BucketsForContext } from "./core/buckets";
 // Retrieval bucket seam (role-gated knowledge, with the anonymous ceiling)
 export { defaultBuckets, resolveBuckets } from "./core/buckets";

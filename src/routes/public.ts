@@ -1,7 +1,7 @@
 import type { Context } from "hono";
 import { Hono } from "hono";
 import { stream } from "hono/streaming";
-import { answerOnce, answerStream } from "../core/answer";
+import { answerOnce, answerStream, applyTransformReply } from "../core/answer";
 import { resolveBuckets } from "../core/buckets";
 import { normalizeChatBody } from "../core/messages";
 import { prepareChat } from "../core/pipeline";
@@ -86,7 +86,12 @@ export function publicRoutes(deps: ServerDependencies) {
     }
 
     const out = await answerOnce({ answerFn, client, system, messages, mode: "public", model });
-    return c.json({ reply: out.content });
+    const reply = await applyTransformReply(
+      config.transformReply,
+      { channel: "widget-public", text: out.content },
+      logger,
+    );
+    return c.json({ reply: reply ?? "" });
   });
 
   return app;

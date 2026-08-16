@@ -262,6 +262,47 @@ const { system, messages } = await prepareChat({ store, prompts, mode: "public",
 const { content } = await answerOnce({ answerFn, client, system, messages, mode: "public" });
 ```
 
+## Modifying or vetoing a reply (`transformReply`)
+
+`answerFn` (or the built-in completion) produces an answer; `transformReply`
+runs after it, once guardrails have already applied, and gets the last word on
+what actually reaches the caller:
+
+```ts
+const server = await createServer({
+  // ...
+  transformReply: async ({ channel, sender, conversationId, text }) => {
+    if (containsBannedTerm(text)) return null; // veto: nothing is delivered
+    return text.replace(/\bASAP\b/g, "as soon as possible");
+  },
+});
+```
+
+Return a string to replace the reply, or `null` to veto it — a deliberate
+drop, treated the same as an empty answer: the channel pipeline sends
+nothing and never records an assistant turn for it (the user's own turn,
+already appended before answering, stays recorded either way); the HTTP and
+MCP surfaces report an empty `content`/`reply`/tool result rather than
+failing the request. A throw/rejection is logged and the ORIGINAL reply is
+sent instead — a bug in this hook must never silently swallow an answer the
+model already produced.
+
+`transformReply` is consulted by the channel pipeline and every non-streaming
+chat surface: the widget and demo routes (`channel: "widget-public"` /
+`"widget-private"` / `"widget-demo"`), the OpenAI-compatible endpoints
+(`channel: "openai-compat-public"` / `"openai-compat-private"`), the MCP chat
+tools (`channel: "mcp-public"` / `"mcp-private"`), and each channel under its
+own name (`"whatsapp"`, `"telegram"`, or a Telegram bot's configured `name`).
+`sender`/`conversationId` carry the same identifiers `answerFn` sees, where
+the surface has them — the demo and MCP surfaces are anonymous, so neither
+populates `sender`.
+
+**Streaming responses are not covered.** A streaming reply is delivered
+incrementally, chunk by chunk, as it's produced — there is no final answer to
+transform until the stream has already been sent. `transformReply` is never
+consulted on `stream: true` requests; a hook that needs to see or block every
+reply cannot rely on streaming clients being disabled.
+
 ## Graph frameworks (LangGraph and similar)
 
 `answerFn` and the OpenAI-compatible endpoint are also the seams for

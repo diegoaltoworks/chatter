@@ -1,7 +1,7 @@
 import type { Context } from "hono";
 import { Hono } from "hono";
 import { stream } from "hono/streaming";
-import { answerOnce, answerStream } from "../core/answer";
+import { answerOnce, answerStream, applyTransformReply } from "../core/answer";
 import { resolveBuckets } from "../core/buckets";
 import { normalizeChatBody } from "../core/messages";
 import { prepareChat } from "../core/pipeline";
@@ -18,7 +18,7 @@ function wantsStream(c: Context) {
 }
 
 export function privateRoutes(deps: ServerDependencies) {
-  const { client, store, config, prompts } = deps;
+  const { client, store, config, prompts, logger } = deps;
   const app = new Hono();
 
   // Create middleware instances from config
@@ -84,7 +84,12 @@ export function privateRoutes(deps: ServerDependencies) {
       sender,
       model,
     });
-    return c.json({ reply: out.content });
+    const reply = await applyTransformReply(
+      config.transformReply,
+      { channel: "widget-private", sender, text: out.content },
+      logger,
+    );
+    return c.json({ reply: reply ?? "" });
   });
 
   return app;

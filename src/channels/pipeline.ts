@@ -15,10 +15,11 @@
  */
 
 import type OpenAI from "openai";
-import type { AnswerFn } from "../core/answer";
-import { answerOnce } from "../core/answer";
+import type { AnswerFn, TransformReply } from "../core/answer";
+import { answerOnce, applyTransformReply } from "../core/answer";
 import type { BucketsFor } from "../core/buckets";
 import { resolveBuckets } from "../core/buckets";
+import type { Logger } from "../core/logger";
 import { type PipelineMessage, type PipelineMode, prepareChat } from "../core/pipeline";
 import type { PromptLoader } from "../core/prompts";
 import type { VectorStore } from "../core/retrieval";
@@ -45,8 +46,15 @@ export interface InboundPipelineDeps {
 }
 
 export interface InboundPipelineConfig {
+  /**
+   * This channel's identity for `transformReply` — e.g. "whatsapp",
+   * "telegram". @default "channel"
+   */
+  channel?: string;
   answerFn?: AnswerFn;
   bucketsFor?: BucketsFor;
+  /** Modifies or vetoes the produced reply before delivery — see `ChatterConfig.transformReply`. */
+  transformReply?: TransformReply;
   model?: string;
   /** Extra system-prompt section describing the delivery channel; passed through to `prepareChat`. */
   channelHint?: string;
@@ -71,6 +79,8 @@ export interface InboundPipelineConfig {
   dmRateLimit?: { max: number; windowMs: number };
   groupRateLimit?: { max: number; windowMs: number };
   now?: () => number;
+  /** Logs a `transformReply` throw; the original reply still sends. */
+  logger?: Logger;
 }
 
 export interface InboundTurn {
@@ -208,7 +218,7 @@ export function createInboundPipeline(
       buckets,
     });
 
-    const { content } = await answerOnce({
+    const { content: produced } = await answerOnce({
       answerFn: config.answerFn,
       client: deps.client,
       system,
@@ -219,13 +229,20 @@ export function createInboundPipeline(
       model: config.model,
     });
 
+    const content = await applyTransformReply(
+      config.transformReply,
+      { channel: config.channel ?? "channel", sender, conversationId, text: produced },
+      config.logger,
+    );
+
     // Recorded as soon as each turn exists, not after delivery: a delivery
     // failure below must not erase the model's answer from history, and a
     // load/append race with a concurrent message for the same chat is
     // narrower the sooner the user's own turn lands.
     if (!content) {
-      // Nothing was delivered — an empty answer must not report `reply`,
-      // the one outcome a caller relies on to mean "something was sent".
+      // Nothing was delivered — an empty answer (or a `transformReply` veto)
+      // must not report `reply`, the one outcome a caller relies on to mean
+      // "something was sent".
       return { action: "ignore" };
     }
     await config.history?.store.append(conversationId, { role: "assistant", content });

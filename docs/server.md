@@ -239,6 +239,29 @@ knowledge stays out of reach of the public pipeline. See
 the hook, and the `resolveBuckets` helper channels and custom routes should
 use.
 
+### Outbound Reply Hook
+
+Modify or veto a reply after it's already been produced — past `answerFn` (or
+the built-in completion) and guardrails:
+
+```typescript
+{
+  transformReply: async ({ channel, sender, conversationId, text }) => {
+    if (containsBannedTerm(text)) return null;   // veto: nothing is delivered
+    return text.replace(/\bASAP\b/g, "as soon as possible");
+  }
+}
+```
+
+Return a string to replace the reply, or `null` to veto it (treated as an
+empty answer — nothing sent, and the channel pipeline never records an
+assistant turn for it; the user's own turn stays recorded either way). A
+throw sends the original reply instead. Non-streaming surfaces only — the
+channel pipeline and the widget/demo/OpenAI-compatible/MCP surfaces; a
+streaming reply has no final answer to transform. See
+[integrations.md](./integrations.md) for the full per-surface `channel`
+identifiers.
+
 ### Logging
 
 Every library log call — startup banners, channel lifecycle, auth/session

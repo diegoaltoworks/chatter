@@ -6,7 +6,7 @@
 import type { Context } from "hono";
 import { Hono } from "hono";
 import { stream } from "hono/streaming";
-import { answerOnce, answerStream } from "../core/answer";
+import { answerOnce, answerStream, applyTransformReply } from "../core/answer";
 import { resolveBuckets } from "../core/buckets";
 import { DEFAULT_MODEL } from "../core/llm";
 import { lastUserMessage, normalizeChatBody } from "../core/messages";
@@ -209,7 +209,12 @@ export function demoRoutes(deps: ServerDependencies) {
           mode: "public",
           model,
         });
-        return c.json({ reply: out.content });
+        const reply = await applyTransformReply(
+          config.transformReply,
+          { channel: "widget-demo", text: out.content },
+          logger,
+        );
+        return c.json({ reply: reply ?? "" });
       } catch (error) {
         const err = error as Error;
         logger.error("Demo chat error:", err);
