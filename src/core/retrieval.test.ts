@@ -148,6 +148,46 @@ describe("VectorStore connection", () => {
       rmSync(dir, { recursive: true, force: true });
     }
   });
+
+  test("build() refuses to run and preserves existing chunks when the knowledge dir resolves to zero documents", async () => {
+    // A knowledgeDir that resolves to zero documents (wrong cwd, bad Docker
+    // COPY, an accidentally emptied folder) must fail loudly rather than
+    // silently deleting every existing chunk as "stale" - this is exactly
+    // what happened against a real production database: a script ran
+    // knowledgeDir-relative loading against the wrong cwd, found zero docs,
+    // and cleanupStaleChunks deleted the entire knowledge base.
+    const dir = mkdtempSync(join(tmpdir(), "chatter-retrieval-zero-docs-"));
+    const knowledgeDir = join(dir, "knowledge");
+    mkdirSync(join(knowledgeDir, "base"), { recursive: true });
+    writeFileSync(join(knowledgeDir, "base", "info.md"), "# Info\nSupport hours are 9-5.");
+
+    try {
+      const db = createClient({ url: "file::memory:", authToken: "" });
+      const openai = createFakeOpenAI([1, 0]);
+
+      // First, a healthy build with real content.
+      const store = new VectorStore(openai, { databaseClient: db, knowledgeDir });
+      await store.build();
+      expect(await store.query("support hours", 3, ["base"])).toEqual([
+        "# Info\nSupport hours are 9-5.",
+      ]);
+
+      // Then, a second build pointed at an empty directory - simulating a
+      // misresolved path - must throw and must not touch the existing data.
+      const emptyDir = join(dir, "empty");
+      mkdirSync(emptyDir, { recursive: true });
+      const brokenStore = new VectorStore(openai, { databaseClient: db, knowledgeDir: emptyDir });
+
+      await expect(brokenStore.build()).rejects.toThrow(/loaded 0 knowledge documents/);
+
+      // The original content must still be there and still queryable.
+      expect(await store.query("support hours", 3, ["base"])).toEqual([
+        "# Info\nSupport hours are 9-5.",
+      ]);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
 });
 
 describe("wrapMissingLibsqlError", () => {
