@@ -349,6 +349,14 @@ transform until the stream has already been sent. `transformReply` is never
 consulted on `stream: true` requests; a hook that needs to see or block every
 reply cannot rely on streaming clients being disabled.
 
+**Security-control caveat.** A throwing/rejecting `transformReply` is not a
+fail-closed veto: as noted above, the ORIGINAL, untransformed reply is sent
+instead. If `transformReply` is your redaction or content-veto layer - not
+just a cosmetic rewrite - a bug that makes it throw ships the very text it
+was meant to catch. Guard any veto/redaction logic with its own try/catch
+and return `null` on failure, rather than letting an unhandled error fall
+through to the original reply.
+
 ## Graph frameworks (LangGraph and similar)
 
 `answerFn` and the OpenAI-compatible endpoint are also the seams for

@@ -177,12 +177,13 @@ which blocks any push of a commit that has not itself already passed the
 check; `GITHUB_TOKEN`, which is all this workflow runs as, has no bypass on
 the ruleset (only the repository-admin role does), so a job pushing straight
 to `main` would be unable to release at all under that rule. See
-[process.md](../.claude/process.md)'s main-protection gotcha for why that rule
-is not currently enabled despite the release flow being built for it: it was
-turned on once, and `GITHUB_TOKEN`'s own PR merges got stuck (GitHub's
-`mergeable_state` reported `blocked` indefinitely even with every required
-check green), wedging the release train until an admin merged by hand. The
-release-PR routing stays regardless, since it's what a re-attempt would need.
+[ADR 0004](./decisions/0004-main-protection-stays-non-fast-forward-only.md)
+for why that rule is not currently enabled despite the release flow being
+built for it: it was turned on once, and `GITHUB_TOKEN`'s own PR merges got
+stuck (GitHub's `mergeable_state` reported `blocked` indefinitely even with
+every required check green), wedging the release train until an admin merged
+by hand. The release-PR routing stays regardless, since it's what a
+re-attempt would need.
 
 Opening the PR, pushing its branch, and merging it all go through
 `GITHUB_TOKEN`, and GitHub does not let a `GITHUB_TOKEN`-created push, pull

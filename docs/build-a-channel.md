@@ -316,8 +316,8 @@ copy for your own.
 ## What you get for free
 
 Everything routed through `createInboundPipeline` automatically honours a
-configured `answerFn`, `bucketsFor`, `rewriteQuery` and `rerankContext` (the
-same seams every other chatter surface uses - see
+configured `answerFn`, `bucketsFor`, `rewriteQuery`, `rerankContext` and
+`transformReply` (the same seams every other chatter surface uses - see
 [integrations.md](./integrations.md)), applies output guardrails, and answers
 through `prepareChat`, so a new channel never hand-rolls its own prompt
 assembly or drifts from the model/config the rest of the server uses.

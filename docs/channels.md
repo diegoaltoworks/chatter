@@ -71,8 +71,9 @@ await createServer({ ..., channels: [whatsapp] });
 it turns a raw Baileys message into a `ChannelMessage` (mentions, loop guard,
 own-mention stripping - everything Baileys-shaped), then hands it to
 `./channels`' `createInboundPipeline`, which applies `decideChannelAction`
-(allowlist, mute/unmute, DM/group rate limits) and answers through the same
-`prepareChat`/`answerOnce` seam every other surface uses - so the WhatsApp
+(allowlist, mute/unmute) and its own DM/group rate limiter, then answers
+through the same `prepareChat`/`answerOnce` seam every other surface uses -
+so the WhatsApp
 channel automatically honours a configured `answerFn`, `bucketsFor`,
 `rewriteQuery`, `rerankContext` and `transformReply`. See
 [Building a Channel](./build-a-channel.md) for how to put the same pipeline
