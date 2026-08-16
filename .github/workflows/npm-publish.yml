@@ -195,8 +195,8 @@ jobs:
       # status. workflow_dispatch is exempt from that guard, so this is a
       # real, non-recursive way to get CI onto this exact commit without a
       # bot PAT or bypass actor. Dispatching before doing anything that could
-      # merge the PR also means this repo's future required-status-checks
-      # stage sees exactly the same status this run waits on below.
+      # merge the PR also means main-protection's required-status-checks rule
+      # sees exactly the same status this run waits on below.
       - name: Run CI on the release branch and wait for it
         if: steps.pr.outputs.branch != ''
         env:
@@ -219,21 +219,35 @@ jobs:
           fi
           gh run watch "$RUN_ID" --repo "${{ github.repository }}" --exit-status
 
-      # Merges only once CI on this exact commit is known good, so this
-      # succeeds today and keeps succeeding once main-protection requires the
-      # same checks: GitHub itself will refuse a merge before they post,
-      # which this run already waited for above. The merge SHA comes from an
-      # explicit fetch rather than gh's own post-merge local branch cleanup
-      # (which only happens to leave main checked out) — that keeps a local
-      # git hiccup in branch deletion from being mistaken for a failed merge,
-      # so deleting the branch is a best-effort step of its own afterward.
+      # Merges only once CI on this exact commit is known good: GitHub itself
+      # refuses a merge before main-protection's required checks post, which
+      # this run already waited for above. GitHub can take a few seconds to
+      # recompute mergeability/check-status after that wait, so a merge
+      # attempted the instant CI reports green can transiently 422 — retried
+      # rather than left to wedge the release PR open. The merge SHA comes
+      # from an explicit fetch rather than gh's own post-merge local branch
+      # cleanup (which only happens to leave main checked out) — that keeps a
+      # local git hiccup in branch deletion from being mistaken for a failed
+      # merge, so deleting the branch is a best-effort step of its own
+      # afterward.
       - name: Merge the release PR
         id: merge
         if: steps.pr.outputs.branch != ''
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          gh pr merge "${{ steps.pr.outputs.number }}" --repo "${{ github.repository }}" --squash
+          merged=false
+          for _ in $(seq 1 6); do
+            if gh pr merge "${{ steps.pr.outputs.number }}" --repo "${{ github.repository }}" --squash; then
+              merged=true
+              break
+            fi
+            sleep 5
+          done
+          if [ "$merged" != true ]; then
+            echo "::error::Could not merge the release PR after retrying — leaving it open for a human."
+            exit 1
+          fi
           git fetch origin main
           echo "sha=$(git rev-parse origin/main)" >> "$GITHUB_OUTPUT"
           echo "version=${{ steps.pr.outputs.version }}" >> "$GITHUB_OUTPUT"
