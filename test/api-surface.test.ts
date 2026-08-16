@@ -1,7 +1,7 @@
 /**
  * Locks the downstream consumption patterns documented in docs/server.md,
- * docs/channels.md, docs/personas.md, docs/flows.md, docs/history.md,
- * docs/build-a-channel.md and docs/integrations.md: the shape of
+ * docs/channels.md, docs/telegram.md, docs/personas.md, docs/flows.md,
+ * docs/history.md, docs/build-a-channel.md and docs/integrations.md: the shape of
  * ServerDependencies (incl. the shared db handle), starting a Channel
  * standalone, personaResolver output feeding prepareChat's personaLayer, the
  * bucketsFor retrieval hook, prepareChat's channel-facing params, the
@@ -35,6 +35,8 @@ import {
   createSenderRegistry,
   type InboundReplySender,
 } from "../src/channels";
+import type { TelegramChannelConfig, TelegramUpdate } from "../src/channels/telegram";
+import { createTelegramChannel, toChannelMessage } from "../src/channels/telegram";
 import type { FlowHandler, FlowHandlerContext, FlowHandlerResult, LoadedFlow } from "../src/flows";
 import type { HistoryMessage, HistoryStore } from "../src/history";
 import { createPersonaResolver } from "../src/personas";
@@ -91,6 +93,41 @@ describe("API surface", () => {
     const deps = fakeDeps();
     await channel.start(deps);
     expect(seenSenders).toEqual([deps.senders]);
+  });
+
+  // The built-in second transport, and the proof that the SPI above is
+  // implementable from outside `./channels`: `./telegram` is configured with
+  // nothing but a bot token, satisfies `Channel`, and takes the same
+  // answerFn/bucketsFor/history seams every other surface does.
+  test("the Telegram channel is a Channel configured from a bot token alone", async () => {
+    const config: TelegramChannelConfig = {
+      botToken: "token",
+      allowedChats: ["-100"],
+      answerFn: async () => "answer",
+      bucketsFor: async () => ["support"],
+      channelHint: "Replies are delivered over Telegram.",
+      history: {
+        store: { append: async () => {}, load: async () => [] },
+        limit: 10,
+      },
+    };
+    const channel: Channel = createTelegramChannel(config);
+    expect(channel.name).toBe("telegram");
+    expect(typeof channel.stop).toBe("function");
+
+    // The wire types are exported too, so a host can pre-map its own updates
+    // (a webhook handler, say) into the same ChannelMessage shape.
+    const update: TelegramUpdate = {
+      update_id: 1,
+      message: {
+        message_id: 7,
+        from: { id: 200 },
+        chat: { id: 200, type: "private" },
+        text: "hi",
+      },
+    };
+    const msg: ChannelMessage | undefined = toChannelMessage(update, { id: 100, username: "bot" });
+    expect(msg?.messageRef).toBe(7);
   });
 
   test("personaResolver output feeds prepareChat's personaLayer directly", () => {

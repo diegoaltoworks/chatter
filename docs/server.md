@@ -428,9 +428,12 @@ transports that want it without pulling in the rest of the core package:
 import { createSenderRegistry, decideChannelAction } from '@diegoaltoworks/chatter/channels';
 ```
 
-A built-in WhatsApp transport ships behind `./whatsapp` and dogfoods this
-same SPI — see [WhatsApp Channel](./channels.md) for setup, pairing, and its
-ToS warning.
+Two built-in transports dogfood this same SPI: WhatsApp behind `./whatsapp`
+(see [WhatsApp Channel](./channels.md) for setup, pairing, and its ToS
+warning) and Telegram behind `./telegram` (see
+[Telegram Channel](./telegram.md) — official Bot API, no extra dependency,
+configured from a bot token alone). [Building a Channel](./build-a-channel.md)
+is the guide for adding a third.
 
 ### Authentication
 
