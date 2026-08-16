@@ -6,6 +6,7 @@ import { type AuthStateRuntime, useTursoAuthState } from "./authState";
 import {
   acquireSessionLease,
   createWhatsAppChannel,
+  normalizeWaMediaPayload,
   reconnectDelayMs,
   senderNameFor,
   shutdownWaSessions,
@@ -22,6 +23,25 @@ describe("createWhatsAppChannel", () => {
     expect(() => createWhatsAppChannel({ sessionSecret: "" })).toThrow(
       "is required and cannot be empty",
     );
+  });
+});
+
+describe("normalizeWaMediaPayload", () => {
+  test("a bare string is shorthand for the URL", () => {
+    expect(normalizeWaMediaPayload("https://example.org/pic.png")).toEqual({
+      url: "https://example.org/pic.png",
+    });
+  });
+
+  test("an object payload passes through", () => {
+    const payload = { url: "https://example.org/pic.png", caption: "hi" };
+    expect(normalizeWaMediaPayload(payload)).toEqual(payload);
+  });
+
+  test("throws on a payload with no usable url", () => {
+    expect(() => normalizeWaMediaPayload({ caption: "hi" })).toThrow(/must be a URL string/);
+    expect(() => normalizeWaMediaPayload(undefined)).toThrow(/must be a URL string/);
+    expect(() => normalizeWaMediaPayload(42)).toThrow(/must be a URL string/);
   });
 });
 
@@ -352,6 +372,96 @@ describe("createWhatsAppChannel", () => {
     expect(sockets[0]?.sendMessage).toHaveBeenCalledWith("12345@s.whatsapp.net", {
       react: { text: "👍", key: messageRef },
     });
+  });
+
+  test("a paired session's sender supports sendMedia via a Baileys image message", async () => {
+    const sockets: FakeSocket[] = [];
+    const channel = createWhatsAppChannel({
+      sessionSecret: "test-session-secret-value",
+      loadBaileys: async () => fakeBaileysModule({ registered: true, sockets }),
+      schedule: () => undefined,
+    });
+    const { deps, senders } = testDeps();
+
+    await channel.start(deps);
+    await flush();
+    sockets[0]?.ev.emit("connection.update", { connection: "open" });
+
+    const ok = await senders.sendMedia("whatsapp", "12345@s.whatsapp.net", {
+      url: "https://example.org/pic.png",
+      caption: "here you go",
+    });
+
+    expect(ok).toBe(true);
+    expect(sockets[0]?.sendMessage).toHaveBeenCalledWith("12345@s.whatsapp.net", {
+      image: { url: "https://example.org/pic.png" },
+      caption: "here you go",
+    });
+  });
+
+  test("sendMedia accepts a bare URL string, matching Telegram/Matrix's shorthand", async () => {
+    const sockets: FakeSocket[] = [];
+    const channel = createWhatsAppChannel({
+      sessionSecret: "test-session-secret-value",
+      loadBaileys: async () => fakeBaileysModule({ registered: true, sockets }),
+      schedule: () => undefined,
+    });
+    const { deps, senders } = testDeps();
+
+    await channel.start(deps);
+    await flush();
+    sockets[0]?.ev.emit("connection.update", { connection: "open" });
+
+    const ok = await senders.sendMedia(
+      "whatsapp",
+      "12345@s.whatsapp.net",
+      "https://example.org/pic.png",
+    );
+
+    expect(ok).toBe(true);
+    expect(sockets[0]?.sendMessage).toHaveBeenCalledWith("12345@s.whatsapp.net", {
+      image: { url: "https://example.org/pic.png" },
+    });
+  });
+
+  test("sendMedia without a caption omits the caption field", async () => {
+    const sockets: FakeSocket[] = [];
+    const channel = createWhatsAppChannel({
+      sessionSecret: "test-session-secret-value",
+      loadBaileys: async () => fakeBaileysModule({ registered: true, sockets }),
+      schedule: () => undefined,
+    });
+    const { deps, senders } = testDeps();
+
+    await channel.start(deps);
+    await flush();
+    sockets[0]?.ev.emit("connection.update", { connection: "open" });
+
+    await senders.sendMedia("whatsapp", "12345@s.whatsapp.net", {
+      url: "https://example.org/pic.png",
+    });
+
+    expect(sockets[0]?.sendMessage).toHaveBeenCalledWith("12345@s.whatsapp.net", {
+      image: { url: "https://example.org/pic.png" },
+    });
+  });
+
+  test("a custom name lets two WhatsApp channels share one process and one registry", async () => {
+    const sockets: FakeSocket[] = [];
+    const channel = createWhatsAppChannel({
+      name: "whatsapp:support",
+      sessionSecret: "test-session-secret-value",
+      loadBaileys: async () => fakeBaileysModule({ registered: true, sockets }),
+      schedule: () => undefined,
+    });
+    const { deps, senders } = testDeps();
+
+    await channel.start(deps);
+    await flush();
+    sockets[0]?.ev.emit("connection.update", { connection: "open" });
+
+    expect(senders.available("whatsapp:support")).toBe(true);
+    expect(senders.available("whatsapp")).toBe(false);
   });
 
   test("creds passed to makeWASocket are the ones actually stored in deps.db", async () => {

@@ -679,6 +679,20 @@ describe("createInboundPipeline", () => {
       expect(store.data.get("chat-1")).toEqual([{ role: "user", content: "hello" }]);
     });
 
+    // A hook that doesn't conform to its declared `string | null` return
+    // (a missing `return`, say) is coerced to `null` at the `applyTransformReply`
+    // boundary and so behaves exactly like an explicit veto here.
+    test("a non-conforming result (e.g. undefined) is treated as a veto too", async () => {
+      const { handle, reply, chatReplies } = harness({
+        transformReply: () => undefined as never,
+      });
+
+      const outcome = await handle(msg(), { reply });
+
+      expect(outcome).toEqual({ action: "ignore" });
+      expect(chatReplies).toHaveLength(0);
+    });
+
     test("a throwing transformReply is logged and the original reply is delivered", async () => {
       const lines: unknown[][] = [];
       const logger = {

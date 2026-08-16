@@ -138,6 +138,14 @@ export type TransformReply = (input: TransformReplyInput) => string | null | Pro
  * Runs `transformReply` if configured. A throw/rejection is logged and the
  * ORIGINAL text is returned — the delivery invariant: a bug in a plugin hook
  * must never silently swallow an answer the model already produced.
+ *
+ * The result crosses the same plugin boundary `runAnswerFn` does, so it gets
+ * the same treatment: anything that isn't a string is coerced to `null`
+ * (treated as a veto) rather than passed through as whatever a
+ * non-conforming hook happened to return (`undefined` from a missing
+ * `return`, say). Every call site already treats a falsy result as "nothing
+ * delivered", but only a normalized `string | null` matches this function's
+ * own declared return type.
  */
 export async function applyTransformReply(
   transformReply: TransformReply | undefined,
@@ -146,7 +154,8 @@ export async function applyTransformReply(
 ): Promise<string | null> {
   if (!transformReply) return input.text;
   try {
-    return await transformReply(input);
+    const result = await transformReply(input);
+    return typeof result === "string" ? result : null;
   } catch (error) {
     logger?.error(
       `transformReply threw for channel "${input.channel}"; sending the original reply`,

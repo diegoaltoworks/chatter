@@ -321,3 +321,15 @@ same seams every other chatter surface uses - see
 [integrations.md](./integrations.md)), applies output guardrails, and answers
 through `prepareChat`, so a new channel never hand-rolls its own prompt
 assembly or drifts from the model/config the rest of the server uses.
+
+## Conformance
+
+`test/channel-conformance.test.ts` runs the same scenario list once per
+built-in channel, against a fake wire the same way each channel's own
+`*.test.ts` already does - see that file for the current scenario list.
+Drift in any single channel's wiring (an unpassed hook, a hardcoded default,
+a gate applied out of order) fails that channel's own run of the shared
+scenario without the others needing to change. A new transport plugs into
+the suite by adding an adapter there - `deliver()` (send one addressed
+message, report what happened) and `senderLifecycle()` (start, confirm
+registration, stop, confirm it's gone) are the whole contract.

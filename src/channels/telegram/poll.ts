@@ -55,7 +55,11 @@ export interface LongPollDeps {
  *
  * The offset advances BEFORE the update is handled: a handler that throws on
  * one specific update must not make Telegram redeliver it forever, which would
- * wedge the loop on a single poison message and starve every later one.
+ * wedge the loop on a single poison message and starve every later one. It
+ * advances only for an update this loop is actually going to handle, though:
+ * a stop that lands mid-batch leaves the offset where it was, so a restart
+ * resumes at the unhandled update rather than past it (matching
+ * `../matrix/sync.ts`'s `since`-token ordering).
  */
 export async function runLongPoll(deps: LongPollDeps): Promise<number | undefined> {
   const logger = deps.logger ?? createConsoleLogger();
@@ -80,9 +84,13 @@ export async function runLongPoll(deps: LongPollDeps): Promise<number | undefine
 
     failures = 0;
     for (const update of updates) {
+      // Before the offset moves: an update this loop is not going to handle
+      // must stay unacknowledged, or a host persisting `onOffset` would
+      // resume past a message nobody ever answered, the same ordering
+      // `../matrix/sync.ts`'s `since` token uses.
+      if (deps.isStopped()) break;
       offset = nextOffset(update);
       deps.onOffset?.(offset);
-      if (deps.isStopped()) break;
       try {
         await deps.handleUpdate(update);
       } catch (error) {

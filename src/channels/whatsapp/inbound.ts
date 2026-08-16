@@ -34,11 +34,10 @@
  *       client: deps.client,
  *       store: deps.store,
  *       prompts: deps.prompts,
- *       answerFn: deps.config.answerFn,
- *       bucketsFor: deps.config.bucketsFor,
- *       rewriteQuery: deps.config.rewriteQuery,
- *       rerankContext: deps.config.rerankContext,
- *       transformReply: deps.config.transformReply,
+ *       // Falls back to deps.config.{answerFn,bucketsFor,rewriteQuery,
+ *       // rerankContext,transformReply} for whichever of those this config
+ *       // doesn't set itself.
+ *       serverConfig: deps.config,
  *       registry: new Map(),
  *       logger: deps.logger,
  *     });
@@ -57,6 +56,7 @@ import type { PromptLoader } from "../../core/prompts";
 import type { VectorStore } from "../../core/retrieval";
 import type { HistoryCompactionOptions } from "../../history/compaction";
 import type { HistoryStore } from "../../history/types";
+import type { ChatterConfig } from "../../types";
 import {
   type ChannelMessage,
   isBlockedByAllowlist,
@@ -313,6 +313,18 @@ export interface WhatsAppInboundConfig {
   rerankContext?: RerankContext;
   /** Modifies or vetoes the produced reply before delivery — see `ChatterConfig.transformReply`. */
   transformReply?: TransformReply;
+  /**
+   * Fallback source for `answerFn`/`bucketsFor`/`rewriteQuery`/`rerankContext`/
+   * `transformReply` above, each consulted only when this config's own field
+   * is unset. Pass `deps.config` from the `customRoutes` callback (see the
+   * module docstring) so this handler automatically honours a server-level
+   * hook, the same `config.X ?? deps.config.X` precedence `./telegram` and
+   * `./matrix` apply internally. Unset: only this config's own fields count.
+   */
+  serverConfig?: Pick<
+    ChatterConfig,
+    "answerFn" | "bucketsFor" | "rewriteQuery" | "rerankContext" | "transformReply"
+  >;
   model?: string;
   /**
    * Own identities per session — share ONE registry across every session
@@ -406,13 +418,13 @@ export function createWhatsAppInboundHandler(
     { client: config.client, store: config.store, prompts: config.prompts },
     {
       channel: "whatsapp",
-      answerFn: config.answerFn,
-      bucketsFor: config.bucketsFor,
-      rewriteQuery: config.rewriteQuery,
-      rerankContext: config.rerankContext,
-      transformReply: config.transformReply,
+      answerFn: config.answerFn ?? config.serverConfig?.answerFn,
+      bucketsFor: config.bucketsFor ?? config.serverConfig?.bucketsFor,
+      rewriteQuery: config.rewriteQuery ?? config.serverConfig?.rewriteQuery,
+      rerankContext: config.rerankContext ?? config.serverConfig?.rerankContext,
+      transformReply: config.transformReply ?? config.serverConfig?.transformReply,
       model: config.model,
-      channelHint: config.channelHint,
+      channelHint: config.channelHint ?? "Channel: WhatsApp.",
       personaResolver: personaResolver
         ? ({ sender, text }) => personaResolver({ senderPhone: sender, text })
         : undefined,

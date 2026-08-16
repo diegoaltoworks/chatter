@@ -407,6 +407,60 @@ describe("createWhatsAppInboundHandler", () => {
     );
   });
 
+  test("channelHint defaults to WhatsApp and is overridable", async () => {
+    const { handler, sock, answerCalls } = createHarness();
+    await handler(waEvent(sock));
+    expect((answerCalls[0] as { system: string }).system).toContain("Channel: WhatsApp.");
+
+    const overridden = createHarness({ channelHint: "Replies arrive over a linked device." });
+    await overridden.handler(waEvent(overridden.sock));
+    expect((overridden.answerCalls[0] as { system: string }).system).toContain(
+      "Replies arrive over a linked device.",
+    );
+    expect((overridden.answerCalls[0] as { system: string }).system).not.toContain(
+      "Channel: WhatsApp.",
+    );
+  });
+
+  test("serverConfig supplies answerFn when this config's own field is unset", async () => {
+    const calls: unknown[] = [];
+    const { handler, sock } = createHarness({
+      answerFn: undefined,
+      serverConfig: {
+        answerFn: async (input) => {
+          calls.push(input);
+          return "from the server config";
+        },
+      },
+    });
+
+    await handler(waEvent(sock));
+
+    expect(calls).toHaveLength(1);
+    expect(sock.sendMessage).toHaveBeenCalledWith(
+      "447700900123@s.whatsapp.net",
+      { text: "from the server config" },
+      { quoted: expect.anything() },
+    );
+  });
+
+  test("this config's own answerFn wins over serverConfig's", async () => {
+    const serverCalls: unknown[] = [];
+    const { handler, sock, answerCalls } = createHarness({
+      serverConfig: {
+        answerFn: async (input) => {
+          serverCalls.push(input);
+          return "from the server config";
+        },
+      },
+    });
+
+    await handler(waEvent(sock));
+
+    expect(answerCalls).toHaveLength(1);
+    expect(serverCalls).toHaveLength(0);
+  });
+
   test("status@broadcast is skipped", async () => {
     const { handler, sock, answerCalls } = createHarness();
 

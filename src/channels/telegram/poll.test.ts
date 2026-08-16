@@ -195,11 +195,12 @@ describe("runLongPoll", () => {
     expect(logger.warnings).toEqual([]);
   });
 
-  test("a stop mid-batch abandons the remaining updates", async () => {
+  test("a stop mid-batch abandons the remaining updates without acknowledging them", async () => {
     const handled: number[] = [];
+    const offsets: number[] = [];
     let stopped = false;
 
-    await runLongPoll({
+    const finalOffset = await runLongPoll({
       getUpdates: async () => updatesFor([1, 2, 3]),
       handleUpdate: async (update) => {
         handled.push(update.update_id);
@@ -207,9 +208,14 @@ describe("runLongPoll", () => {
       },
       isStopped: () => stopped,
       sleep: async () => undefined,
+      onOffset: (offset) => offsets.push(offset),
       logger: silentLogger(),
     });
 
     expect(handled).toEqual([1]);
+    // Update 2 was never handled, so its offset must never have been
+    // acknowledged either: a restart has to redeliver it, not skip past it.
+    expect(offsets).toEqual([2]);
+    expect(finalOffset).toBe(2);
   });
 });

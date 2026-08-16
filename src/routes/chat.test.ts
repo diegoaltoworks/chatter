@@ -271,6 +271,24 @@ describe("transformReply hook", () => {
     expect(await res.json()).toEqual({ reply: "built-in reply" });
   });
 
+  // A non-conforming return (a missing `return` in a hook, say) is coerced
+  // to `null` at the applyTransformReply boundary and so reports the same
+  // empty reply a deliberate veto would - not the raw value verbatim, which
+  // would have put a non-string into this route's JSON response.
+  test("a non-conforming transformReply return is treated as a veto, reported as empty", async () => {
+    const { deps } = createFakeDeps({
+      transformReply: () => undefined as never,
+    });
+    const app = publicRoutes(deps);
+
+    const res = await app.fetch(
+      chatRequest("/api/public/chat", message, { "x-api-key": PUBLIC_KEY }),
+    );
+
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ reply: "" });
+  });
+
   test("the public route's streaming path is unaffected by transformReply", async () => {
     const seen: unknown[] = [];
     const { deps } = createFakeDeps({

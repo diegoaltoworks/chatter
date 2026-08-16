@@ -49,6 +49,9 @@ const whatsapp = createWhatsAppChannel({
 await createServer({ ..., channels: [whatsapp] });
 ```
 
+- **`name`** - channel and sender-registry name prefix. Override to run more
+  than one WhatsApp channel in one process (each with its own sessions).
+  Defaults to `"whatsapp"`.
 - **`sessionSecret`** (required, at least 16 characters - a shorter or empty
   value throws at channel creation) encrypts the stored session at rest
   (AES-256-GCM, key derived via scrypt with a fresh salt per row). Keep it
@@ -103,18 +106,17 @@ await createServer({
       client: deps.client,
       store: deps.store,
       prompts: deps.prompts,
-      answerFn: deps.config.answerFn,
-      bucketsFor: deps.config.bucketsFor,
-      rewriteQuery: deps.config.rewriteQuery,
-      rerankContext: deps.config.rerankContext,
-      transformReply: deps.config.transformReply,
+      // Falls back to deps.config's answerFn/bucketsFor/rewriteQuery/
+      // rerankContext/transformReply for whichever of those this config
+      // doesn't set itself - the same precedence `./telegram` and
+      // `./matrix` apply internally.
+      serverConfig: deps.config,
       logger: deps.logger,
       // Share ONE registry across every WhatsApp channel instance in this
       // process - it's how the loop guard recognises another linked
       // number's own traffic as "us" rather than a stranger.
       registry: new Map(),
       allowedChats: (process.env.WA_CHAT_ALLOWLIST ?? "").split(",").filter(Boolean),
-      channelHint: "Channel: WhatsApp.",
     });
   },
 });
@@ -126,6 +128,11 @@ Configuration:
   across every session this handler serves. Populated automatically from
   each message's `sock.user`; never cleared, so a reconnecting session is
   still recognised as itself.
+- **`serverConfig`** - fallback source for `answerFn`/`bucketsFor`/
+  `rewriteQuery`/`rerankContext`/`transformReply`, each consulted only when
+  this handler's own field of the same name is unset. Pass `deps.config`
+  (as above) so the handler automatically honours a server-level hook
+  without repeating each field by hand.
 - **`allowedChats`** - group chats eligible for a reply. Empty (default) =
   every group; has no effect on DMs, which always reply. A group jid isn't
   guessable in advance: when a group is rejected by this gate, its jid is
@@ -143,7 +150,8 @@ Configuration:
   separate concern; this only wires the result through. A throwing/rejecting
   resolver degrades to no persona for that turn rather than failing the
   reply.
-- **`channelHint`** - passed straight through to `prepareChat`.
+- **`channelHint`** - passed straight through to `prepareChat`. @default
+  `"Channel: WhatsApp."`
 
 ### Mentions in the message text
 
@@ -473,6 +481,14 @@ to pass straight through:
 
 ```ts
 await deps.senders.sendReaction("whatsapp", msg.chatId, msg.messageRef, "👍");
+```
+
+`sendMedia(name, chatId, payload)` sends an image Baileys fetches itself -
+`payload` is `{ url: string; caption?: string }` (`WhatsAppMediaPayload` from
+`./whatsapp`), the same shape `./images`' own reply uses:
+
+```ts
+await deps.senders.sendMedia("whatsapp", msg.chatId, { url: imageUrl, caption: "here you go" });
 ```
 
 Inside a WhatsApp router detector, prefer `ctx.react(emoji)` (above) - it's
