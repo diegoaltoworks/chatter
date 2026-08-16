@@ -200,11 +200,15 @@ describe("createTelegramWebhookRoute", () => {
   test("rejects an oversized body before it reaches the secret check", async () => {
     const { app, api } = await mountWebhook();
 
+    // Deliberately the WRONG secret token (and 403 would win if the secret
+    // check ran first): asserting 413 here, not 403, is what actually
+    // proves the size limit is enforced before the secret comparison rather
+    // than merely also being enforced at some point.
     const res = await app.request("/webhooks/telegram", {
       method: "POST",
       headers: {
         "content-type": "application/json",
-        "x-telegram-bot-api-secret-token": SECRET,
+        "x-telegram-bot-api-secret-token": "wrong",
       },
       body: JSON.stringify({
         update_id: 1,

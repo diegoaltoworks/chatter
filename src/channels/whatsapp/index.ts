@@ -32,11 +32,13 @@ export {
   acquireSessionLease,
   createWhatsAppChannel,
   type LeaseGatedConnectDeps,
+  normalizeWaMediaPayload,
   reconnectDelayMs,
   senderNameFor,
   shutdownWaSessions,
   type WaSessionHandle,
   type WhatsAppChannelConfig,
+  type WhatsAppMediaPayload,
   type WhatsAppMessageEvent,
 } from "./channel";
 export { decrypt, encrypt } from "./crypto";

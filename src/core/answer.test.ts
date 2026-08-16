@@ -7,7 +7,7 @@
 
 import { describe, expect, test } from "bun:test";
 import type OpenAI from "openai";
-import { type AnswerFnInput, answerOnce, answerStream } from "./answer";
+import { type AnswerFnInput, answerOnce, answerStream, applyTransformReply } from "./answer";
 import type { PipelineMessage } from "./pipeline";
 
 interface CreateCall {
@@ -222,6 +222,46 @@ describe("answerOnce", () => {
     ).rejects.toThrow("brain unavailable");
     // Failure is not silently papered over with the built-in completion.
     expect(calls).toEqual([]);
+  });
+});
+
+describe("applyTransformReply", () => {
+  test("passes the text through when no hook is configured", async () => {
+    expect(await applyTransformReply(undefined, { channel: "c", text: "hi" })).toBe("hi");
+  });
+
+  test("a string result replaces the reply", async () => {
+    const result = await applyTransformReply(() => "transformed", { channel: "c", text: "hi" });
+    expect(result).toBe("transformed");
+  });
+
+  test("null vetoes the reply", async () => {
+    const result = await applyTransformReply(() => null, { channel: "c", text: "hi" });
+    expect(result).toBeNull();
+  });
+
+  test("a throw is logged and the original text is returned", async () => {
+    const errors: unknown[][] = [];
+    const result = await applyTransformReply(
+      () => {
+        throw new Error("plugin bug");
+      },
+      { channel: "c", text: "hi" },
+      { error: (...args) => errors.push(args) },
+    );
+    expect(result).toBe("hi");
+    expect(errors).toHaveLength(1);
+  });
+
+  // Same coercion `runAnswerFn` applies at its own plugin boundary: a hook
+  // that doesn't conform to its declared `string | null` return (a missing
+  // `return`, say) must not leak an arbitrary value past this function's own
+  // declared return type.
+  test("a non-string, non-null result is coerced to null (treated as a veto)", async () => {
+    for (const bogus of [undefined, 42, { text: "hi" }]) {
+      const result = await applyTransformReply(() => bogus as never, { channel: "c", text: "hi" });
+      expect(result).toBeNull();
+    }
   });
 });
 

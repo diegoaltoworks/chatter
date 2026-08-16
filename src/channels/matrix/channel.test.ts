@@ -611,6 +611,11 @@ describe("createMatrixChannel", () => {
     await settle();
     await channel.stop?.();
 
+    // The whole point of the fixture: `initialSince` must actually reach
+    // the first `/sync` call, or this test would pass the same way with the
+    // resume token silently dropped and every restart re-syncing from
+    // scratch.
+    expect(api.syncs[0]).toBe("resume-token");
     expect(api.sent).toHaveLength(1);
     expect(api.sent[0]?.roomId).toBe("!dm:example.org");
   });

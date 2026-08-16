@@ -39,10 +39,16 @@ import {
   createSenderRegistry,
   type InboundReplySender,
 } from "../src/channels";
+import type { MatrixChannelConfig } from "../src/channels/matrix";
+import {
+  createMatrixChannel,
+  toChannelMessage as toMatrixChannelMessage,
+} from "../src/channels/matrix";
 import type { TelegramChannelConfig, TelegramUpdate } from "../src/channels/telegram";
 import { createTelegramChannel, toChannelMessage } from "../src/channels/telegram";
 import type { FlowHandler, FlowHandlerContext, FlowHandlerResult, LoadedFlow } from "../src/flows";
 import type { HistoryMessage, HistoryStore } from "../src/history";
+import { createHistoryCompactor } from "../src/history";
 import { createPersonaResolver } from "../src/personas";
 import { openaiRoutes } from "../src/routes/openai";
 import type { ChatterConfig } from "../src/types";
@@ -133,6 +139,101 @@ describe("API surface", () => {
     };
     const msg: ChannelMessage | undefined = toChannelMessage(update, { id: 100, username: "bot" });
     expect(msg?.messageRef).toBe(7);
+  });
+
+  // The third built-in transport, and proof the SPI works with zero peer
+  // dependencies: `./matrix` is configured with a homeserver URL and access
+  // token alone, satisfies `Channel`, and takes the same seams every other
+  // surface does.
+  test("the Matrix channel is a Channel configured from a homeserver URL and access token alone", async () => {
+    const config: MatrixChannelConfig = {
+      homeserverUrl: "https://matrix.example.org",
+      accessToken: "token",
+      allowedChats: ["!room:example.org"],
+      answerFn: async () => "answer",
+      bucketsFor: async () => ["support"],
+      channelHint: "Replies are delivered over Matrix.",
+      history: {
+        store: { append: async () => {}, load: async () => [], clear: async () => {} },
+        limit: 10,
+        historyEnabledFor: () => true,
+      },
+    };
+    const channel: Channel = createMatrixChannel(config);
+    expect(channel.name).toBe("matrix");
+    expect(typeof channel.stop).toBe("function");
+
+    // The wire mapping is exported too, so a host can pre-map its own sync
+    // events into the same ChannelMessage shape.
+    const msg: ChannelMessage | undefined = toMatrixChannelMessage(
+      "!room:example.org",
+      {
+        type: "m.room.message",
+        event_id: "$1",
+        sender: "@alice:example.org",
+        origin_server_ts: 1,
+        content: { msgtype: "m.text", body: "hi" },
+      },
+      { userId: "@bot:example.org" },
+      new Set(),
+      new Set(),
+    );
+    expect(msg?.chatId).toBe("!room:example.org");
+  });
+
+  // Compaction is optional history layering, built entirely on HistoryStore's
+  // own append/load/clear: this locks that it composes with any store, not
+  // just the shipped Turso one.
+  test("createHistoryCompactor folds turns beyond threshold via any HistoryStore", async () => {
+    const client = {
+      chat: {
+        completions: {
+          create: async () => ({ choices: [{ message: { content: "a summary" } }] }),
+        },
+      },
+    } as unknown as ServerDependencies["client"];
+
+    function fakeStore(turns: HistoryMessage[]) {
+      const cleared: string[] = [];
+      const appended: HistoryMessage[] = [];
+      const store: HistoryStore = {
+        async append(_conversationId, message) {
+          appended.push(message);
+        },
+        async load() {
+          return turns;
+        },
+        async clear(conversationId) {
+          cleared.push(conversationId);
+        },
+      };
+      return { store, cleared, appended };
+    }
+
+    const compactor = createHistoryCompactor({ client }, { threshold: 3, keep: 1 });
+
+    // Below threshold: left untouched.
+    const below = fakeStore([
+      { role: "user", content: "one" },
+      { role: "assistant", content: "two" },
+    ]);
+    await compactor.maybeCompact(below.store, "conv-1");
+    expect(below.cleared).toEqual([]);
+    expect(below.appended).toEqual([]);
+
+    // At threshold: cleared, then the summary plus the kept turn re-appended
+    // (SUMMARY_PREFIX is `createHistoryCompactor`'s own marker for a folded
+    // turn, not asserted verbatim here since it isn't part of this contract).
+    const at = fakeStore([
+      { role: "user", content: "one" },
+      { role: "assistant", content: "two" },
+      { role: "user", content: "three" },
+    ]);
+    await compactor.maybeCompact(at.store, "conv-1");
+    expect(at.cleared).toEqual(["conv-1"]);
+    expect(at.appended).toHaveLength(2);
+    expect(at.appended[0]?.content).toContain("a summary");
+    expect(at.appended[1]).toEqual({ role: "user", content: "three" });
   });
 
   test("personaResolver output feeds prepareChat's personaLayer directly", () => {

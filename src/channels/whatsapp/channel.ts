@@ -51,6 +51,8 @@ export interface WhatsAppMessageEvent {
 export interface WhatsAppChannelConfig {
   /** Passphrase that encrypts auth state at rest (AES-256-GCM key material). Keep it stable across restarts and deploys — losing it means re-pairing. */
   sessionSecret: string;
+  /** Channel and sender-registry name prefix (see {@link senderNameFor}). Override to run more than one WhatsApp channel in one process. @default "whatsapp" */
+  name?: string;
   /** One Baileys connection per id, each a separate WhatsApp number. Defaults to `["default"]`, whose auth rows are unprefixed (a pre-multi-session deployment needs no migration). */
   sessionIds?: string[];
   /**
@@ -202,9 +204,33 @@ export function senderNameFor(channelName: string, sessionId: string): string {
   return sessionId === "default" ? channelName : `${channelName}:${sessionId}`;
 }
 
+/** `ChannelSender.sendMedia`'s payload shape for this channel: a URL Baileys fetches itself, matching `./images`' own `{ image: { url } }` usage. A bare string is shorthand for the URL, the same convention `./telegram` and `./matrix` use. */
+export interface WhatsAppMediaPayload {
+  url: string;
+  caption?: string;
+}
+
+/**
+ * Turns the registry's opaque `sendMedia` payload into what `sock.sendMessage`
+ * needs. `ChannelSender.sendMedia` types its payload as `unknown` (payload
+ * shapes are transport-defined), so this is where that unknown is checked:
+ * a malformed payload throws here, which the sender registry reports as
+ * `false` rather than sending Baileys a `{ image: { url: undefined } }`.
+ */
+export function normalizeWaMediaPayload(payload: unknown): WhatsAppMediaPayload {
+  const media: WhatsAppMediaPayload =
+    typeof payload === "string" ? { url: payload } : (payload as WhatsAppMediaPayload);
+  if (!media || typeof media !== "object" || typeof media.url !== "string" || !media.url) {
+    throw new TypeError(
+      `WhatsApp sendMedia payload must be a URL string or { url, caption? }, got: ${typeof payload}`,
+    );
+  }
+  return media;
+}
+
 export function createWhatsAppChannel(config: WhatsAppChannelConfig): Channel {
   assertStrongSecret(config.sessionSecret, "WhatsApp sessionSecret (e.g. WA_SESSION_SECRET)");
-  const channelName = "whatsapp";
+  const channelName = config.name ?? "whatsapp";
   const sessionIds =
     config.sessionIds && config.sessionIds.length > 0 ? config.sessionIds : ["default"];
   const now = config.now ?? Date.now;
@@ -314,6 +340,13 @@ export function createWhatsAppChannel(config: WhatsAppChannelConfig): Channel {
             const sender: ChannelSender = {
               sendText: async (chatId, text) => {
                 await sock.sendMessage(chatId, { text });
+              },
+              sendMedia: async (chatId, payload) => {
+                const { url, caption } = normalizeWaMediaPayload(payload);
+                await sock.sendMessage(
+                  chatId,
+                  caption !== undefined ? { image: { url }, caption } : { image: { url } },
+                );
               },
               sendReaction: async (chatId, messageRef, emoji) => {
                 await sock.sendMessage(chatId, {
