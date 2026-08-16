@@ -11,6 +11,7 @@ import type { z as ZodNamespace } from "zod";
 import { answerOnce } from "./core/answer";
 import { resolveBuckets } from "./core/buckets";
 import { DEFAULT_MODEL } from "./core/llm";
+import { resolveLogger } from "./core/logger";
 import { lastUserMessage } from "./core/messages";
 import { prepareChat } from "./core/pipeline";
 import { PromptLoader } from "./core/prompts";
@@ -59,7 +60,12 @@ import type { MCPServerOptions } from "./mcp-server/types";
  * ```
  */
 export async function createMCPServer(config: MCPServerOptions) {
-  console.log(`🚀 Starting ${config.bot.name} MCP Server...`);
+  // Every startup/registration message below goes through `log`, whose
+  // default implementation never writes to stdout — the stdio transport
+  // reserves stdout for the JSON-RPC stream, so a raw console.log here would
+  // corrupt it.
+  const log = resolveLogger(config.logger, config.logLevel);
+  log.info(`🚀 Starting ${config.bot.name} MCP Server...`);
 
   // Optional peers, loaded lazily so core installs/imports never require them.
   const [McpServer, z] = await Promise.all([loadMcpSdk(), loadZod()]);
@@ -71,7 +77,7 @@ export async function createMCPServer(config: MCPServerOptions) {
 
   // Initialize modular components
   const rateLimiter = createRateLimiter(config.toolRateLimit);
-  const logger = createLogger(config.logging?.console !== false, config.logging?.onChat);
+  const logger = createLogger(config.logging?.console !== false, config.logging?.onChat, log);
 
   // Tool configurations with defaults
   const publicToolConfig = {
@@ -101,9 +107,10 @@ export async function createMCPServer(config: MCPServerOptions) {
     databaseUrl: config.database.url,
     databaseAuthToken: config.database.authToken,
     knowledgeDir,
+    logger: log,
   });
   await store.build();
-  console.log("✅ Knowledge base ready");
+  log.info("✅ Knowledge base ready");
 
   // Create prompt loader
   const prompts = new PromptLoader(promptsDir, config.bot);
@@ -114,7 +121,7 @@ export async function createMCPServer(config: MCPServerOptions) {
     version: "1.0.0",
   });
 
-  console.log("✅ MCP server initialized");
+  log.info("✅ MCP server initialized");
 
   // Register chat_public tool (if enabled)
   if (publicToolConfig.enabled) {
@@ -200,7 +207,7 @@ export async function createMCPServer(config: MCPServerOptions) {
             duration,
             cost,
           )
-          .catch((err) => console.error("Logging error:", err));
+          .catch((err) => log.error("Logging error:", err));
 
         return {
           content: [
@@ -222,7 +229,7 @@ export async function createMCPServer(config: MCPServerOptions) {
       },
     );
 
-    console.log(`✅ Registered tool: ${publicToolConfig.name}`);
+    log.info(`✅ Registered tool: ${publicToolConfig.name}`);
   }
 
   // Register chat_private tool (if enabled)
@@ -308,7 +315,7 @@ export async function createMCPServer(config: MCPServerOptions) {
             duration,
             cost,
           )
-          .catch((err) => console.error("Logging error:", err));
+          .catch((err) => log.error("Logging error:", err));
 
         return {
           content: [
@@ -330,7 +337,7 @@ export async function createMCPServer(config: MCPServerOptions) {
       },
     );
 
-    console.log(`✅ Registered tool: ${privateToolConfig.name}`);
+    log.info(`✅ Registered tool: ${privateToolConfig.name}`);
   }
 
   // Log summary
@@ -340,10 +347,10 @@ export async function createMCPServer(config: MCPServerOptions) {
   ].filter(Boolean);
 
   if (enabledTools.length === 0) {
-    console.warn("⚠️  Warning: No MCP tools enabled");
+    log.warn("⚠️  Warning: No MCP tools enabled");
   }
 
-  console.log(
+  log.info(
     `✅ ${config.bot.name} MCP Server ready (transport: ${transportMode}, tools: ${enabledTools.join(", ") || "none"})`,
   );
 

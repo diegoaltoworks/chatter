@@ -9,6 +9,7 @@
 import { describe, expect, test } from "bun:test";
 import { exportSPKI, generateKeyPair, SignJWT } from "jose";
 import type { AnswerFnInput } from "../core/answer";
+import { createConsoleLogger } from "../core/logger";
 import type { ChatterConfig, ServerDependencies } from "../types";
 import { demoRoutes } from "./demo";
 import { privateRoutes } from "./private";
@@ -67,6 +68,7 @@ function createFakeDeps(config: Partial<ChatterConfig> = {}) {
       verify: async (token: string) =>
         token === PUBLIC_KEY ? { valid: true, payload: { name: "test" } } : { valid: false },
     },
+    logger: createConsoleLogger(),
     config: {
       bot: {
         name: "TestBot",

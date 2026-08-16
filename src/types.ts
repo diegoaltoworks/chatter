@@ -11,8 +11,11 @@ import type OpenAI from "openai";
 import type { Channel, ChannelSenderRegistry } from "./channels";
 import type { AnswerFn } from "./core/answer";
 import type { BucketsFor } from "./core/buckets";
+import type { Logger, LogLevel } from "./core/logger";
 import type { PromptLoader } from "./core/prompts";
 import type { VectorStore } from "./core/retrieval";
+
+export type { Logger, LogLevel } from "./core/logger";
 
 /**
  * USD price per 1M tokens, used to turn token usage into an estimated cost.
@@ -249,6 +252,19 @@ export interface ChatterConfig {
    * gates, and the sender registry channels register into.
    */
   channels?: Channel[];
+
+  // Logging (advanced)
+  /**
+   * Structured logging seam for every library log call (auth/session
+   * decisions, channel lifecycle, retrieval, flows, the scheduler). Unset: a
+   * console-backed logger is used, writing to stderr only — stdout is never
+   * touched, so the stdio MCP transport stays clean by default. Per-request
+   * detail (e.g. auth/session decisions) logs at `debug`, which the default
+   * logger suppresses; pass `logLevel: "debug"` (or a custom `logger`) to see it.
+   */
+  logger?: Logger;
+  /** Minimum level the default console logger emits. Ignored when `logger` is set. Default: "info". */
+  logLevel?: LogLevel;
 }
 
 /**
@@ -299,6 +315,8 @@ export interface ServerDependencies {
    * channel name without importing the transport.
    */
   senders: ChannelSenderRegistry;
+  /** Resolved logger — `config.logger`, or the default console logger. */
+  logger: Logger;
 }
 
 /**

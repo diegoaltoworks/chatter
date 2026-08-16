@@ -1,6 +1,7 @@
 import type OpenAI from "openai";
 import type { AnswerFn } from "../core/answer";
 import { answerOnce } from "../core/answer";
+import { createConsoleLogger, type Logger } from "../core/logger";
 import type { PipelineMessage, PipelineMode } from "../core/pipeline";
 import type { ComposeFn, ScheduleEntry } from "./types";
 
@@ -13,13 +14,14 @@ export async function composeMessage(
   entry: ScheduleEntry,
   compose: ComposeFn | undefined,
   fallbackMessage: string,
+  logger: Logger = createConsoleLogger(),
 ): Promise<string> {
   if (!compose) return fallbackMessage;
   try {
     const result = await compose(entry);
     return result.trim().length > 0 ? result : fallbackMessage;
   } catch (error) {
-    console.warn(`Scheduler compose failed for entry "${entry.id}":`, error);
+    logger.warn(`Scheduler compose failed for entry "${entry.id}":`, error);
     return fallbackMessage;
   }
 }

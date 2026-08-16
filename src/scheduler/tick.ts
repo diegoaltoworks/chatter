@@ -1,4 +1,5 @@
 import type { ChannelSenderRegistry } from "../channels/senders";
+import { createConsoleLogger, type Logger } from "../core/logger";
 import { composeMessage } from "./compose";
 import { deliver } from "./deliver";
 import { dueDrops, staleDrops } from "./dueDrops";
@@ -12,6 +13,7 @@ export interface TickOptions {
   fallbackMessage: string;
   compose?: ComposeFn;
   voiceAttempted?: boolean;
+  logger?: Logger;
 }
 
 /**
@@ -21,6 +23,7 @@ export interface TickOptions {
  * window, and delivery on top.
  */
 export async function runTick(entries: ScheduleEntry[], options: TickOptions): Promise<TickResult> {
+  const logger = options.logger ?? createConsoleLogger();
   const result: TickResult = { sent: [], notClaimed: [], stale: [], failed: [] };
 
   for (const entry of staleDrops(entries, options.now, options.graceMs)) {
@@ -35,7 +38,7 @@ export async function runTick(entries: ScheduleEntry[], options: TickOptions): P
     }
 
     try {
-      const message = await composeMessage(entry, options.compose, options.fallbackMessage);
+      const message = await composeMessage(entry, options.compose, options.fallbackMessage, logger);
       const delivered = await deliver(entry, message, {
         senders: options.senders,
         voiceAttempted: options.voiceAttempted,
@@ -51,7 +54,7 @@ export async function runTick(entries: ScheduleEntry[], options: TickOptions): P
       // A caller-supplied sender registry is not guaranteed to degrade to
       // false like the built-in one — an unexpected throw must still free
       // the claim rather than block the entry until claimTimeoutMs.
-      console.warn(`Scheduler delivery failed for entry "${entry.id}":`, error);
+      logger.warn(`Scheduler delivery failed for entry "${entry.id}":`, error);
       await options.claims.release(entry.id);
       result.failed.push(entry.id);
     }

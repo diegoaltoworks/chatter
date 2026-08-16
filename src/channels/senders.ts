@@ -7,6 +7,8 @@
  * send fails, so a disconnected channel can never crash a caller.
  */
 
+import { createConsoleLogger, type Logger } from "../core/logger";
+
 /** What a channel implements to receive outbound sends. Voice/media payload shapes are transport-defined. */
 export interface ChannelSender {
   sendText(chatId: string, text: string): Promise<void>;
@@ -29,13 +31,15 @@ export interface ChannelSenderRegistry {
 }
 
 /** One registry per server: channels register on start, callers send by name. */
-export function createSenderRegistry(): ChannelSenderRegistry {
+export function createSenderRegistry(
+  logger: Logger = createConsoleLogger(),
+): ChannelSenderRegistry {
   const senders = new Map<string, ChannelSender>();
 
   return {
     register(name, sender) {
       if (senders.has(name)) {
-        console.warn(`Channel sender "${name}" is already registered; overwriting.`);
+        logger.warn(`Channel sender "${name}" is already registered; overwriting.`);
       }
       senders.set(name, sender);
     },
@@ -52,7 +56,7 @@ export function createSenderRegistry(): ChannelSenderRegistry {
         await sender.sendText(chatId, text);
         return true;
       } catch (error) {
-        console.warn(`Channel sender "${name}" sendText failed:`, error);
+        logger.warn(`Channel sender "${name}" sendText failed:`, error);
         return false;
       }
     },
@@ -63,7 +67,7 @@ export function createSenderRegistry(): ChannelSenderRegistry {
         await sender.sendVoice(chatId, payload);
         return true;
       } catch (error) {
-        console.warn(`Channel sender "${name}" sendVoice failed:`, error);
+        logger.warn(`Channel sender "${name}" sendVoice failed:`, error);
         return false;
       }
     },
@@ -74,7 +78,7 @@ export function createSenderRegistry(): ChannelSenderRegistry {
         await sender.sendMedia(chatId, payload);
         return true;
       } catch (error) {
-        console.warn(`Channel sender "${name}" sendMedia failed:`, error);
+        logger.warn(`Channel sender "${name}" sendMedia failed:`, error);
         return false;
       }
     },

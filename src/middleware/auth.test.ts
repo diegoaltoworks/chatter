@@ -1,6 +1,7 @@
 import { describe, expect, it } from "bun:test";
 import { Hono } from "hono";
 import { ApiKeyManager } from "../auth/apikeys";
+import { createConsoleLogger } from "../core/logger";
 import { createSession } from "../core/session";
 import type { ServerDependencies } from "../types";
 import { createAuthMiddleware } from "./auth";
@@ -11,7 +12,7 @@ describe("Auth Middleware", () => {
   describe("createAuthMiddleware", () => {
     it("should create middleware function", () => {
       const apiKeyManager = new ApiKeyManager(testSecret);
-      const deps: Partial<ServerDependencies> = { apiKeyManager };
+      const deps: Partial<ServerDependencies> = { apiKeyManager, logger: createConsoleLogger() };
 
       const middleware = createAuthMiddleware(deps as ServerDependencies);
 
@@ -21,7 +22,7 @@ describe("Auth Middleware", () => {
 
     it("should reject request without API key", async () => {
       const apiKeyManager = new ApiKeyManager(testSecret);
-      const deps: Partial<ServerDependencies> = { apiKeyManager };
+      const deps: Partial<ServerDependencies> = { apiKeyManager, logger: createConsoleLogger() };
 
       const app = new Hono();
       app.use("/api/*", createAuthMiddleware(deps as ServerDependencies));
@@ -40,7 +41,7 @@ describe("Auth Middleware", () => {
 
     it("should reject request with invalid API key", async () => {
       const apiKeyManager = new ApiKeyManager(testSecret);
-      const deps: Partial<ServerDependencies> = { apiKeyManager };
+      const deps: Partial<ServerDependencies> = { apiKeyManager, logger: createConsoleLogger() };
 
       const app = new Hono();
       app.use("/api/*", createAuthMiddleware(deps as ServerDependencies));
@@ -60,7 +61,7 @@ describe("Auth Middleware", () => {
     it("should accept request with valid JWT API key", async () => {
       const apiKeyManager = new ApiKeyManager(testSecret);
       const validKey = await apiKeyManager.create({ name: "test-app" });
-      const deps: Partial<ServerDependencies> = { apiKeyManager };
+      const deps: Partial<ServerDependencies> = { apiKeyManager, logger: createConsoleLogger() };
 
       const app = new Hono();
       app.use("/api/*", createAuthMiddleware(deps as ServerDependencies));
@@ -80,7 +81,7 @@ describe("Auth Middleware", () => {
     it("should accept request with session key", async () => {
       const apiKeyManager = new ApiKeyManager(testSecret);
       const session = createSession();
-      const deps: Partial<ServerDependencies> = { apiKeyManager };
+      const deps: Partial<ServerDependencies> = { apiKeyManager, logger: createConsoleLogger() };
 
       const app = new Hono();
       app.use("/api/*", createAuthMiddleware(deps as ServerDependencies));
@@ -101,7 +102,7 @@ describe("Auth Middleware", () => {
       // Session keys should pass through without JWT verification
       const apiKeyManager = new ApiKeyManager(testSecret);
       const session = createSession();
-      const deps: Partial<ServerDependencies> = { apiKeyManager };
+      const deps: Partial<ServerDependencies> = { apiKeyManager, logger: createConsoleLogger() };
 
       const app = new Hono();
       app.use("/api/*", createAuthMiddleware(deps as ServerDependencies));
@@ -125,7 +126,7 @@ describe("Auth Middleware", () => {
       // Wait for expiration
       await new Promise((resolve) => setTimeout(resolve, 1100));
 
-      const deps: Partial<ServerDependencies> = { apiKeyManager };
+      const deps: Partial<ServerDependencies> = { apiKeyManager, logger: createConsoleLogger() };
 
       const app = new Hono();
       app.use("/api/*", createAuthMiddleware(deps as ServerDependencies));
@@ -147,7 +148,7 @@ describe("Auth Middleware", () => {
       const otherKey = await otherManager.create();
 
       const apiKeyManager = new ApiKeyManager(testSecret);
-      const deps: Partial<ServerDependencies> = { apiKeyManager };
+      const deps: Partial<ServerDependencies> = { apiKeyManager, logger: createConsoleLogger() };
 
       const app = new Hono();
       app.use("/api/*", createAuthMiddleware(deps as ServerDependencies));
@@ -165,7 +166,10 @@ describe("Auth Middleware", () => {
     });
 
     it("should return error when no API key manager configured", async () => {
-      const deps: Partial<ServerDependencies> = { apiKeyManager: undefined };
+      const deps: Partial<ServerDependencies> = {
+        apiKeyManager: undefined,
+        logger: createConsoleLogger(),
+      };
 
       const app = new Hono();
       app.use("/api/*", createAuthMiddleware(deps as ServerDependencies));
@@ -188,7 +192,7 @@ describe("Auth Middleware", () => {
     it("should work with multiple middleware in chain", async () => {
       const apiKeyManager = new ApiKeyManager(testSecret);
       const validKey = await apiKeyManager.create();
-      const deps: Partial<ServerDependencies> = { apiKeyManager };
+      const deps: Partial<ServerDependencies> = { apiKeyManager, logger: createConsoleLogger() };
 
       const app = new Hono();
 
@@ -215,7 +219,7 @@ describe("Auth Middleware", () => {
 
     it("should stop middleware chain on auth failure", async () => {
       const apiKeyManager = new ApiKeyManager(testSecret);
-      const deps: Partial<ServerDependencies> = { apiKeyManager };
+      const deps: Partial<ServerDependencies> = { apiKeyManager, logger: createConsoleLogger() };
 
       let nextCalled = false;
 
@@ -250,6 +254,7 @@ describe("Auth Middleware", () => {
 
       const deps: Partial<ServerDependencies> = {
         apiKeyManager: customManager as unknown as ApiKeyManager,
+        logger: createConsoleLogger(),
       };
 
       const app = new Hono();

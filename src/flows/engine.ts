@@ -6,6 +6,7 @@
  */
 
 import type OpenAI from "openai";
+import { createConsoleLogger, type Logger } from "../core/logger";
 import { detectIntent } from "./intent";
 import { loadFlowsFromDirectory } from "./loader";
 import { extractParameters } from "./params";
@@ -43,6 +44,8 @@ export interface FlowEngineOptions {
   sessionTtlMs?: number;
   /** Clock, injectable for deterministic tests. */
   now?: () => number;
+  /** Logger for load/intent-detection failures. Default: a console logger writing to stderr. */
+  logger?: Logger;
 }
 
 export interface FlowEngine {
@@ -80,6 +83,7 @@ export function createFlowEngine(options: FlowEngineOptions): FlowEngine {
     errorMessage = DEFAULT_ERROR_MESSAGE,
     sessionTtlMs,
     now = Date.now,
+    logger = createConsoleLogger(),
   } = options;
 
   let registry: FlowRegistry = createFlowRegistry(new Map());
@@ -95,7 +99,14 @@ export function createFlowEngine(options: FlowEngineOptions): FlowEngine {
     if (allFlows.length === 0) return undefined;
 
     const flowMap = new Map(allFlows.map((flow) => [flow.definition.id, flow]));
-    const detection = await detectIntent(client, model, message, flowMap, conversationContext);
+    const detection = await detectIntent(
+      client,
+      model,
+      message,
+      flowMap,
+      conversationContext,
+      logger,
+    );
     if (detection.confidence >= minConfidence) {
       return registry.getFlow(detection.intent);
     }
@@ -141,7 +152,7 @@ export function createFlowEngine(options: FlowEngineOptions): FlowEngine {
 
   return {
     async loadFlows() {
-      const flows = await loadFlowsFromDirectory(flowsDir);
+      const flows = await loadFlowsFromDirectory(flowsDir, logger);
       registry = createFlowRegistry(flows, criticalKeywords);
     },
 

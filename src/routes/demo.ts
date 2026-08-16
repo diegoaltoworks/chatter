@@ -103,7 +103,7 @@ function limitDemo(trustProxy: boolean) {
 }
 
 export function demoRoutes(deps: ServerDependencies) {
-  const { client, store, config, prompts } = deps;
+  const { client, store, config, prompts, logger } = deps;
   const app = new Hono();
 
   // Derive demo allowed origins from configured origins, falling back to allow-all
@@ -126,7 +126,7 @@ export function demoRoutes(deps: ServerDependencies) {
         ttl: 3600, // 1 hour
       });
 
-      console.log(
+      logger.debug(
         `[Demo] Created session: ${session.key.slice(0, 20)}... (${session.maxRequests} requests, ${3600}s TTL)`,
       );
 
@@ -207,7 +207,7 @@ export function demoRoutes(deps: ServerDependencies) {
       return c.json({ reply: out.content });
     } catch (error) {
       const err = error as Error;
-      console.error("Demo chat error:", err);
+      logger.error("Demo chat error:", err);
       return c.json({ error: err.message || "Internal error" }, 500);
     }
   });

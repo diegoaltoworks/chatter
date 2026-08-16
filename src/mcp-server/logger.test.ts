@@ -1,21 +1,28 @@
-import { afterEach, beforeEach, describe, expect, it, mock, spyOn } from "bun:test";
+import { describe, expect, it, mock } from "bun:test";
+import type { Logger } from "../core/logger";
 import { createLogger, MCPLogger } from "./logger";
 import type { CostInfo, MCPLogCallback } from "./types";
 
+function fakeLogger(): { logger: Logger; infoCalls: unknown[][]; errorCalls: unknown[][] } {
+  const infoCalls: unknown[][] = [];
+  const errorCalls: unknown[][] = [];
+  return {
+    logger: {
+      debug() {},
+      info: (...args) => infoCalls.push(args),
+      warn() {},
+      error: (...args) => errorCalls.push(args),
+    },
+    infoCalls,
+    errorCalls,
+  };
+}
+
 describe("MCPLogger", () => {
-  let consoleSpy: ReturnType<typeof spyOn>;
-
-  beforeEach(() => {
-    consoleSpy = spyOn(console, "log").mockImplementation(() => {});
-  });
-
-  afterEach(() => {
-    consoleSpy.mockRestore();
-  });
-
   describe("logChatInteraction", () => {
     it("should log to console when enabled", async () => {
-      const logger = new MCPLogger(true);
+      const { logger: fake, infoCalls } = fakeLogger();
+      const logger = new MCPLogger(true, undefined, fake);
       const cost: CostInfo = {
         promptTokens: 100,
         completionTokens: 50,
@@ -33,15 +40,16 @@ describe("MCPLogger", () => {
         cost,
       );
 
-      expect(consoleSpy).toHaveBeenCalled();
-      const loggedData = JSON.parse(consoleSpy.mock.calls[0][0]);
+      expect(infoCalls).toHaveLength(1);
+      const loggedData = JSON.parse(infoCalls[0]?.[0] as string);
       expect(loggedData.event).toBe("mcp_chat");
       expect(loggedData.toolName).toBe("test_tool");
       expect(loggedData.conversationId).toBe("conv_123");
     });
 
     it("should not log to console when disabled", async () => {
-      const logger = new MCPLogger(false);
+      const { logger: fake, infoCalls } = fakeLogger();
+      const logger = new MCPLogger(false, undefined, fake);
       const cost: CostInfo = {
         promptTokens: 100,
         completionTokens: 50,
@@ -59,7 +67,7 @@ describe("MCPLogger", () => {
         cost,
       );
 
-      expect(consoleSpy).not.toHaveBeenCalled();
+      expect(infoCalls).toHaveLength(0);
     });
 
     it("should call custom callback when provided", async () => {
@@ -154,11 +162,11 @@ describe("MCPLogger", () => {
     });
 
     it("should handle errors in callback gracefully", async () => {
-      const errorSpy = spyOn(console, "error").mockImplementation(() => {});
+      const { logger: fake, errorCalls } = fakeLogger();
       const callback = mock<MCPLogCallback>(() => {
         throw new Error("Callback error");
       });
-      const logger = new MCPLogger(false, callback);
+      const logger = new MCPLogger(false, callback, fake);
       const cost: CostInfo = {
         promptTokens: 100,
         completionTokens: 50,
@@ -177,14 +185,13 @@ describe("MCPLogger", () => {
         cost,
       );
 
-      expect(errorSpy).toHaveBeenCalled();
-      errorSpy.mockRestore();
+      expect(errorCalls).toHaveLength(1);
     });
 
     it("should handle async callback errors", async () => {
-      const errorSpy = spyOn(console, "error").mockImplementation(() => {});
+      const { logger: fake, errorCalls } = fakeLogger();
       const callback = mock<MCPLogCallback>(() => Promise.reject(new Error("Async error")));
-      const logger = new MCPLogger(false, callback);
+      const logger = new MCPLogger(false, callback, fake);
       const cost: CostInfo = {
         promptTokens: 100,
         completionTokens: 50,
@@ -205,8 +212,7 @@ describe("MCPLogger", () => {
       // Give async error handling time to complete
       await new Promise((resolve) => setTimeout(resolve, 10));
 
-      expect(errorSpy).toHaveBeenCalled();
-      errorSpy.mockRestore();
+      expect(errorCalls).toHaveLength(1);
     });
   });
 });

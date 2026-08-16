@@ -6,6 +6,7 @@
  */
 
 import { describe, expect, test } from "bun:test";
+import { createConsoleLogger } from "../core/logger";
 import type { ChatterConfig, ServerDependencies } from "../types";
 import { demoRoutes } from "./demo";
 
@@ -28,6 +29,7 @@ function createFakeDeps(config: Partial<ChatterConfig> = {}, completionCalls: un
     client,
     store: { query: async () => ["some context"] },
     prompts: { baseSystemRules: "rules", publicPersona: "public persona" },
+    logger: createConsoleLogger(),
     config: {
       bot: {
         name: "TestBot",

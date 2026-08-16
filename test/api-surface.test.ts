@@ -20,8 +20,15 @@ import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { ChatCompletion } from "openai/resources/chat/completions";
-import type { AnswerFn, BucketsFor, Channel, PipelineMessage, ServerDependencies } from "../src";
-import { prepareChat, resolveBuckets } from "../src";
+import type {
+  AnswerFn,
+  BucketsFor,
+  Channel,
+  Logger,
+  PipelineMessage,
+  ServerDependencies,
+} from "../src";
+import { createConsoleLogger, prepareChat, resolveBuckets } from "../src";
 import {
   type ChannelMessage,
   createInboundPipeline,
@@ -42,6 +49,7 @@ function fakeDeps(): ServerDependencies {
     config: {} as ServerDependencies["config"],
     prompts: {} as ServerDependencies["prompts"],
     senders: createSenderRegistry(),
+    logger: createConsoleLogger(),
   };
 }
 
@@ -50,6 +58,25 @@ describe("API surface", () => {
     const deps = fakeDeps();
     expect(deps.senders.available("anything")).toBe(false);
     expect(deps.db).toBeDefined();
+  });
+
+  test("ServerDependencies.logger is a leveled Logger, satisfiable by a custom implementation", () => {
+    const deps = fakeDeps();
+    expect(typeof deps.logger.debug).toBe("function");
+    expect(typeof deps.logger.info).toBe("function");
+    expect(typeof deps.logger.warn).toBe("function");
+    expect(typeof deps.logger.error).toBe("function");
+
+    const calls: string[] = [];
+    const custom: Logger = {
+      debug: (...a) => calls.push(String(a[0])),
+      info: (...a) => calls.push(String(a[0])),
+      warn: (...a) => calls.push(String(a[0])),
+      error: (...a) => calls.push(String(a[0])),
+    };
+    const deps2: ServerDependencies = { ...deps, logger: custom };
+    deps2.logger.info("hello");
+    expect(calls).toEqual(["hello"]);
   });
 
   test("a Channel starts standalone with only ServerDependencies", async () => {
