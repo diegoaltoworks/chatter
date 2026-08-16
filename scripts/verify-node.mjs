@@ -13,11 +13,11 @@
  * Deliberately plain `.mjs`: it must be runnable by `node` with no loader.
  */
 
-import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { readFile } from "node:fs/promises";
 import { createRequire } from "node:module";
-import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { runBootCheck } from "./boot-check.mjs";
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const dist = join(repoRoot, "dist");
@@ -89,39 +89,14 @@ await check("import('dist/server.mjs') does not need a Bun global", async () => 
   assert(typeof module.createServer === "function", "missing export createServer");
 });
 
-/**
- * Boots the real factory the way a Node host does. In-memory libsql and an
- * empty knowledge directory keep it offline: with nothing to embed, the vector
- * store never calls OpenAI.
- */
+// The Node static adapter, end to end: boots the real factory the way a Node
+// host does and asserts the actual built widget is served — not a synthetic
+// stand-in. In-memory libsql and an empty knowledge directory keep it
+// offline: with nothing to embed, the vector store never calls OpenAI. See
+// scripts/boot-check.mjs, shared verbatim with the packed-tarball check.
 await check("createServer boots and serves under Node", async () => {
   const { createServer } = await import(new URL("./dist/index.mjs", `file://${repoRoot}/`));
-  const workspace = await mkdtemp(join(tmpdir(), "chatter-node-"));
-  try {
-    await writeFile(join(workspace, "chatter.js"), "widget");
-    const app = await createServer({
-      bot: { name: "Node Runtime Check", personName: "Tester", publicUrl: "http://localhost" },
-      openai: { apiKey: "test-key-not-used" },
-      database: { url: "file::memory:", authToken: "" },
-      knowledgeDir: workspace,
-      staticDir: workspace,
-      publicDir: workspace,
-      features: { headless: false },
-    });
-
-    const health = await app.request("/healthz");
-    assert(health.status === 200, `/healthz returned ${health.status}`);
-
-    // The Node static adapter, end to end: this is the route that used to be
-    // unreachable because the whole module refused to import.
-    const asset = await app.request("/chatter.js");
-    assert(asset.status === 200, `/chatter.js returned ${asset.status}`);
-    assert((await asset.text()) === "widget", "/chatter.js served the wrong body");
-
-    await app.stopChannels();
-  } finally {
-    await rm(workspace, { recursive: true, force: true });
-  }
+  await runBootCheck(createServer, { chatterJsStatus: 200, expectActionableLog: false });
 });
 
 if (failures.length > 0) {

@@ -64,8 +64,10 @@ and CI loads the built bundles under each). Two things differ:
   `serve({ port: 8181, fetch: app.fetch })` from [`@hono/node-server`](https://github.com/honojs/node-server) on Node.
 - **Static assets** — serving the widget files (`/chatter.js`, `/chatter.css`)
   and a `publicDir` needs a runtime adapter, picked automatically. On Node that
-  adapter is `@hono/node-server`, an optional peer dependency: install it, or
-  run with `features: { headless: true }` if the server serves no files.
+  adapter is `@hono/node-server`, an optional peer dependency: without it,
+  `/chatter.js` and `/chatter.css` 404 and the server logs an actionable
+  error naming the missing package. Install it, or run with
+  `features: { headless: true }` if the server should serve no files.
 
 Everything else — the chat pipeline, RAG, channels, the OpenAI-compatible API —
 is runtime-neutral. Development and the quality gates run on Bun.

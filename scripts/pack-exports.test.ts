@@ -4,6 +4,7 @@ import {
   collectExportEntries,
   hygieneViolations,
   loadPlan,
+  missingBinTargets,
   missingTargets,
   specifierFor,
 } from "./pack-exports";
@@ -99,6 +100,26 @@ describe("missingTargets", () => {
     const files = ["dist/server.d.ts", "dist/server.mjs", "dist/server.js"];
 
     expect(missingTargets(entries, files)).toEqual([]);
+  });
+});
+
+describe("missingBinTargets", () => {
+  const bin = { chatter: "./dist/bin/create-apikey.js", "wa-pair": "./dist/bin/wa-pair.js" };
+
+  test("flags a bin pointing at a file the build never produced", () => {
+    expect(missingBinTargets(bin, ["dist/bin/create-apikey.js"])).toEqual([
+      "wa-pair -> ./dist/bin/wa-pair.js",
+    ]);
+  });
+
+  test("passes when every declared bin is packed", () => {
+    const files = ["dist/bin/create-apikey.js", "dist/bin/wa-pair.js"];
+
+    expect(missingBinTargets(bin, files)).toEqual([]);
+  });
+
+  test("returns nothing when the package declares no bins", () => {
+    expect(missingBinTargets(undefined, ["dist/bin/create-apikey.js"])).toEqual([]);
   });
 });
 

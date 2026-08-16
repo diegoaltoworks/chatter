@@ -8,16 +8,18 @@
  * emitted) and to any test that imports from `src/` — only a real consumer
  * installing a real tarball sees the MODULE_NOT_FOUND.
  *
- * It runs under Bun because that is the runtime this package's server surface
- * requires (`hono/bun`); Bun resolves both ESM and CJS specifiers, so both
- * conditions are genuinely exercised.
+ * That resolve pass runs under Bun, because that is the runtime this
+ * package's server surface requires (`hono/bun`); Bun resolves both ESM and
+ * CJS specifiers, so both conditions are genuinely exercised. The boot check
+ * below is the deliberate exception — see scripts/boot-check.mjs's docstring
+ * for why it has to run under real Node instead.
  *
  * The pure half — what the contract demands, and which parts of it the tarball
  * fails — lives in scripts/pack-exports.ts and is unit-tested there.
  */
 
 import { spawnSync } from "node:child_process";
-import { mkdirSync, mkdtempSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import {
@@ -28,6 +30,7 @@ import {
   type ExportsValue,
   hygieneViolations,
   loadPlan,
+  missingBinTargets,
   missingTargets,
 } from "./pack-exports";
 
@@ -71,11 +74,35 @@ if (failures.length > 0) {
 console.log(\`Loaded \${loaded} specifiers across \${entries.length} subpaths.\`);
 `;
 
+/**
+ * The shared boot-check logic itself (scripts/boot-check.mjs) is copied
+ * verbatim into each consumer — see its own docstring for why the check
+ * exists and why it has to run under real Node, not Bun. This is the tiny
+ * runner around it: read what this consumer expects, call it, report.
+ */
+const RUN_BOOT_CHECK = `import { readFileSync } from "node:fs";
+import { runBootCheck } from "./boot-check.mjs";
+
+const spec = JSON.parse(readFileSync(new URL("./boot-expect.json", import.meta.url), "utf8"));
+const { createServer } = await import(spec.specifier);
+
+try {
+  await runBootCheck(createServer, spec);
+  console.log(\`OK: \${spec.label}\`);
+} catch (error) {
+  console.error(\`FAIL: \${error.message}\`);
+  process.exit(1);
+}
+`;
+
+const BOOT_CHECK_SOURCE = readFileSync(join(import.meta.dir, "boot-check.mjs"), "utf8");
+
 const repoRoot = resolve(import.meta.dir, "..");
 
 interface PackageManifest {
   name: string;
   exports?: Record<string, ExportsValue>;
+  bin?: Record<string, string>;
   peerDependencies?: Record<string, string>;
   peerDependenciesMeta?: Record<string, { optional?: boolean }>;
   devDependencies?: Record<string, string>;
@@ -121,14 +148,21 @@ function consumerDependencies(
   return deps;
 }
 
-/** Install the tarball into a fresh consumer and load every subpath in it. */
+/** What runBootCheck (scripts/boot-check.mjs) asserts, computed per consumer by the two call sites below. */
+interface BootCheckSpec {
+  chatterJsStatus: number;
+  expectActionableLog: boolean;
+  label: string;
+}
+
+/** Install the tarball into a fresh consumer and load every subpath in it. Returns the consumer's directory. */
 function resolveInConsumer(
   workspace: string,
   pkg: PackageManifest,
   tarball: string,
   entries: ExportEntry[],
-  options: { name: string; optional: boolean },
-): void {
+  options: { name: string; optional: boolean; bootCheck: BootCheckSpec },
+): string {
   const consumer = join(workspace, options.name);
   mkdirSync(consumer, { recursive: true });
   writeFileSync(
@@ -150,6 +184,49 @@ function resolveInConsumer(
   // event loop, so the resolver exiting on its own is part of what we check.
   // Without the bound, such a regression hangs the CI job instead of failing.
   run("bun", ["run", "resolve-exports.mjs"], consumer, 120_000);
+
+  writeFileSync(join(consumer, "boot-check.mjs"), BOOT_CHECK_SOURCE);
+  writeFileSync(join(consumer, "run-boot-check.mjs"), RUN_BOOT_CHECK);
+  writeFileSync(
+    join(consumer, "boot-expect.json"),
+    JSON.stringify({ specifier: pkg.name, ...options.bootCheck }),
+  );
+  // Real `node`, not `bun run` — see scripts/boot-check.mjs's docstring for why.
+  run("node", ["run-boot-check.mjs"], consumer, 30_000);
+
+  return consumer;
+}
+
+/**
+ * Runs every declared bin with `--help` from inside a consumer that has the
+ * package installed, the way `npx <bin>` would. Bins sit outside `exports`,
+ * so nothing above this notices one pointing at a build artefact that was
+ * never produced, or one that throws before it ever prints its usage text.
+ *
+ * `chatter` requires jose, an ESM-only dependency, from CJS — that needs
+ * Node's `require(esm)` support (unflagged since 22.12, below this package's
+ * own engines floor, so CI is unaffected). A developer on an older local Node
+ * still gets every other check in this file instead of an opaque
+ * ERR_REQUIRE_ESM. Mirrors the same guard in scripts/verify-node.mjs.
+ */
+function smokeTestBins(consumer: string, pkg: PackageManifest): void {
+  const [nodeMajor, nodeMinor] = run("node", ["-p", "process.versions.node"], consumer)
+    .trim()
+    .split(".")
+    .map(Number);
+  const requiresEsmSupported = nodeMajor > 22 || (nodeMajor === 22 && nodeMinor >= 12);
+  if (!requiresEsmSupported) {
+    console.log(`  skip bin smoke test — Node ${nodeMajor}.${nodeMinor} has no require(esm)`);
+    return;
+  }
+
+  for (const [name, target] of Object.entries(pkg.bin ?? {})) {
+    const binPath = join(consumer, "node_modules", ".bin", name);
+    const output = run("node", [binPath, "--help"], consumer, 15_000);
+    if (!output.includes("Usage")) {
+      throw new Error(`bin "${name}" (${target}) did not print usage text for --help:\n${output}`);
+    }
+  }
 }
 
 const pkg = (await Bun.file(join(repoRoot, "package.json")).json()) as PackageManifest;
@@ -194,11 +271,38 @@ try {
     );
   }
 
+  const missingBins = missingBinTargets(pkg.bin, files);
+  if (missingBins.length > 0) {
+    throw new Error(
+      `bin entries point at files the tarball does not contain:\n  ${missingBins.join("\n  ")}`,
+    );
+  }
+
   console.log(`Resolving ${entries.length} subpaths with every peer installed...`);
-  resolveInConsumer(workspace, pkg, tarball, entries, { name: "full", optional: true });
+  const fullConsumer = resolveInConsumer(workspace, pkg, tarball, entries, {
+    name: "full",
+    optional: true,
+    bootCheck: {
+      chatterJsStatus: 200,
+      expectActionableLog: false,
+      label: "chatter.js is served automatically when @hono/node-server is installed",
+    },
+  });
+
+  console.log("Smoke-testing bins from the tarball...");
+  smokeTestBins(fullConsumer, pkg);
 
   console.log(`Resolving ${entries.length} subpaths with the optional peers absent...`);
-  resolveInConsumer(workspace, pkg, tarball, entries, { name: "lean", optional: false });
+  resolveInConsumer(workspace, pkg, tarball, entries, {
+    name: "lean",
+    optional: false,
+    bootCheck: {
+      chatterJsStatus: 404,
+      expectActionableLog: true,
+      label:
+        "chatter.js absence without @hono/node-server is a logged, actionable error, not a silent 404",
+    },
+  });
 
   console.log(`\nOK: every exports key of ${pkg.name} resolves from the packed tarball.`);
 } finally {

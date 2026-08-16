@@ -59,6 +59,30 @@ for the whole `src` tree. That config is narrower than `tsconfig.json` — which
 covers tests and build scripts so they typecheck — precisely so tests and
 fixtures cannot reach `dist`.
 
+## Peer tiers
+
+`hono`, `openai` and `@libsql/client` are the only peers *not* marked
+`optional`. That is deliberate, not an oversight: `.` (`createServer`)
+imports and uses all three unconditionally, so per the rule above core cannot
+install and boot without them — marking them optional would let
+`npm install` succeed into a package that throws the moment it is used.
+Every other peer (`@hono/node-server`, `@modelcontextprotocol/sdk`,
+`@whiskeysockets/baileys`, `qrcode-terminal`, `zod`) is optional because the
+subpath that needs it reaches it through a dynamic import at call time and
+fails with an actionable, not a bare `MODULE_NOT_FOUND`, error when it is
+missing (`loadServeStatic`, `loadBaileys`, ...).
+
+The one tier this cannot fix: `./client` (the widget) uses none of the above
+— `src/client/package.json` declares zero peers of its own — but npm's peer
+model is package-wide, not subpath-scoped, so `npm install
+@diegoaltoworks/chatter` for the widget alone still resolves every mandatory
+peer of `.`. There is no `exports`-aware peer syntax to fix that with. The
+documented, zero-install path for the widget (`<script src=".../chatter.js">`,
+see [docs/client.md](./client.md)) sidesteps it entirely; an npm consumer who
+truly only wants `./client` can drop the peers with `npm install --omit=peer`
+(or the pnpm/yarn equivalent), since none of the widget's code ever touches
+them.
+
 ## How it is verified
 
 `bun run test:pack` builds, runs `npm pack`, installs the resulting tarball
@@ -78,6 +102,21 @@ consumers — tsc reads the `types` condition, and declarations *are* emitted �
 and every in-repo test imports from `src/`, never from the package. The bug
 only surfaces as `MODULE_NOT_FOUND` in someone else's project, one release too
 late.
+
+Resolving isn't the same as running: each of the two consumers also boots a
+real server from the tarball and requests `/chatter.js`, under real Node (not
+Bun — see `scripts/boot-check.mjs` for why that distinction matters here,
+and why the module is shared verbatim with `bun run test:node`). The full
+consumer asserts the widget is actually served; the
+lean one asserts the missing `@hono/node-server` peer produces a logged,
+actionable error rather than a silent 404. `bun run test:node` cannot catch
+this on its own — it runs against the in-tree `dist/`, where devDependencies
+mean the optional peer is always present.
+
+Bins are checked too, since `package.json#bin` sits outside `exports` and
+nothing else touches it: the tarball must contain every declared bin target,
+and each one is run with `--help` from inside the full consumer, the way
+`npx <bin>` would.
 
 The check also asserts what it can about non-module keys. A stylesheet subpath
 has no meaning to `import` outside a bundler, so for asset keys the contract

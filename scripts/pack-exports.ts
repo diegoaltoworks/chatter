@@ -127,6 +127,23 @@ export function missingTargets(
 }
 
 /**
+ * Bins are not part of `exports`, so `missingTargets` never sees them: a
+ * `package.json#bin` entry pointing at a file `build:bin` stopped producing
+ * would ship silently and only fail once someone runs `npx <bin>`. Same
+ * shape of check as `missingTargets`, one condition (bins are CJS, run
+ * directly by Node) instead of three.
+ */
+export function missingBinTargets(
+  bin: Record<string, string> | undefined,
+  files: readonly string[],
+): string[] {
+  const present = new Set(files.map(normalizePath));
+  return Object.entries(bin ?? {})
+    .filter(([, target]) => !present.has(normalizePath(target)))
+    .map(([name, target]) => `${name} -> ${target}`);
+}
+
+/**
  * Build artefacts that must never ship: declarations for test files, and
  * anything under a `__fixtures__` directory. Both are authored under `src/`
  * and so land in `dist` unless declaration emit excludes them.
