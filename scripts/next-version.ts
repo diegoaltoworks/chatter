@@ -1,18 +1,35 @@
 /**
- * Derives the next release version from conventional-commit subjects, so a
- * chore/docs/fix merge ships a patch and only a feat merge ships a minor.
- * A `!` breaking-change marker (`feat!:`, `fix!:`) still only reaches minor
- * here — a distinct major-bump tier is reserved for when that matters, post-1.0.
- * `BREAKING CHANGE:` footers (commit body, not subject) are not read.
+ * Derives the next release version from conventional commits since the last
+ * release tag, so a chore/docs/fix merge ships a patch, a feat merge ships a
+ * minor, and a breaking change ships a major — once the package is past 1.0.
+ * Before 1.0, a breaking change still only reaches minor (there is no major
+ * tier to reach yet): semver leaves 0.x compatibility undefined, so bumping
+ * minor is already the strongest signal available.
+ * Breaking changes are read from a `!` before the `:` (`feat!:`, `fix(api)!:`)
+ * or a `BREAKING CHANGE:` / `BREAKING-CHANGE:` footer in the commit body.
  */
 
-export type Bump = "minor" | "patch";
+export type Bump = "major" | "minor" | "patch";
 
-const CONVENTIONAL_TYPE = /^([a-z]+)(\([^)]+\))?!?:/;
+export interface CommitInfo {
+  subject: string;
+  body: string;
+}
 
-/** Highest bump implied by a set of commit subjects: any `feat` (or `feat!`) -> minor, else patch. */
-export function bumpFromCommitSubjects(subjects: string[]): Bump {
-  const isFeat = subjects.some((subject) => CONVENTIONAL_TYPE.exec(subject)?.[1] === "feat");
+const CONVENTIONAL_TYPE = /^([a-z]+)(\([^)]+\))?(!)?:/;
+const BREAKING_FOOTER = /^BREAKING[ -]CHANGE:/m;
+
+function isBreaking(commit: CommitInfo): boolean {
+  return CONVENTIONAL_TYPE.exec(commit.subject)?.[3] === "!" || BREAKING_FOOTER.test(commit.body);
+}
+
+/** Highest bump implied by a set of commits, given the version they'd apply to. */
+export function bumpFromCommits(commits: CommitInfo[], currentVersion: string): Bump {
+  const major = Number(currentVersion.split(".")[0]);
+  const pastOne = Number.isInteger(major) && major >= 1;
+
+  if (commits.some(isBreaking)) return pastOne ? "major" : "minor";
+  const isFeat = commits.some((commit) => CONVENTIONAL_TYPE.exec(commit.subject)?.[1] === "feat");
   return isFeat ? "minor" : "patch";
 }
 
@@ -23,7 +40,25 @@ export function applyBump(version: string, bump: Bump): string {
   if (parts.length !== 3 || [major, minor, patch].some((n) => !Number.isInteger(n))) {
     throw new Error(`not a major.minor.patch version: ${version}`);
   }
+  if (bump === "major") return `${major + 1}.0.0`;
   return bump === "minor" ? `${major}.${minor + 1}.0` : `${major}.${minor}.${patch + 1}`;
+}
+
+const COMMIT_SEP = "\x1e";
+const FIELD_SEP = "\x1f";
+
+/** Reverses `git log --format='%s${FIELD_SEP}%b${COMMIT_SEP}'`. */
+export function parseCommits(raw: string): CommitInfo[] {
+  return raw
+    .split(COMMIT_SEP)
+    .map((chunk) => chunk.replace(/^\n+/, "").trimEnd())
+    .filter(Boolean)
+    .map((chunk) => {
+      const sep = chunk.indexOf(FIELD_SEP);
+      return sep === -1
+        ? { subject: chunk, body: "" }
+        : { subject: chunk.slice(0, sep), body: chunk.slice(sep + 1) };
+    });
 }
 
 async function readStdin(): Promise<string> {
@@ -35,20 +70,24 @@ async function readStdin(): Promise<string> {
 async function main() {
   const [mode, ...rest] = process.argv.slice(2);
   if (mode === "bump") {
-    const subjects = (await readStdin()).split("\n").filter(Boolean);
-    process.stdout.write(bumpFromCommitSubjects(subjects));
+    const [currentVersion] = rest;
+    if (!currentVersion) {
+      throw new Error("usage: next-version.ts bump <current-version> < commits on stdin");
+    }
+    const commits = parseCommits(await readStdin());
+    process.stdout.write(bumpFromCommits(commits, currentVersion));
     return;
   }
   if (mode === "apply") {
     const [version, bump] = rest;
-    if (!version || (bump !== "minor" && bump !== "patch")) {
-      throw new Error("usage: next-version.ts apply <major.minor.patch> <minor|patch>");
+    if (!version || (bump !== "major" && bump !== "minor" && bump !== "patch")) {
+      throw new Error("usage: next-version.ts apply <major.minor.patch> <major|minor|patch>");
     }
     process.stdout.write(applyBump(version, bump));
     return;
   }
   throw new Error(
-    "usage: next-version.ts bump <commit subjects on stdin> | apply <version> <bump>",
+    "usage: next-version.ts bump <current-version> | apply <version> <major|minor|patch>",
   );
 }
 

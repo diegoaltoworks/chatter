@@ -91,8 +91,12 @@ jobs:
         run: bun run test:node
 
       # The bump type is derived from every commit since the last release tag
-      # (not just the triggering one), so a chore/fix/docs merge ships a patch
-      # and only a feat merge ships a minor. See scripts/next-version.ts.
+      # (not just the triggering one), so a chore/fix/docs merge ships a
+      # patch, a feat merge ships a minor, and a breaking change (`!` or a
+      # BREAKING CHANGE: footer) ships a major once past 1.0. The %x1f/%x1e
+      # delimiters let next-version.ts tell each commit's subject from its
+      # body without a real commit message ever colliding with them. See
+      # scripts/next-version.ts.
       - name: Bump version
         id: bump
         run: |
@@ -105,10 +109,13 @@ jobs:
             BASE_VERSION=$(node -p "require('./package.json').version")
           fi
           RANGE="${LATEST_TAG:+${LATEST_TAG}..}HEAD"
-          BUMP=$(git log "$RANGE" --format='%s' | bun scripts/next-version.ts bump)
+          BUMP=$(git log "$RANGE" --format='%s%x1f%b%x1e' | bun scripts/next-version.ts bump "$BASE_VERSION")
           NEW_VERSION=$(bun scripts/next-version.ts apply "$BASE_VERSION" "$BUMP")
+          # A collision only means "someone already took this exact version" —
+          # re-applying $BUMP would skip a whole extra major/minor on every
+          # retry, so once past the first bump every retry is a patch.
           while git rev-parse --verify --quiet "refs/tags/v${NEW_VERSION}" >/dev/null; do
-            NEW_VERSION=$(bun scripts/next-version.ts apply "$NEW_VERSION" "$BUMP")
+            NEW_VERSION=$(bun scripts/next-version.ts apply "$NEW_VERSION" "patch")
           done
           npm version "$NEW_VERSION" --no-git-tag-version >/dev/null
           echo "version=$NEW_VERSION" >> $GITHUB_OUTPUT

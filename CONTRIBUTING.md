@@ -123,6 +123,16 @@ chatter/
   - `test: add tests`
   - `refactor: restructure code`
   - `chore: maintenance tasks`
+- A husky `commit-msg` hook runs `commitlint` (config:
+  `commitlint.config.js`, extending `@commitlint/config-conventional`) and
+  rejects a commit whose message isn't a conventional-commit subject. This
+  is a local guardrail, not a CI check: on `main` the commit that actually
+  drives the release version is the squash-merge commit, whose subject is
+  the PR title, composed on GitHub and never passed through this hook —
+  keep the PR title itself conventional-commit shaped.
+- Mark a breaking change with `!` before the colon (`feat!:`, `fix(api)!:`) or
+  a `BREAKING CHANGE:` footer in the commit body. Past 1.0 this ships a major
+  version; before 1.0 it still only reaches minor (see Release Process).
 
 ## Pull Request Process
 
@@ -146,10 +156,12 @@ provenance, and cuts the GitHub release with its notes. Do not bump
 The bump type is derived from the conventional-commit type of every commit
 since the last release tag (not just the one that triggered the run): any
 `feat` commit ships a minor, everything else (`fix`, `chore`, `docs`, etc.)
-ships a patch. A `!` breaking-change marker (`feat!:`) still only reaches
-minor — a distinct major-bump tier is reserved for after 1.0; `BREAKING
-CHANGE:` commit-body footers are not read. See `scripts/next-version.ts` for
-the derivation.
+ships a patch. A breaking change — a `!` before the colon (`feat!:`) or a
+`BREAKING CHANGE:` / `BREAKING-CHANGE:` footer in the commit body — ships a
+major once the package is past 1.0; before 1.0 it still only reaches minor,
+since semver leaves 0.x compatibility undefined and minor is already the
+strongest signal available. See `scripts/next-version.ts` for the
+derivation.
 
 One thing is deliberately **not** automatic: nothing authored by
 `dependabot[bot]` triggers its own release. Dependency PRs are opened, approved

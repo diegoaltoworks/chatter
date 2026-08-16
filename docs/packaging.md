@@ -162,10 +162,17 @@ Nobody types a version number: the publish workflow derives the next version
 from the highest `v*` tag and commits the bump itself, which is why its own
 `chore(release): v…` commit is excluded from re-triggering it. The bump type
 carries signal instead of always being a minor: `scripts/next-version.ts`
-scans every commit subject since the last tag and ships a minor if any of them
-is a `feat` (a `!` breaking-change marker still only reaches minor; `BREAKING
-CHANGE:` footers are not read), a patch otherwise (`fix`, `chore`, `docs`, …).
-A distinct major-bump tier is reserved for when that matters, post-1.0.
+scans every commit since the last tag and ships a minor if any of them is a
+`feat`, a patch otherwise (`fix`, `chore`, `docs`, …), and a major if any of
+them is breaking (a `!` before the colon, or a `BREAKING CHANGE:` /
+`BREAKING-CHANGE:` footer) — but only once the package is past 1.0. Before
+1.0 a breaking commit still only reaches minor, the strongest tier semver
+defines for 0.x. A husky `commit-msg` hook runs `commitlint` against
+`commitlint.config.js` locally, but the commit `next-version.ts` actually
+scans is the squash-merge commit on `main`, whose subject is the PR title —
+composed on GitHub, never passed through the hook. The hook catches a typo'd
+type on the commits inside a branch; a mistyped PR title still falls back to
+patch silently.
 
 ### The human gate
 
