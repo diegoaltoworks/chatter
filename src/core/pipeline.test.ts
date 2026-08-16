@@ -374,6 +374,184 @@ describe("prepareChat", () => {
     });
   });
 
+  describe("fallbackFn", () => {
+    test("is not consulted when retrieval returns chunks", async () => {
+      const { store, prompts } = createFakes();
+      let called = false;
+
+      const result = await prepareChat({
+        store,
+        prompts,
+        mode: "public",
+        messages,
+        fallbackFn: () => {
+          called = true;
+          return "should not appear";
+        },
+      });
+
+      expect(called).toBe(false);
+      expect(result.system).toBe("rules\n\npublic persona\n\nContext:\nsome context");
+    });
+
+    test("injects guidance as its own layer when retrieval returns nothing", async () => {
+      const { prompts } = createFakes();
+      const store = { query: async () => [] } satisfies Retriever;
+
+      const result = await prepareChat({
+        store,
+        prompts,
+        mode: "public",
+        messages,
+        fallbackFn: () => "Offer a clearly-labelled guess, or decline if truly out of scope.",
+      });
+
+      expect(result.system).toBe(
+        "rules\n\npublic persona\n\nOffer a clearly-labelled guess, or decline if truly out of scope.\n\nContext:\n",
+      );
+    });
+
+    test("receives the query, mode, buckets, sender and the chunks store.query returned", async () => {
+      const store = { query: async () => [] } satisfies Retriever;
+      const { prompts } = createFakes();
+      const seen: unknown[] = [];
+
+      await prepareChat({
+        store,
+        prompts,
+        mode: "private",
+        messages,
+        sender: "user-1",
+        buckets: ["base", "finance"],
+        fallbackFn: (ctx) => {
+          seen.push(ctx);
+          return undefined;
+        },
+      });
+
+      expect(seen).toEqual([
+        {
+          query: "latest question",
+          mode: "private",
+          buckets: ["base", "finance"],
+          sender: "user-1",
+          retrievedChunks: [],
+        },
+      ]);
+    });
+
+    test("sees the chunks store.query returned even when rerankContext filtered them all out", async () => {
+      const store = { query: async () => ["weak match"] } satisfies Retriever;
+      const { prompts } = createFakes();
+      const seen: string[][] = [];
+
+      await prepareChat({
+        store,
+        prompts,
+        mode: "public",
+        messages,
+        rerankContext: async () => [],
+        fallbackFn: (ctx) => {
+          seen.push(ctx.retrievedChunks);
+          return undefined;
+        },
+      });
+
+      expect(seen).toEqual([["weak match"]]);
+    });
+
+    test("retrievedChunks survives a rerankContext that filters in place rather than returning a new array", async () => {
+      const store = { query: async () => ["weak match"] } satisfies Retriever;
+      const { prompts } = createFakes();
+      const seen: string[][] = [];
+
+      await prepareChat({
+        store,
+        prompts,
+        mode: "public",
+        messages,
+        rerankContext: async ({ chunks }) => {
+          chunks.length = 0;
+          return chunks;
+        },
+        fallbackFn: (ctx) => {
+          seen.push(ctx.retrievedChunks);
+          return undefined;
+        },
+      });
+
+      expect(seen).toEqual([["weak match"]]);
+    });
+
+    test("returning undefined leaves the prompt unchanged", async () => {
+      const store = { query: async () => [] } satisfies Retriever;
+      const { prompts } = createFakes();
+
+      const result = await prepareChat({
+        store,
+        prompts,
+        mode: "public",
+        messages,
+        fallbackFn: () => undefined,
+      });
+
+      expect(result.system).toBe("rules\n\npublic persona\n\nContext:\n");
+    });
+
+    test("a blank string is treated the same as undefined", async () => {
+      const store = { query: async () => [] } satisfies Retriever;
+      const { prompts } = createFakes();
+
+      const result = await prepareChat({
+        store,
+        prompts,
+        mode: "public",
+        messages,
+        fallbackFn: () => "   ",
+      });
+
+      expect(result.system).toBe("rules\n\npublic persona\n\nContext:\n");
+    });
+
+    test("a throw is swallowed and the prompt proceeds without fallback guidance", async () => {
+      const store = { query: async () => [] } satisfies Retriever;
+      const { prompts } = createFakes();
+
+      const result = await prepareChat({
+        store,
+        prompts,
+        mode: "public",
+        messages,
+        fallbackFn: () => {
+          throw new Error("boom");
+        },
+      });
+
+      expect(result.system).toBe("rules\n\npublic persona\n\nContext:\n");
+    });
+
+    test("logs a throwing fallbackFn instead of failing silently", async () => {
+      const store = { query: async () => [] } satisfies Retriever;
+      const { prompts } = createFakes();
+      const errors: unknown[][] = [];
+      const logger = { error: (...args: unknown[]) => errors.push(args) };
+
+      await prepareChat({
+        store,
+        prompts,
+        mode: "public",
+        messages,
+        logger,
+        fallbackFn: () => {
+          throw new Error("boom");
+        },
+      });
+
+      expect(errors).toHaveLength(1);
+      expect(String(errors[0]?.[0])).toContain("fallbackFn");
+    });
+  });
+
   describe("fail-open logging", () => {
     function fakeLogger() {
       const errors: unknown[][] = [];

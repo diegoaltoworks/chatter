@@ -82,7 +82,7 @@ own-mention stripping - everything Baileys-shaped), then hands it to
 through the same `prepareChat`/`answerOnce` seam every other surface uses -
 so the WhatsApp
 channel automatically honours a configured `answerFn`, `bucketsFor`,
-`rewriteQuery`, `rerankContext` and `transformReply`. See
+`rewriteQuery`, `rerankContext`, `fallbackFn` and `transformReply`. See
 [Building a Channel](./build-a-channel.md) for how to put the same pipeline
 behind a different transport.
 
@@ -115,8 +115,8 @@ await createServer({
       store: deps.store,
       prompts: deps.prompts,
       // Falls back to deps.config's answerFn/bucketsFor/rewriteQuery/
-      // rerankContext/transformReply for whichever of those this config
-      // doesn't set itself - the same precedence `./telegram` and
+      // rerankContext/fallbackFn/transformReply for whichever of those this
+      // config doesn't set itself - the same precedence `./telegram` and
       // `./matrix` apply internally.
       serverConfig: deps.config,
       logger: deps.logger,
@@ -137,10 +137,10 @@ Configuration:
   each message's `sock.user`; never cleared, so a reconnecting session is
   still recognised as itself.
 - **`serverConfig`** - fallback source for `answerFn`/`bucketsFor`/
-  `rewriteQuery`/`rerankContext`/`transformReply`, each consulted only when
-  this handler's own field of the same name is unset. Pass `deps.config`
-  (as above) so the handler automatically honours a server-level hook
-  without repeating each field by hand.
+  `rewriteQuery`/`rerankContext`/`fallbackFn`/`transformReply`, each
+  consulted only when this handler's own field of the same name is unset.
+  Pass `deps.config` (as above) so the handler automatically honours a
+  server-level hook without repeating each field by hand.
 - **`allowedChats`** - group chats eligible for a reply. Empty (default) =
   every group; has no effect on DMs, which always reply. A group jid isn't
   guessable in advance: when a group is rejected by this gate, its jid is

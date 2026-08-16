@@ -189,6 +189,7 @@ export async function createMCPServer(config: MCPServerOptions) {
           buckets,
           rewriteQuery: config.rewriteQuery,
           rerankContext: config.rerankContext,
+          fallbackFn: config.fallbackFn,
           logger: log,
         });
 
@@ -299,6 +300,7 @@ export async function createMCPServer(config: MCPServerOptions) {
           buckets,
           rewriteQuery: config.rewriteQuery,
           rerankContext: config.rerankContext,
+          fallbackFn: config.fallbackFn,
           logger: log,
         });
 

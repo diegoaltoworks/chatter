@@ -69,6 +69,7 @@ export function publicRoutes(deps: ServerDependencies) {
         buckets,
         rewriteQuery: config.rewriteQuery,
         rerankContext: config.rerankContext,
+        fallbackFn: config.fallbackFn,
         logger,
       }));
     } catch {

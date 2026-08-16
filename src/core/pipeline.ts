@@ -71,6 +71,39 @@ export interface RerankContextArgs {
  */
 export type RerankContext = (ctx: RerankContextArgs) => string[] | Promise<string[]>;
 
+/** What `fallbackFn` sees for a turn where retrieval came back empty. */
+export interface FallbackContext {
+  /** The query retrieval actually ran with, post-`rewriteQuery` if configured. */
+  query: string;
+  mode: PipelineMode;
+  /** Buckets retrieval ran against for this turn. */
+  buckets: string[];
+  /** Caller identity, where the surface has one. Absent on anonymous surfaces. */
+  sender?: string;
+  /**
+   * What `store.query` returned, before `rerankContext` ran: always
+   * non-empty when this is empty because `rerankContext` filtered
+   * everything out, and always empty when the store itself found nothing.
+   * A hook can use this to tell "some low-confidence signal existed" apart
+   * from "nothing matched at all".
+   */
+  retrievedChunks: string[];
+}
+
+/**
+ * Runs only when retrieval produced no chunks for a turn (after
+ * `rerankContext`, if configured), the deterministic, testable alternative
+ * to baking "what if there's nothing to retrieve" judgment calls into
+ * freeform system-prompt text. Return a string to inject as an extra system
+ * prompt layer scoped to this turn only (e.g. "no matching context was
+ * found; offer a clearly-labelled guess or decline"); return `undefined` to
+ * leave the prompt exactly as it would be otherwise.
+ *
+ * A throw/rejection is caught by `prepareChat`, which proceeds without
+ * fallback guidance: a broken hook must never break the chat path.
+ */
+export type FallbackFn = (ctx: FallbackContext) => string | undefined | Promise<string | undefined>;
+
 const MODE_SETTINGS: Record<PipelineMode, { topK: number; label: string }> = {
   public: { topK: 6, label: "Context" },
   private: { topK: 8, label: "Internal Context" },
@@ -80,7 +113,8 @@ const MODE_SETTINGS: Record<PipelineMode, { topK: number; label: string }> = {
  * Run retrieval for the latest user message and assemble the system prompt.
  *
  * The assembled system prompt is layered, in order:
- * base rules → persona → channel hint (optional) → retrieved context.
+ * base rules → persona → channel hint (optional) → fallback guidance
+ * (optional, only when retrieval came back empty) → retrieved context.
  *
  * `personaLayer` and `channelHint` let a caller shape those middle layers
  * without hand-rolling its own sandwich around `store`/`prompts`. Both are
@@ -99,6 +133,9 @@ const MODE_SETTINGS: Record<PipelineMode, { topK: number; label: string }> = {
  * value falls back to what retrieval would have done unmodified, so a buggy
  * hook degrades relevance rather than breaking the chat path.
  *
+ * `fallbackFn` runs after both, only when the chunks folded into the prompt
+ * would otherwise be empty, see {@link FallbackFn}.
+ *
  * @throws if the conversation contains no user message
  */
 export async function prepareChat({
@@ -112,6 +149,7 @@ export async function prepareChat({
   sender,
   rewriteQuery,
   rerankContext,
+  fallbackFn,
   logger,
 }: {
   store: Retriever;
@@ -133,7 +171,9 @@ export async function prepareChat({
   rewriteQuery?: RewriteQuery;
   /** Post-processes retrieved chunks before they're folded into the prompt — see {@link RerankContext}. */
   rerankContext?: RerankContext;
-  /** Logs a `rewriteQuery`/`rerankContext` throw before falling back. Unset: the failure is silent. */
+  /** Injects fallback guidance when retrieval comes back empty, see {@link FallbackFn}. */
+  fallbackFn?: FallbackFn;
+  /** Logs a `rewriteQuery`/`rerankContext`/`fallbackFn` throw before falling back. Unset: the failure is silent. */
   logger?: Pick<Logger, "error">;
 }): Promise<PreparedChat> {
   const lastUserMsg = lastUserMessage(messages);
@@ -153,13 +193,34 @@ export async function prepareChat({
     }
   }
 
-  let ctx = await store.query(query, topK, buckets ?? defaultBuckets(mode));
+  const resolvedBuckets = buckets ?? defaultBuckets(mode);
+  const retrievedChunks = await store.query(query, topK, resolvedBuckets);
+  let ctx = retrievedChunks;
   if (rerankContext) {
     try {
-      const reranked = await rerankContext({ query, chunks: ctx });
+      // A copy, not `ctx` itself: a reranker that filters in place (rather
+      // than returning a new array) must not be able to mutate the snapshot
+      // `fallbackFn` later reads as `retrievedChunks`.
+      const reranked = await rerankContext({ query, chunks: [...ctx] });
       if (Array.isArray(reranked) && reranked.every((c) => typeof c === "string")) ctx = reranked;
     } catch (error) {
       logger?.error("rerankContext threw; falling back to the original chunks", error);
+    }
+  }
+
+  let fallback: string | undefined;
+  if (ctx.length === 0 && fallbackFn) {
+    try {
+      const guidance = await fallbackFn({
+        query,
+        mode,
+        buckets: resolvedBuckets,
+        sender,
+        retrievedChunks,
+      });
+      if (typeof guidance === "string" && guidance.trim()) fallback = guidance.trim();
+    } catch (error) {
+      logger?.error("fallbackFn threw; proceeding without fallback guidance", error);
     }
   }
 
@@ -170,6 +231,7 @@ export async function prepareChat({
     prompts.baseSystemRules,
     persona,
     ...(hint ? [hint] : []),
+    ...(fallback ? [fallback] : []),
     `${label}:\n${ctx.join("\n\n")}`,
   ].join("\n\n");
 

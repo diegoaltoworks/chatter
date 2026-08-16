@@ -54,6 +54,8 @@ export type { NormalizedChatBody } from "./core/messages";
 // system/tool turns never reach the pipeline)
 export { normalizeChatBody, normalizeMessages } from "./core/messages";
 export type {
+  FallbackContext,
+  FallbackFn,
   PipelineMessage,
   PipelineMode,
   PreparedChat,

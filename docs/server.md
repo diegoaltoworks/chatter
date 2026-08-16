@@ -282,6 +282,24 @@ decisions belong in `bucketsFor` instead. See
 [integrations.md](./integrations.md) for the full rules and which surfaces
 consult each hook.
 
+When retrieval leaves nothing to fold into the prompt - after
+`rerankContext`, if configured - `fallbackFn` runs and can inject
+turn-scoped guidance (a labelled-guess vs. plain-decline distinction, say)
+without it leaking into any other completion's prompt:
+
+```typescript
+{
+  fallbackFn: ({ retrievedChunks }) =>
+    retrievedChunks.length > 0
+      ? "Offer a clearly-labelled guess, or say you're unsure."
+      : "Decline plainly; this is out of scope.",
+}
+```
+
+Unset, an empty retrieval changes nothing about the assembled prompt. See
+[integrations.md](./integrations.md#handling-empty-retrieval-fallbackfn) for
+the full worked example.
+
 ### Outbound Reply Hook
 
 Modify or veto a reply after it's already been produced - past `answerFn` (or

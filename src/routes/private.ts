@@ -59,6 +59,7 @@ export function privateRoutes(deps: ServerDependencies) {
         sender,
         rewriteQuery: config.rewriteQuery,
         rerankContext: config.rerankContext,
+        fallbackFn: config.fallbackFn,
         logger,
       }));
     } catch {
