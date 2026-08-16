@@ -240,6 +240,10 @@ handleInbound = createWhatsAppInboundHandler({
 - **`historyEnabledFor`** — excludes a sender from memory entirely; see
   "Privacy controls" in [history.md](./history.md) for this, retention TTLs,
   and the `clear` reset primitive.
+- **`compaction`** — folds older turns into a stored summary once a
+  conversation's turn count reaches a threshold, so `limit`/`load` keep
+  returning a bounded window without growing the prompt forever; see
+  "Compaction" in [history.md](./history.md). Off by default.
 
 History is keyed by chat jid, so a group chat's history is shared across every
 participant in it — there is no per-sender history within a group. A message

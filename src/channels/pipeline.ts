@@ -29,6 +29,8 @@ import {
 } from "../core/pipeline";
 import type { PromptLoader } from "../core/prompts";
 import type { VectorStore } from "../core/retrieval";
+import type { HistoryCompactionOptions } from "../history/compaction";
+import { createHistoryCompactor } from "../history/compaction";
 import type { HistoryStore } from "../history/types";
 import {
   type ChannelMessage,
@@ -86,6 +88,13 @@ export interface InboundPipelineConfig {
      * opted out. @default every sender is enabled
      */
     historyEnabledFor?: (sender: string) => boolean | Promise<boolean>;
+    /**
+     * Summarize-then-truncate compaction, checked right after each reply is
+     * appended. Off by default — a conversation's window grows unbounded
+     * (aside from the store's own `maxPerConversation`) until this is set.
+     * See `../history/compaction`.
+     */
+    compaction?: HistoryCompactionOptions;
   };
   /** Group chats eligible for a reply. Empty (default) = every group. Has no effect on DMs, which always reply. */
   allowedChats?: string[];
@@ -185,6 +194,12 @@ export function createInboundPipeline(
   // (which widens retrieval and swaps the persona) isn't a knob any channel
   // needs yet, so it stays out of the config surface until one does.
   const mode: PipelineMode = "public";
+  const compactor = config.history?.compaction
+    ? createHistoryCompactor(
+        { client: deps.client },
+        { model: config.model, ...config.history.compaction },
+      )
+    : undefined;
 
   return async function handleInboundMessage(msg, turn) {
     const allowedChats = config.allowedChats ?? [];
@@ -287,6 +302,22 @@ export function createInboundPipeline(
       await config.history?.store.append(conversationId, { role: "assistant", content });
     }
     await turn.reply.sendAnswer(msg.chatId, content);
+
+    // After delivery, never before: compaction is housekeeping for the next
+    // turn, not this one, and its rewrite (clear + several appends) is the
+    // slowest thing this handler does. Run it ahead of the reply and a
+    // `timeoutMs`-long summarize stalls the user's answer for no benefit to
+    // them; a store failure partway through the rewrite would additionally
+    // take the reply down with it. A failure here is logged, never thrown —
+    // a broken compactor must not turn a delivered reply into a failed turn.
+    const history = config.history;
+    if (compactor && historyEnabled && history) {
+      try {
+        await compactor.maybeCompact(history.store, conversationId);
+      } catch (error) {
+        config.logger?.error(`history compaction failed for "${conversationId}"`, error);
+      }
+    }
 
     return { action: "reply", content };
   };

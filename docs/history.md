@@ -85,6 +85,11 @@ A conversation nobody ever revisits keeps its rows until it is (there is
 nothing to sweep them in the meantime) — pair a TTL with a retention policy
 that fits your data, not a false guarantee of prompt deletion.
 
+Compaction (below) defeats a TTL on any conversation it touches: the turns it
+keeps are re-appended with a fresh timestamp, and a folded-in summary row
+carries content forward from turns of any age. Do not rely on a TTL for
+retention on a conversation that also has compaction configured.
+
 **Reset.** `store.clear(conversationId)` erases one conversation's history
 immediately — every implementation, not just Turso, must support it. This is
 the primitive a "forget me" feature is built from; the engine ships nothing
@@ -128,6 +133,69 @@ chat's history is one shared stream — see [channels.md](./channels.md)), an
 opted-out participant in a group still gets a context-free answer while
 everyone else's turns keep accumulating around them; opt-out silences one
 voice, it doesn't wall off the room.
+
+## Compaction
+
+`limit`/`maxPerConversation` bound what one `load` returns and what a store
+physically keeps, but neither one shrinks a conversation that keeps growing —
+a chat that never stops still costs the same tokens on every reply once it's
+past the window. `createHistoryCompactor` (from
+`@diegoaltoworks/chatter/history`) is an opt-in layer that folds older turns
+into a single stored summary row once a conversation reaches a configured
+turn count, keeping only the most recent turns verbatim.
+
+A channel's `history.compaction` config takes the compaction options
+directly — the channel builds and owns the compactor itself, alongside the
+`OpenAI` client it already has:
+
+```ts
+history: {
+  store: historyStore,
+  compaction: { threshold: 40, keep: 10 },
+},
+```
+
+Used standalone (a custom surface wiring `HistoryStore` itself, outside the
+built-in channels), `createHistoryCompactor` builds the same compactor
+directly:
+
+```ts
+import { createHistoryCompactor } from "@diegoaltoworks/chatter/history";
+
+const compactor = createHistoryCompactor({ client }, { threshold: 40, keep: 10 });
+await compactor.maybeCompact(historyStore, conversationId); // after each store.append
+```
+
+- **`threshold`** — turn count that triggers compaction, checked right after
+  each reply is recorded.
+- **`keep`** — most recent turns kept verbatim; everything older is folded
+  into the summary. Must be less than `threshold`.
+- **`summarize`** — the compaction step itself, typically an LLM call.
+  Defaults to `answerOnce` with a neutral prompt and the built-in completion
+  (never a caller's own `answerFn`, since compaction is an internal chatter
+  operation, not a chat surface); set this to route it through your own brain
+  hook, a cheaper model, or a non-LLM summarizer instead.
+- **`model`** — model for the default `summarize` step; ignored when
+  `summarize` is supplied. A channel's `history.compaction` defaults this to
+  the channel's own `model` config.
+- **`timeoutMs`** (default 8000) — how long `summarize` gets before
+  compaction is abandoned for that turn, leaving history untouched. The
+  race-a-timeout, fall-back-safely shape matches `./images`'
+  `composeCaption`.
+
+Compaction runs after the reply is sent, never before — it's housekeeping for
+the *next* turn, not a precondition for this one, so a slow or failing
+`summarize` step never delays or breaks the current reply.
+
+The summary is written back through the same `store.append`/`store.clear`
+calls any host code could make, tagged with a fixed prefix ("Summary of
+earlier conversation: ..."), so it loads back and participates in
+`prepareChat` context exactly like a real turn on the next reply. This rewrite
+is clear-then-append, not one atomic operation — a process crash mid-rewrite
+could lose the turns being kept, an accepted tradeoff of a store contract with
+no transaction primitive. A failing or timed-out `summarize` never reaches
+that rewrite at all: history is left exactly as it was, and the turn's own
+reply still sends normally.
 
 ## WhatsApp
 

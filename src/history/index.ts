@@ -10,9 +10,21 @@
  * implement it. The shipped Turso implementation needs `@libsql/client`,
  * which chatter already expects for retrieval.
  *
+ * `./compaction` is an optional layer on top: summarize-then-truncate for a
+ * conversation whose window has grown past a threshold, built entirely on
+ * the store's own `load`/`clear`/`append` so it works with any
+ * `HistoryStore`, not just the Turso one.
+ *
  * @packageDocumentation
  */
 
+export type {
+  HistoryCompactionOptions,
+  HistoryCompactor,
+  SummarizeFn,
+  SummarizeRequest,
+} from "./compaction";
+export { createHistoryCompactor, SUMMARY_PREFIX } from "./compaction";
 export type { TursoHistoryStoreOptions } from "./tursoStore";
 export { createTursoHistoryStore } from "./tursoStore";
 export type { HistoryMessage, HistoryStore } from "./types";

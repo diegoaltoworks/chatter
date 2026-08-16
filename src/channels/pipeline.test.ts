@@ -477,6 +477,179 @@ describe("createInboundPipeline", () => {
       ]);
       expect(store.data.has("chat-1")).toBe(false);
     });
+
+    describe("compaction", () => {
+      test("off by default: crossing a would-be threshold does nothing without config.history.compaction", async () => {
+        const store = fakeHistoryStore();
+        for (let i = 0; i < 4; i++) {
+          await store.append("chat-1", { role: "user", content: `turn ${i}` });
+        }
+        const { handle, reply } = harness({ history: { store } });
+
+        await handle(msg({ text: "hello there" }), { reply });
+
+        expect(store.data.get("chat-1")).toHaveLength(6);
+      });
+
+      test("reaching the threshold after the reply is appended compacts before the next turn reads it back", async () => {
+        const store = fakeHistoryStore();
+        for (let i = 0; i < 3; i++) {
+          await store.append("chat-1", { role: "user", content: `turn ${i}` });
+        }
+        const summarized: unknown[] = [];
+        const { handle, reply, answers } = harness({
+          history: {
+            store,
+            compaction: {
+              threshold: 4,
+              keep: 1,
+              summarize: async (req) => {
+                summarized.push(req.turns);
+                return "the gist";
+              },
+            },
+          },
+        });
+
+        await handle(msg({ text: "hello there" }), { reply });
+
+        // 5 turns end up appended (3 seeded + the user turn + the reply) —
+        // one more than `threshold` — so every one of them must have been
+        // considered, not just the most recent `threshold`-sized window.
+        expect(summarized).toEqual([
+          [
+            { role: "user", content: "turn 0" },
+            { role: "user", content: "turn 1" },
+            { role: "user", content: "turn 2" },
+            { role: "user", content: "hello there" },
+          ],
+        ]);
+        expect(store.data.get("chat-1")).toEqual([
+          { role: "assistant", content: "Summary of earlier conversation: the gist" },
+          { role: "assistant", content: "a reply" },
+        ]);
+
+        await handle(msg({ text: "another one" }), { reply });
+
+        expect((answers[1] as AnswerFnInput).messages).toEqual([
+          { role: "assistant", content: "Summary of earlier conversation: the gist" },
+          { role: "assistant", content: "a reply" },
+          { role: "user", content: "another one" },
+        ]);
+      });
+
+      test("a failing summarize leaves the appended turns intact and does not break the reply", async () => {
+        const store = fakeHistoryStore();
+        for (let i = 0; i < 3; i++) {
+          await store.append("chat-1", { role: "user", content: `turn ${i}` });
+        }
+        const { handle, reply, chatReplies } = harness({
+          history: {
+            store,
+            compaction: {
+              threshold: 4,
+              keep: 1,
+              summarize: async () => {
+                throw new Error("summarizer unavailable");
+              },
+            },
+          },
+        });
+
+        const outcome = await handle(msg({ text: "hello there" }), { reply });
+
+        expect(outcome).toEqual({ action: "reply", content: "a reply" });
+        expect(chatReplies).toEqual([{ chatId: "chat-1", text: "a reply" }]);
+        expect(store.data.get("chat-1")).toHaveLength(5);
+      });
+
+      test("an opted-out sender's turn never triggers compaction", async () => {
+        const store = fakeHistoryStore();
+        for (let i = 0; i < 4; i++) {
+          await store.append("chat-1", { role: "user", content: `turn ${i}` });
+        }
+        let called = false;
+        const { handle, reply } = harness({
+          history: {
+            store,
+            historyEnabledFor: () => false,
+            compaction: {
+              threshold: 4,
+              keep: 1,
+              summarize: async () => {
+                called = true;
+                return "unused";
+              },
+            },
+          },
+        });
+
+        await handle(msg({ text: "hello there" }), { reply });
+
+        expect(called).toBe(false);
+        expect(store.data.get("chat-1")).toHaveLength(4);
+      });
+
+      test("the reply is sent before compaction runs, not blocked by it", async () => {
+        const store = fakeHistoryStore();
+        for (let i = 0; i < 3; i++) {
+          await store.append("chat-1", { role: "user", content: `turn ${i}` });
+        }
+        const order: string[] = [];
+        const originalClear = store.clear.bind(store);
+        store.clear = async (conversationId) => {
+          order.push("compaction-clear");
+          await originalClear(conversationId);
+        };
+        const { handle, reply } = harness({
+          history: { store, compaction: { threshold: 4, keep: 1, summarize: async () => "gist" } },
+        });
+        const originalSendAnswer = reply.sendAnswer;
+        reply.sendAnswer = async (chatId, text) => {
+          order.push("sent");
+          await originalSendAnswer(chatId, text);
+        };
+
+        await handle(msg({ text: "hello there" }), { reply });
+
+        expect(order).toEqual(["sent", "compaction-clear"]);
+      });
+
+      test("a store failure during compaction's rewrite is logged, not thrown — the already-sent reply still reports success", async () => {
+        const store = fakeHistoryStore();
+        for (let i = 0; i < 3; i++) {
+          await store.append("chat-1", { role: "user", content: `turn ${i}` });
+        }
+        let cleared = false;
+        const originalClear = store.clear.bind(store);
+        const originalAppend = store.append.bind(store);
+        store.clear = async (conversationId) => {
+          cleared = true;
+          await originalClear(conversationId);
+        };
+        store.append = async (conversationId, message) => {
+          if (cleared) throw new Error("store unavailable");
+          await originalAppend(conversationId, message);
+        };
+        const errors: unknown[][] = [];
+        const logger = {
+          debug: () => {},
+          info: () => {},
+          warn: () => {},
+          error: (...args: unknown[]) => errors.push(args),
+        };
+        const { handle, reply, chatReplies } = harness({
+          history: { store, compaction: { threshold: 4, keep: 1, summarize: async () => "gist" } },
+          logger,
+        });
+
+        const outcome = await handle(msg({ text: "hello there" }), { reply });
+
+        expect(outcome).toEqual({ action: "reply", content: "a reply" });
+        expect(chatReplies).toEqual([{ chatId: "chat-1", text: "a reply" }]);
+        expect(errors).toHaveLength(1);
+      });
+    });
   });
 
   describe("transformReply hook", () => {
