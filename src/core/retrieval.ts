@@ -152,25 +152,33 @@ export class VectorStore implements Retriever {
     const docs = loadKnowledge(this.knowledgeDir);
     this.logger.info(`📚 Loaded ${docs.length} knowledge documents`);
 
-    // A consumer that reaches build() with zero documents is almost always
-    // misconfigured (a knowledgeDir that doesn't resolve from the process's
-    // cwd, a bad Docker COPY, a knowledge folder emptied by accident) rather
-    // than a deliberate no-knowledge deployment. Proceeding from here is
-    // actively destructive, not just unhelpful: every existing chunk in
-    // `chunks` would read as "not in this build's output" and get deleted by
-    // the cleanup step below, wiping a working knowledge base down to
-    // nothing while leaving its embeddings orphaned (no FK/cascade ties the
-    // two tables together at the schema level). Refuse outright instead -
-    // `createServer` awaits `build()` with no try/catch, so this fails boot
-    // loudly rather than silently serving a chatbot with no knowledge.
+    // Zero documents is fine on its own - a genuinely fresh deployment with
+    // no knowledge added yet (see scripts/boot-check.mjs, which boots
+    // against an intentionally empty temp knowledgeDir) has nothing in
+    // `chunks` either, so there's nothing for the cleanup step below to
+    // destroy. The dangerous case is specifically zero documents AND
+    // existing chunks: a knowledgeDir that resolves wrong on a working
+    // deployment (bad cwd, a bad Docker COPY, a folder emptied by accident)
+    // would otherwise read every existing chunk as "not in this build's
+    // output" and delete the entire knowledge base - which happened once
+    // already, against a real production database, wiping content that had
+    // been building up for a while. Refuse only when there's real data on
+    // the line - `createServer` awaits `build()` with no try/catch, so this
+    // fails boot loudly rather than silently wiping a working knowledge base.
     if (docs.length === 0) {
-      throw new Error(
-        `VectorStore.build(): loaded 0 knowledge documents from "${this.knowledgeDir}" ` +
-          "(resolved from process.cwd(), not this file's location) - refusing to build, " +
-          "since doing so would delete every existing chunk as stale. Verify knowledgeDir " +
-          "exists relative to the process's working directory and contains base/public/" +
-          "private subdirectories with .md files.",
-      );
+      const existing = await this.db.execute("SELECT count(*) as n FROM chunks");
+      const existingCount = Number(existing.rows[0]?.n ?? 0);
+      if (existingCount > 0) {
+        throw new Error(
+          `VectorStore.build(): loaded 0 knowledge documents from "${this.knowledgeDir}" ` +
+            `(resolved from process.cwd(), not this file's location), but ${existingCount} ` +
+            "chunks already exist in the database - refusing to build, since doing so would " +
+            "delete all of them as stale. Verify knowledgeDir exists relative to the process's " +
+            "working directory and contains base/public/private subdirectories with .md files.",
+        );
+      }
+      this.logger.info("✅ No knowledge documents and no existing chunks - nothing to build");
+      return;
     }
 
     const rows: { id: string; bucket: Bucket; source: string; text: string }[] = [];

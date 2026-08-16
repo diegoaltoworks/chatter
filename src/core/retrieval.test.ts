@@ -188,6 +188,30 @@ describe("VectorStore connection", () => {
       rmSync(dir, { recursive: true, force: true });
     }
   });
+
+  test("build() succeeds on zero documents when there are no existing chunks to lose", async () => {
+    // A genuinely fresh deployment - no knowledge added yet - has zero docs
+    // AND zero existing chunks, so there's nothing for cleanupStaleChunks to
+    // destroy. This is exactly scripts/boot-check.mjs's own scenario (an
+    // intentionally empty temp knowledgeDir, verifying the package boots at
+    // all before any knowledge is added) - the zero-docs guard must not
+    // reject this case the way it rejects an existing knowledge base
+    // resolving to zero documents.
+    const dir = mkdtempSync(join(tmpdir(), "chatter-retrieval-fresh-empty-"));
+    const knowledgeDir = join(dir, "knowledge");
+    mkdirSync(knowledgeDir, { recursive: true });
+
+    try {
+      const db = createClient({ url: "file::memory:", authToken: "" });
+      const openai = createFakeOpenAI([1, 0]);
+      const store = new VectorStore(openai, { databaseClient: db, knowledgeDir });
+
+      await expect(store.build()).resolves.toBeUndefined();
+      expect(await store.query("anything", 3, ["base"])).toEqual([]);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
 });
 
 describe("wrapMissingLibsqlError", () => {
