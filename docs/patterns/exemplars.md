@@ -18,8 +18,8 @@ in a doc comment, and make every caller go through it.
 
 ## `src/channels/gates.ts` - transport-agnostic logic, zero imports from chatter
 
-`decideChannelAction` combines mention/reply/allowlist/mute/rate-limit
-booleans into a reply/ignore/mute/unmute decision, and imports nothing from
+`decideChannelAction` combines mention/reply/allowlist/mute booleans into a
+reply/ignore/mute/unmute decision, and imports nothing from
 the rest of the package. A transport resolves its own wire format into the
 shared `ChannelMessage` shape; this module never sees a jid, a Baileys
 session, or any other transport's types. That's what makes it reusable by a

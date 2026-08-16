@@ -162,14 +162,21 @@ export function underReplyRateLimit(
 }
 
 /**
- * Every session's own identities ever seen, keyed by session id. A
- * multi-session deployment (e.g. two linked numbers in one process) gives
- * each session only its own identity from its transport — a message that
- * actually came from a *different* session's identity looks like a
- * stranger, not "us", and the two sessions can ping-pong replies at each
- * other indefinitely. Callers populate this directly (`registry.set(sessionId, ids)`)
- * as each session's identities become known, typically on connect and kept
- * in sync as they change.
+ * Every session's own identities ever seen, keyed by session id.
+ *
+ * The failure this exists to prevent: link two numbers to one process (a
+ * common WhatsApp setup — a "support" and a "sales" line sharing a server),
+ * and each session's transport only tells that session its own identity. A
+ * message from the OTHER linked number's session then looks like a
+ * stranger, not "us" — the bot answers it, the other session sees THAT
+ * reply as a new stranger message and answers it back, and the two numbers
+ * ping-pong replies at each other indefinitely, burning the rate limit and
+ * spamming both chats until someone notices and kills the process. Sharing
+ * one registry across every session (rather than each session checking only
+ * its own identity) is what lets session A recognise session B's identity
+ * as "us" too, and stop the loop before it starts. Callers populate this
+ * directly (`registry.set(sessionId, ids)`) as each session's identities
+ * become known, typically on connect and kept in sync as they change.
  *
  * Entries are NOT expected to be removed when a session disconnects: a
  * session's own identity is still "us" while it reconnects, and losing that

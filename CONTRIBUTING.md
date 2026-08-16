@@ -123,6 +123,9 @@ chatter/
   BUNDLE_BUDGETS in scripts/pack-exports.ts, measured by bun run test:pack`)
   or phrase it qualitatively instead ("fast", "bounded", "under the
   tarball's size budget").
+- **No em-dashes.** Not in code comments, docs, commit messages, PR text, or
+  any user-facing string. Use a plain hyphen with spaces, a comma, a colon,
+  or restructure the sentence.
 
 ### Commits
 

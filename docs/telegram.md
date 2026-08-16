@@ -62,7 +62,7 @@ Honest limits of the bot model, none of which chatter can work around:
 | `muteReply` / `unmuteReply` | none | Acknowledgements. Unset = silent. |
 | `dmRateLimit` / `groupRateLimit` | 20/h, 30/h | Sliding-window reply budgets, per chat. |
 | `pollTimeoutSeconds` | `30` | How long Telegram holds an idle `getUpdates` open. |
-| `initialOffset` / `onOffset` | none | Update-offset resume point and observer - see [below](#offsets-and-restarts). |
+| `initialOffset` / `onOffset` | none | Update-offset resume point and observer - see [below](#long-polling-offsets-and-restarts). |
 | `apiBaseUrl` | `https://api.telegram.org` | For a self-hosted Bot API server. |
 | `fetch` | `globalThis.fetch` | For a proxy, or for tests. |
 | `logger` | `deps.logger` | Poll/gate diagnostics. |

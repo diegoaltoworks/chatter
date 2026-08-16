@@ -15,7 +15,8 @@ Welcome to the Chatter documentation! This guide will help you set up and deploy
      codebase:
      [0001, brain and sockets split](./decisions/0001-brain-and-sockets-split.md),
      [0002, no LangChain in core](./decisions/0002-no-langchain-in-core.md),
-     [0003, slot-filling is brain territory](./decisions/0003-slot-filling-is-brain-territory.md)
+     [0003, slot-filling is brain territory](./decisions/0003-slot-filling-is-brain-territory.md),
+     [0004, main-protection keeps only non-fast-forward and deletion protections](./decisions/0004-main-protection-stays-non-fast-forward-only.md)
 
 2. **[Requirements](./requirements.md)** - What you need before starting
    - OpenAI API setup
@@ -89,7 +90,7 @@ Welcome to the Chatter documentation! This guide will help you set up and deploy
     - `HistoryStore`: append/load(conversationId, limit)/clear(conversationId)
     - Multi-instance-safe Turso store with bounded per-conversation pruning
     - Privacy controls: retention TTL, `clear` reset, per-sender opt-out
-    - Opt-in WhatsApp wiring; single-turn elsewhere until adopted
+    - Opt-in per channel (WhatsApp, Telegram, Matrix); single-turn until adopted
 
 14. **[Scheduler](./scheduler.md)** - Exactly-once outbound scheduling
     - Content-free: candidate entries are always caller-supplied
@@ -121,17 +122,19 @@ Welcome to the Chatter documentation! This guide will help you set up and deploy
     - Faking OpenAI/Turso for tests that must never call a paid API
     - Coverage and watch mode
 
-19. **[Sprint Review](./sprint-review.md)** - Cross-module & security-invariant audit
-    - Confirms cross-module paths are exercised end to end, not just per-module
-    - A point-in-time snapshot, not a standing guarantee
-
-20. **[FAQs](./faqs.md)** - Common questions and troubleshooting
+19. **[FAQs](./faqs.md)** - Common questions and troubleshooting
     - General questions
     - Platform compatibility
     - Knowledge base and RAG
     - Authentication
     - Customization
     - Performance and scaling
+
+### Archive
+
+- **[Sprint Review](./sprint-review.md)** - A dated, point-in-time audit
+  (v0.40) of cross-module paths and security invariants, not a standing
+  guarantee about the current codebase.
 
 ## Documentation Flow
 

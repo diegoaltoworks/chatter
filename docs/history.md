@@ -197,11 +197,15 @@ no transaction primitive. A failing or timed-out `summarize` never reaches
 that rewrite at all: history is left exactly as it was, and the turn's own
 reply still sends normally.
 
-## WhatsApp
+## Channels
 
-The built-in WhatsApp channel consumes a `HistoryStore` behind config; see
-"Conversation history" in [channels.md](./channels.md). Off by default, so
-existing single-turn behavior is unchanged until you wire one in. No other
-built-in surface wires history yet - wiring it into a new channel means
-loading it before `prepareChat` and appending the turn after, the same two
-calls the WhatsApp handler makes.
+Every built-in channel - WhatsApp, Telegram, Matrix - accepts the same
+`history` config (`store`, `limit`, `historyEnabledFor`, `compaction`) and
+consumes a `HistoryStore` through `createInboundPipeline`; see "Conversation
+history" in [channels.md](./channels.md). Off by default, so existing
+single-turn behavior is unchanged until you wire one in. A channel built the
+documented way (see [Building a Channel](./build-a-channel.md)) just passes
+`history` through to `createInboundPipeline` and hand-rolls nothing; only a
+channel that bypasses the shared pipeline has to load history before
+`prepareChat` and append the turn after itself, the two calls
+`createInboundPipeline` makes on every channel's behalf.

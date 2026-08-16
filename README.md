@@ -111,16 +111,22 @@ Complete guides for setup, deployment, and integration - see
 - **[Deployment](./docs/deployment.md)** - Google Cloud Run, Fly.io, Railway, VPS
 - **[Packaging](./docs/packaging.md)** - The subpath contract and the release chain
 - **[Testing](./docs/testing.md)** - Comprehensive testing guide
-- **[Sprint Review](./docs/sprint-review.md)** - Cross-module & security-invariant audit
 - **[FAQs](./docs/faqs.md)** - Troubleshooting and common questions
 - **Architecture Decisions** - The ADRs behind the shape of the codebase:
   [0001, brain and sockets split](./docs/decisions/0001-brain-and-sockets-split.md),
   [0002, no LangChain in core](./docs/decisions/0002-no-langchain-in-core.md),
-  [0003, slot-filling is brain territory](./docs/decisions/0003-slot-filling-is-brain-territory.md)
+  [0003, slot-filling is brain territory](./docs/decisions/0003-slot-filling-is-brain-territory.md),
+  [0004, main-protection keeps only non-fast-forward and deletion protections](./docs/decisions/0004-main-protection-stays-non-fast-forward-only.md)
 - **Patterns** - Worked "how do I add X" guides:
   [adding a capability](./docs/patterns/adding-a-capability.md),
   [adding a store](./docs/patterns/adding-a-store.md),
   [exemplars](./docs/patterns/exemplars.md)
+
+### Archive
+
+- **[Sprint Review](./docs/sprint-review.md)** - A dated, point-in-time
+  audit (v0.40) of cross-module paths and security invariants, not a
+  standing guarantee about the current codebase.
 
 ## Demo
 
@@ -279,7 +285,7 @@ Both tools:
 
 ## Plugins
 
-### Talker - Voice Calls & SMS
+### Talker - Voice Calls, SMS & WhatsApp
 
 Add phone call and SMS support to your Chatter bot with [Talker](https://github.com/diegoaltoworks/talker):
 
@@ -303,6 +309,20 @@ const app = await createServer({
 ```
 
 One server, one port - web chat, phone calls, and SMS. See the [Talker README](https://github.com/diegoaltoworks/talker) for full documentation.
+
+### Two ways to do WhatsApp
+
+Chatter's own [WhatsApp channel](./docs/channels.md) and Talker's Twilio
+integration both reach WhatsApp, through very different paths - pick based on
+what you're building:
+
+| | This repo's [WhatsApp channel](./docs/channels.md) | Talker's Twilio WhatsApp |
+| --- | --- | --- |
+| WhatsApp access | Unofficial, via [Baileys](https://github.com/WhiskeySockets/Baileys) - a linked-device client, not the WhatsApp Business API | Sanctioned path, via Twilio's WhatsApp Business API integration |
+| Cost | Free besides hosting | Twilio usage-based pricing |
+| Risk | Real risk of the linked number being banned - use a number you can afford to lose | Runs through WhatsApp's own approved channel |
+| Setup | Link a number by QR code or pairing code, no third party | Twilio account and WhatsApp Business API approval |
+| Best for | Prototyping, personal or low-stakes bots | Production, customer-facing deployments |
 
 ## License
 
