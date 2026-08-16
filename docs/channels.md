@@ -65,11 +65,14 @@ await createServer({ ..., channels: [whatsapp] });
 ## Answering messages
 
 `createWhatsAppInboundHandler` is the built-in `onMessage` implementation:
-it turns a raw Baileys message into a `ChannelMessage`, runs it through
-`./channels`' `decideChannelAction` (allowlist, mute/unmute, DM/group rate
-limits) and cross-session loop guard, then answers through the same
+it turns a raw Baileys message into a `ChannelMessage` (mentions, loop guard,
+own-mention stripping — everything Baileys-shaped), then hands it to
+`./channels`' `createInboundPipeline`, which applies `decideChannelAction`
+(allowlist, mute/unmute, DM/group rate limits) and answers through the same
 `prepareChat`/`answerOnce` seam every other surface uses — so the WhatsApp
-channel automatically honours a configured `answerFn` and `bucketsFor`.
+channel automatically honours a configured `answerFn` and `bucketsFor`. See
+[Building a Channel](./build-a-channel.md) for how to put the same pipeline
+behind a different transport.
 
 It needs the same `client`/`store`/`prompts` `createServer` builds into
 `ServerDependencies`, which only exist once `createServer` runs — after the

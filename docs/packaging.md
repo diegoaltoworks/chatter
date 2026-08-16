@@ -19,7 +19,7 @@ in a dependency you did not ask for.
 | `./client` | Widget classes and their types |
 | `./client/style.css` | The widget stylesheet |
 | `./mcp` | MCP server factory |
-| `./channels` | Channel SPI, reply gates, sender registry |
+| `./channels` | Channel SPI, reply gates, sender registry, the shared inbound pipeline |
 | `./whatsapp` | The built-in WhatsApp channel |
 | `./usage` | Daily usage limiter and its Turso store |
 | `./history` | Conversation history store contract and its Turso implementation |

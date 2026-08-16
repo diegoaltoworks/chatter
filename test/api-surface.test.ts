@@ -1,13 +1,15 @@
 /**
  * Locks the downstream consumption patterns documented in docs/server.md,
- * docs/channels.md, docs/personas.md, docs/flows.md, docs/history.md and
- * docs/integrations.md: the shape of ServerDependencies (incl. the shared db
- * handle), starting a Channel standalone, personaResolver output feeding
- * prepareChat's personaLayer, the bucketsFor retrieval hook, prepareChat's
- * channel-facing params, the answerFn brain hook, sending through the sender
- * registry by name, the flow contract a plugin implements, a HistoryStore's
- * loaded turns feeding straight into that same messages array, and the
- * OpenAI-compatible wire shape third-party clients depend on.
+ * docs/channels.md, docs/personas.md, docs/flows.md, docs/history.md,
+ * docs/build-a-channel.md and docs/integrations.md: the shape of
+ * ServerDependencies (incl. the shared db handle), starting a Channel
+ * standalone, personaResolver output feeding prepareChat's personaLayer, the
+ * bucketsFor retrieval hook, prepareChat's channel-facing params, the
+ * answerFn brain hook, sending through the sender registry by name, the flow
+ * contract a plugin implements, a HistoryStore's loaded turns feeding
+ * straight into that same messages array, the channel-agnostic inbound
+ * pipeline a new transport builds on, and the OpenAI-compatible wire shape
+ * third-party clients depend on.
  *
  * Typechecked via test/tsconfig.json (see `bun run typecheck:api-surface`,
  * folded into `bun run check`) so a breaking change to any of these types
@@ -20,7 +22,12 @@ import { join } from "node:path";
 import type { ChatCompletion } from "openai/resources/chat/completions";
 import type { AnswerFn, BucketsFor, Channel, PipelineMessage, ServerDependencies } from "../src";
 import { prepareChat, resolveBuckets } from "../src";
-import { createSenderRegistry } from "../src/channels";
+import {
+  type ChannelMessage,
+  createInboundPipeline,
+  createSenderRegistry,
+  type InboundReplySender,
+} from "../src/channels";
 import type { FlowHandler, FlowHandlerContext, FlowHandlerResult, LoadedFlow } from "../src/flows";
 import type { HistoryMessage, HistoryStore } from "../src/history";
 import { createPersonaResolver } from "../src/personas";
@@ -203,6 +210,42 @@ describe("API surface", () => {
     expect(appended).toEqual([
       { conversationId: "conv-1", message: { role: "user", content: "again" } },
     ]);
+  });
+
+  test("createInboundPipeline (a new channel's foundation) answers a ChannelMessage through an InboundReplySender", async () => {
+    const store = { query: async () => ["context"] } as unknown as ServerDependencies["store"];
+    const prompts = {
+      baseSystemRules: "rules",
+      publicPersona: "persona",
+      privatePersona: "private persona",
+    } as unknown as ServerDependencies["prompts"];
+
+    const handle = createInboundPipeline(
+      { client: {} as ServerDependencies["client"], store, prompts },
+      { answerFn: async () => "hello from the pipeline" },
+    );
+
+    const delivered: Array<{ chatId: string; text: string }> = [];
+    const reply: InboundReplySender = {
+      sendAnswer: async (chatId, text) => {
+        delivered.push({ chatId, text });
+      },
+      sendGateReply: async () => undefined,
+    };
+    const msg: ChannelMessage = {
+      chatId: "chat-1",
+      senderId: "user-1",
+      text: "hi",
+      isDirectMessage: true,
+      mentionsBot: false,
+      isReplyToBot: false,
+      fromBot: false,
+    };
+
+    const outcome = await handle(msg, { reply, sender: "user-1", conversationId: "chat-1" });
+
+    expect(outcome).toEqual({ action: "reply", content: "hello from the pipeline" });
+    expect(delivered).toEqual([{ chatId: "chat-1", text: "hello from the pipeline" }]);
   });
 
   test("POST /v1/chat/completions responds with the real OpenAI ChatCompletion wire shape", async () => {

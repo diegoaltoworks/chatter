@@ -74,7 +74,12 @@ Welcome to the Chatter documentation! This guide will help you set up and deploy
     - Multi-instance-safe claim via Turso, with a fire-time grace window
     - Pluggable compose step and voice-attempted/text-guaranteed delivery
 
-12. **[Deployment](./deployment.md)** - Deploy to production
+12. **[Building a Channel](./build-a-channel.md)** - Plug in a new transport
+    - What a transport owns vs. what `createInboundPipeline` gives you free
+    - A worked, non-WhatsApp example (Telegram)
+    - The `intercept` hook, history, and allowlist observability
+
+13. **[Deployment](./deployment.md)** - Deploy to production
     - Platform compatibility
     - Docker deployment
     - Google Cloud Run
@@ -83,13 +88,13 @@ Welcome to the Chatter documentation! This guide will help you set up and deploy
     - VPS setup
     - Security best practices
 
-13. **[Packaging](./packaging.md)** - What the published package exposes
+14. **[Packaging](./packaging.md)** - What the published package exposes
     - The subpath contract and what each one gives you
     - Adding a subpath without breaking consumers
     - The packed-tarball check that verifies it before release
     - The release chain, its human gate, and how the toolchain is pinned
 
-14. **[FAQs](./faqs.md)** - Common questions and troubleshooting
+15. **[FAQs](./faqs.md)** - Common questions and troubleshooting
     - General questions
     - Platform compatibility
     - Knowledge base and RAG
