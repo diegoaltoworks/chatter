@@ -284,6 +284,11 @@ export function resolveWaMessage(
     mentionsBot: context.mentionedJids.some((jid) => ownIds.some((own) => jidsMatch(jid, own))),
     isReplyToBot: ownIds.some((own) => jidsMatch(context.quotedParticipantJid, own)),
     fromBot,
+    // The Baileys message key — what `sendMessage(chatId, { react: { key, text } })`
+    // targets. Exposed generically so a caller reaching `msg` through
+    // `createInboundPipeline` (not just the WhatsApp-specific router) can
+    // still react to it via `ChannelSenderRegistry.sendReaction`.
+    messageRef: message.key,
   };
 
   return { msg, ownIds };

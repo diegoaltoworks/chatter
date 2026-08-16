@@ -23,6 +23,13 @@ export interface ChannelMessage {
   isReplyToBot: boolean;
   /** True when the bot itself sent this message (including via another session — see {@link isEffectivelyFromSelf}). */
   fromBot: boolean;
+  /**
+   * Opaque, transport-defined handle for targeting this specific message —
+   * e.g. `ChannelSenderRegistry.sendReaction`'s `messageRef` — not
+   * interpreted by anything in this module. Omitted transports (or
+   * messages a transport can't target individually) simply have none.
+   */
+  messageRef?: unknown;
 }
 
 export type ChannelAction = "reply" | "ignore" | "mute" | "unmute";

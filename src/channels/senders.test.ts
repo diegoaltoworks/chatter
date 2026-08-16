@@ -72,4 +72,33 @@ describe("createSenderRegistry", () => {
     expect(voiceCalls).toEqual([{ seconds: 3 }]);
     expect(await registry.sendMedia("wa", "chat-1", { url: "x" })).toBe(false);
   });
+
+  test("sendReaction returns false when the sender omits it", async () => {
+    const registry = createSenderRegistry();
+    registry.register("wa", { sendText: async () => {} });
+
+    expect(await registry.sendReaction("wa", "chat-1", { id: "msg-1" }, "👍")).toBe(false);
+  });
+
+  test("sendReaction reaches the sender with chatId/messageRef/emoji, and catches failures", async () => {
+    const registry = createSenderRegistry();
+    const reactionCalls: Array<{ chatId: string; messageRef: unknown; emoji: string }> = [];
+    registry.register("wa", {
+      sendText: async () => {},
+      sendReaction: async (chatId, messageRef, emoji) => {
+        reactionCalls.push({ chatId, messageRef, emoji });
+      },
+    });
+
+    expect(await registry.sendReaction("wa", "chat-1", { id: "msg-1" }, "👍")).toBe(true);
+    expect(reactionCalls).toEqual([{ chatId: "chat-1", messageRef: { id: "msg-1" }, emoji: "👍" }]);
+
+    registry.register("wa2", {
+      sendText: async () => {},
+      sendReaction: async () => {
+        throw new Error("reaction rejected");
+      },
+    });
+    expect(await registry.sendReaction("wa2", "chat-1", { id: "msg-1" }, "👍")).toBe(false);
+  });
 });

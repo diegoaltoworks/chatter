@@ -288,7 +288,7 @@ const router = createWhatsAppMessageRouter({
       mode: "parallel",
       test: (ctx) => /^lol\b/i.test(ctx.text),
       handle: async (ctx) => {
-        await ctx.sock.sendMessage(ctx.msg.chatId, { react: { text: "😂", key: ctx.message.key } });
+        await ctx.react("😂");
       },
     },
     // Checked in registration order; the first match fully owns the message
@@ -330,6 +330,13 @@ const whatsapp = createWhatsAppChannel({
   own-mention-stripped text, alongside the raw `sock`/`message` a detector
   needs to actually reply — no detector re-derives mention/loop-guard
   resolution itself.
+- **`ctx.react(emoji)`** sends a Baileys reaction to the current message
+  without a detector re-deriving the targeting itself. Because `ctx` only
+  ever exists for a message that already cleared the loop guard and
+  `allowedChats` (see below), a reaction can never fire where those same
+  checks would have gated a reply. A failed send is caught and logged, the
+  same as a detector error — it never throws and never affects the reply
+  path.
 - The loop guard and `allowedChats` are enforced once, before any detector
   runs — a message from the bot's own session, or from a group the whole
   channel isn't eligible for, never reaches a detector or the fallback.
@@ -447,6 +454,18 @@ under `"whatsapp:<sessionId>"`:
 ```ts
 await deps.senders.sendText("whatsapp", "447700900123@s.whatsapp.net", "hi");
 ```
+
+The same registry also carries `sendReaction(name, chatId, messageRef, emoji)`
+for a channel-agnostic caller that already has a `ChannelMessage` in hand —
+`msg.messageRef` is the Baileys message key `resolveWaMessage` attaches, ready
+to pass straight through:
+
+```ts
+await deps.senders.sendReaction("whatsapp", msg.chatId, msg.messageRef, "👍");
+```
+
+Inside a WhatsApp router detector, prefer `ctx.react(emoji)` (above) — it's
+already bound to the current message.
 
 ## Full example
 

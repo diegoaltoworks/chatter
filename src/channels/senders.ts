@@ -16,6 +16,12 @@ export interface ChannelSender {
   sendVoice?(chatId: string, payload: unknown): Promise<void>;
   /** Optional: channels without media support (or test fakes) stay valid without it. */
   sendMedia?(chatId: string, payload: unknown): Promise<void>;
+  /**
+   * Optional: channels without reaction support (or test fakes) stay valid
+   * without it. `messageRef` is transport-defined — WhatsApp's is the
+   * Baileys message key (see `ChannelMessage.messageRef`).
+   */
+  sendReaction?(chatId: string, messageRef: unknown, emoji: string): Promise<void>;
 }
 
 export interface ChannelSenderRegistry {
@@ -28,6 +34,8 @@ export interface ChannelSenderRegistry {
   sendVoice(name: string, chatId: string, payload: unknown): Promise<boolean>;
   /** False (not a throw) when the sender is missing, disconnected, or lacks media support. */
   sendMedia(name: string, chatId: string, payload: unknown): Promise<boolean>;
+  /** False (not a throw) when the sender is missing, disconnected, or lacks reaction support. */
+  sendReaction(name: string, chatId: string, messageRef: unknown, emoji: string): Promise<boolean>;
 }
 
 /** One registry per server: channels register on start, callers send by name. */
@@ -79,6 +87,17 @@ export function createSenderRegistry(
         return true;
       } catch (error) {
         logger.warn(`Channel sender "${name}" sendMedia failed:`, error);
+        return false;
+      }
+    },
+    async sendReaction(name, chatId, messageRef, emoji) {
+      const sender = senders.get(name);
+      if (!sender?.sendReaction) return false;
+      try {
+        await sender.sendReaction(chatId, messageRef, emoji);
+        return true;
+      } catch (error) {
+        logger.warn(`Channel sender "${name}" sendReaction failed:`, error);
         return false;
       }
     },

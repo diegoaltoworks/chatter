@@ -332,6 +332,28 @@ describe("createWhatsAppChannel", () => {
     expect(sockets[0]?.sendMessage).toHaveBeenCalledWith("12345@s.whatsapp.net", { text: "hi" });
   });
 
+  test("a paired session's sender supports sendReaction via a Baileys reaction message", async () => {
+    const sockets: FakeSocket[] = [];
+    const channel = createWhatsAppChannel({
+      sessionSecret: "test-session-secret-value",
+      loadBaileys: async () => fakeBaileysModule({ registered: true, sockets }),
+      schedule: () => undefined,
+    });
+    const { deps, senders } = testDeps();
+
+    await channel.start(deps);
+    await flush();
+    sockets[0]?.ev.emit("connection.update", { connection: "open" });
+
+    const messageRef = { remoteJid: "12345@s.whatsapp.net", id: "ABC123", fromMe: false };
+    const ok = await senders.sendReaction("whatsapp", "12345@s.whatsapp.net", messageRef, "👍");
+
+    expect(ok).toBe(true);
+    expect(sockets[0]?.sendMessage).toHaveBeenCalledWith("12345@s.whatsapp.net", {
+      react: { text: "👍", key: messageRef },
+    });
+  });
+
   test("creds passed to makeWASocket are the ones actually stored in deps.db", async () => {
     const sockets: FakeSocket[] = [];
     const socketOptions: { auth: { creds: unknown }; version: unknown }[] = [];

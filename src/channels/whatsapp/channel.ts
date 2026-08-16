@@ -17,7 +17,7 @@
  */
 
 import type { Client } from "@libsql/client";
-import type { WAMessage, WASocket } from "@whiskeysockets/baileys";
+import type { WAMessage, WAMessageKey, WASocket } from "@whiskeysockets/baileys";
 import { assertStrongSecret } from "../../auth/secretStrength";
 import { createConsoleLogger, type Logger } from "../../core/logger";
 import type { Channel } from "../index";
@@ -314,6 +314,11 @@ export function createWhatsAppChannel(config: WhatsAppChannelConfig): Channel {
             const sender: ChannelSender = {
               sendText: async (chatId, text) => {
                 await sock.sendMessage(chatId, { text });
+              },
+              sendReaction: async (chatId, messageRef, emoji) => {
+                await sock.sendMessage(chatId, {
+                  react: { text: emoji, key: messageRef as WAMessageKey },
+                });
               },
             };
             deps.senders.register(senderName, sender);
