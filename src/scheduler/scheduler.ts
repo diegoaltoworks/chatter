@@ -7,17 +7,25 @@ import {
   DEFAULT_CLAIM_TIMEOUT_MS,
 } from "./claimStore";
 import { runTick } from "./tick";
-import type { ComposeFn, ScheduleEntry, TickResult } from "./types";
+import type { ComposeFn, ScheduleClaimStore, ScheduleEntry, TickResult } from "./types";
 
 export const DEFAULT_GRACE_MS = 5 * 60_000;
 export const DEFAULT_INTERVAL_MS = 60_000;
 export const DEFAULT_FALLBACK_MESSAGE = "You have a scheduled message.";
 
 export interface SchedulerConfig {
+  /**
+   * The libsql client the default `ScheduleClaimStore` is built against.
+   * Ignored when `claimStore` is supplied - the type stays required for now
+   * (narrowing it to reflect that is deferred), so a caller that only wants
+   * to inject `claimStore` still has to pass a `Client`, even an unused one.
+   */
   db: Client;
   senders: ChannelSenderRegistry;
   /** Returns the caller's own pending candidates for this tick — chatter stores no schedule content. */
   fetchPending: () => Promise<ScheduleEntry[]> | ScheduleEntry[];
+  /** The exactly-once claim store. Defaults to a Turso-backed store against `db`; inject your own to run the scheduler on a different backend (see docs/patterns/adding-a-store.md). */
+  claimStore?: ScheduleClaimStore;
   tableName?: string;
   graceMs?: number;
   intervalMs?: number;
@@ -58,12 +66,14 @@ const defaultSchedule: NonNullable<SchedulerConfig["schedule"]> = (fn, ms) => {
  * within the grace window instead of being lost.
  */
 export function createScheduler(config: SchedulerConfig): Scheduler {
-  const claims = createTursoScheduleClaimStore(
-    config.db,
-    config.instanceId ?? crypto.randomUUID(),
-    config.tableName ?? DEFAULT_CLAIM_TABLE,
-    config.claimTimeoutMs ?? DEFAULT_CLAIM_TIMEOUT_MS,
-  );
+  const claims =
+    config.claimStore ??
+    createTursoScheduleClaimStore(
+      config.db,
+      config.instanceId ?? crypto.randomUUID(),
+      config.tableName ?? DEFAULT_CLAIM_TABLE,
+      config.claimTimeoutMs ?? DEFAULT_CLAIM_TIMEOUT_MS,
+    );
   const graceMs = config.graceMs ?? DEFAULT_GRACE_MS;
   const fallbackMessage = config.fallbackMessage ?? DEFAULT_FALLBACK_MESSAGE;
   const now = config.now ?? Date.now;

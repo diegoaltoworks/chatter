@@ -24,8 +24,8 @@
  * @packageDocumentation
  */
 
-export type { AuthStateRuntime, TursoAuthStateResult } from "./authState";
-export { useTursoAuthState } from "./authState";
+export type { AuthStateRuntime, TursoAuthStateResult, WaAuthKV } from "./authState";
+export { createTursoWaAuthKV, useAuthState, useTursoAuthState } from "./authState";
 export type { Baileys } from "./baileys";
 export { loadBaileys } from "./baileys";
 export {

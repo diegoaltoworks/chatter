@@ -66,14 +66,22 @@ way" reference they point back to.
    connection, warm a cache) can trust the app it receives is fully mounted.
    Enforced: `src/server.test.ts`.
 
-8. **Rate/spend state that must survive a restart lives in Turso, never
-   process memory** - deployments run multiple instances, and a limiter or
-   scheduler claim backed by an in-process `Map` would let each instance
-   enforce its own, independent cap. Table creation is idempotent
+8. **State that must survive a restart lives behind a shared,
+   multi-instance-safe store interface, never process memory** - deployments
+   run multiple instances, and a limiter, scheduler claim, deploy lease, or
+   auth-state cache backed by an in-process `Map` would let each instance
+   enforce its own, independent view. libsql (Turso) is the shipped
+   implementation (`createTursoScheduleClaimStore`, `createTursoWaLeaseStore`,
+   `createTursoWaAuthKV`, `usage/tursoStore.ts`); table creation is idempotent
    (`CREATE TABLE IF NOT EXISTS`) and a claim/reservation is atomic, so two
-   instances racing the same key can never both win. Enforced:
+   instances racing the same key can never both win. Every such store's
+   config field (`SchedulerConfig.claimStore`,
+   `WhatsAppChannelConfig.leaseStore`/`authStore`) is injectable, defaulting
+   to the Turso-backed factory only when unset - a caller can swap in a
+   different backend without touching the seam that consumes it. Enforced:
    `src/usage/limits.test.ts`, `src/usage/tursoStore.test.ts`,
-   `src/scheduler/claimStore.test.ts`. See
+   `src/scheduler/claimStore.test.ts`, `src/scheduler/scheduler.test.ts`,
+   `src/channels/whatsapp/channel.test.ts`. See
    [patterns/adding-a-store.md](./patterns/adding-a-store.md).
 
 9. **Channel-agnostic reply gates (`decideChannelAction`) import nothing from
