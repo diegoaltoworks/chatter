@@ -163,10 +163,10 @@ describe("VectorStore connection", () => {
 
     try {
       const db = createClient({ url: "file::memory:", authToken: "" });
-      const openai = createFakeOpenAI([1, 0]);
+      const embed = fakeEmbedder([1, 0]);
 
       // First, a healthy build with real content.
-      const store = new VectorStore(openai, { databaseClient: db, knowledgeDir });
+      const store = new VectorStore(embed, { databaseClient: db, knowledgeDir });
       await store.build();
       expect(await store.query("support hours", 3, ["base"])).toEqual([
         "# Info\nSupport hours are 9-5.",
@@ -176,7 +176,7 @@ describe("VectorStore connection", () => {
       // misresolved path - must throw and must not touch the existing data.
       const emptyDir = join(dir, "empty");
       mkdirSync(emptyDir, { recursive: true });
-      const brokenStore = new VectorStore(openai, { databaseClient: db, knowledgeDir: emptyDir });
+      const brokenStore = new VectorStore(embed, { databaseClient: db, knowledgeDir: emptyDir });
 
       await expect(brokenStore.build()).rejects.toThrow(/loaded 0 knowledge documents/);
 
@@ -203,8 +203,8 @@ describe("VectorStore connection", () => {
 
     try {
       const db = createClient({ url: "file::memory:", authToken: "" });
-      const openai = createFakeOpenAI([1, 0]);
-      const store = new VectorStore(openai, { databaseClient: db, knowledgeDir });
+      const embed = fakeEmbedder([1, 0]);
+      const store = new VectorStore(embed, { databaseClient: db, knowledgeDir });
 
       await expect(store.build()).resolves.toBeUndefined();
       expect(await store.query("anything", 3, ["base"])).toEqual([]);
