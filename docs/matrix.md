@@ -78,7 +78,7 @@ this v1; it would need an Olm/Megolm implementation (a real dependency, not a
 | `accessToken` | *(required)* | From a login call - see above. |
 | `name` | `"matrix"` | Channel and sender-registry name. Give each bot its own when running several in one process. |
 | `allowedChats` | `[]` (all) | Group room ids eligible for a reply. DMs always reply. When set, it also gates which invites `autoJoin` accepts. |
-| `answerFn` / `bucketsFor` / `rewriteQuery` / `rerankContext` / `transformReply` | `deps.config.*` | The brain, retrieval-scope, retrieval-shaping and outbound-reply hooks; fall back to the server's own. |
+| `answerFn` / `bucketsFor` / `rewriteQuery` / `rerankContext` / `fallbackFn` / `transformReply` | `deps.config.*` | The brain, retrieval-scope, retrieval-shaping and outbound-reply hooks; fall back to the server's own. |
 | `model` | server default | Model override for this channel. |
 | `channelHint` | `"Channel: Matrix."` | Extra system-prompt section describing the delivery channel. |
 | `personaResolver` | none | Per-sender prompt layer; receives the `mx:<user id>` sender key. |

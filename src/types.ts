@@ -12,7 +12,7 @@ import type { Channel, ChannelSenderRegistry } from "./channels";
 import type { AnswerFn, TransformReply } from "./core/answer";
 import type { BucketsFor } from "./core/buckets";
 import type { Logger, LogLevel } from "./core/logger";
-import type { RerankContext, RewriteQuery } from "./core/pipeline";
+import type { FallbackFn, RerankContext, RewriteQuery } from "./core/pipeline";
 import type { PromptLoader } from "./core/prompts";
 import type { Retriever } from "./core/retrieval";
 
@@ -68,9 +68,10 @@ export interface BotChatConfig {
 /**
  * The brain and retrieval hooks a chat surface consults, in the order a turn
  * reaches them: `bucketsFor` scopes retrieval, `rewriteQuery` shapes the
- * search, `rerankContext` post-processes what came back, `answerFn` replaces
- * the completion call itself, and `transformReply` has the last word on what
- * gets delivered. `ChatterConfig` sets the server-wide default for each; a
+ * search, `rerankContext` post-processes what came back, `fallbackFn` steps
+ * in only when that leaves nothing, `answerFn` replaces the completion call
+ * itself, and `transformReply` has the last word on what gets delivered.
+ * `ChatterConfig` sets the server-wide default for each; a
  * channel config (`TelegramChannelConfig`, `MatrixChannelConfig`,
  * `WhatsAppInboundConfig`, ...) extends this same interface so a single
  * channel can override any of them for its own traffic, falling back to the
@@ -127,6 +128,22 @@ export interface BrainHooks {
    * chunks are used as-is.
    */
   rerankContext?: RerankContext;
+  /**
+   * Injects turn-scoped guidance when retrieval comes back with nothing to
+   * fold into the prompt, after `rerankContext`, if configured, has had its
+   * say. Receives the query, mode, buckets retrieval ran against and (via
+   * `retrievedChunks`) what `store.query` itself returned before
+   * `rerankContext` ran, so a hook can tell "the store found nothing" apart
+   * from "a reranker filtered everything out". Return a string to add it as
+   * an extra system-prompt layer for this turn only; return `undefined` to
+   * leave the prompt as-is.
+   *
+   * Consulted everywhere `bucketsFor` is. A throw/rejection is logged and
+   * the turn proceeds without fallback guidance: a broken hook must never
+   * break the chat path. Unset: an empty retrieval changes nothing about the
+   * assembled prompt, same as today.
+   */
+  fallbackFn?: FallbackFn;
   /**
    * Modifies or vetoes an outgoing reply after it has already been produced
    * (by `answerFn` or the built-in completion, past guardrails). Return a

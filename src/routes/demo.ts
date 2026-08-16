@@ -192,6 +192,7 @@ export function demoRoutes(deps: ServerDependencies) {
           buckets,
           rewriteQuery: config.rewriteQuery,
           rerankContext: config.rerankContext,
+          fallbackFn: config.fallbackFn,
           logger,
         });
         const model = config.openai.model || DEFAULT_MODEL;

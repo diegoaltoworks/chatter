@@ -34,12 +34,12 @@ import {
 
 /**
  * Resolves the brain hooks (`answerFn`, `bucketsFor`, `rewriteQuery`,
- * `rerankContext`, `transformReply`) for one channel: each field from
- * `config` wins when set, falling back to the matching field on `fallback`
- * (typically `deps.config`, the server-level `ChatterConfig`). Every channel
- * that layers its own hooks over the server's uses this instead of
- * hand-rolling the same five `??` lines: see `../telegram`, `../matrix` and
- * `../whatsapp/inbound`.
+ * `rerankContext`, `fallbackFn`, `transformReply`) for one channel: each
+ * field from `config` wins when set, falling back to the matching field on
+ * `fallback` (typically `deps.config`, the server-level `ChatterConfig`).
+ * Every channel that layers its own hooks over the server's uses this
+ * instead of hand-rolling the same six `??` lines: see `../telegram`,
+ * `../matrix` and `../whatsapp/inbound`.
  */
 export function resolveBrainHooks(config: BrainHooks, fallback?: BrainHooks): BrainHooks {
   return {
@@ -47,6 +47,7 @@ export function resolveBrainHooks(config: BrainHooks, fallback?: BrainHooks): Br
     bucketsFor: config.bucketsFor ?? fallback?.bucketsFor,
     rewriteQuery: config.rewriteQuery ?? fallback?.rewriteQuery,
     rerankContext: config.rerankContext ?? fallback?.rerankContext,
+    fallbackFn: config.fallbackFn ?? fallback?.fallbackFn,
     transformReply: config.transformReply ?? fallback?.transformReply,
   };
 }
@@ -272,6 +273,7 @@ export function createInboundPipeline(
       sender,
       rewriteQuery: config.rewriteQuery,
       rerankContext: config.rerankContext,
+      fallbackFn: config.fallbackFn,
       logger: config.logger,
     });
 

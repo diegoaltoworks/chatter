@@ -35,8 +35,8 @@
  *       store: deps.store,
  *       prompts: deps.prompts,
  *       // Falls back to deps.config.{answerFn,bucketsFor,rewriteQuery,
- *       // rerankContext,transformReply} for whichever of those this config
- *       // doesn't set itself.
+ *       // rerankContext,fallbackFn,transformReply} for whichever of those
+ *       // this config doesn't set itself.
  *       serverConfig: deps.config,
  *       registry: new Map(),
  *       logger: deps.logger,

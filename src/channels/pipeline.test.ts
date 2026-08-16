@@ -34,18 +34,24 @@ describe("resolveBrainHooks", () => {
       bucketsFor: undefined,
       rewriteQuery: undefined,
       rerankContext: undefined,
+      fallbackFn: undefined,
       transformReply: undefined,
     });
     expect(resolveBrainHooks({}).answerFn).toBeUndefined();
   });
 
-  test("resolves each of the five hooks independently", () => {
+  test("resolves each of the six hooks independently", () => {
     const rewriteQuery = async () => "rewritten";
     const rerankContext = async () => ["chunk"];
+    const fallbackFn = () => "fallback guidance";
     const transformReply = () => "transformed";
-    const resolved = resolveBrainHooks({ rewriteQuery }, { rerankContext, transformReply });
+    const resolved = resolveBrainHooks(
+      { rewriteQuery },
+      { rerankContext, fallbackFn, transformReply },
+    );
     expect(resolved.rewriteQuery).toBe(rewriteQuery);
     expect(resolved.rerankContext).toBe(rerankContext);
+    expect(resolved.fallbackFn).toBe(fallbackFn);
     expect(resolved.transformReply).toBe(transformReply);
     expect(resolved.answerFn).toBeUndefined();
   });
@@ -854,6 +860,39 @@ describe("createInboundPipeline", () => {
       await handle(msg(), { reply });
 
       expect(captured?.system).toContain("second\n\nfirst");
+    });
+
+    test("fallbackFn injects guidance into the assembled system prompt when retrieval finds nothing", async () => {
+      let captured: AnswerFnInput | undefined;
+      const store = { query: async () => [] } satisfies Retriever;
+
+      const handle = createInboundPipeline(
+        {
+          client: {} as never,
+          store,
+          prompts: {
+            baseSystemRules: "rules",
+            publicPersona: "persona",
+            privatePersona: "private persona",
+          } as unknown as PromptLoader,
+        },
+        {
+          channel: "test-channel",
+          fallbackFn: () => "decline politely, this is outside scope",
+          answerFn: async (input) => {
+            captured = input;
+            return "ok";
+          },
+        },
+      );
+      const reply: InboundReplySender = {
+        sendAnswer: async () => undefined,
+        sendGateReply: async () => undefined,
+      };
+
+      await handle(msg(), { reply });
+
+      expect(captured?.system).toContain("decline politely, this is outside scope");
     });
 
     test("a throwing rewriteQuery is logged and retrieval falls back to the unmodified query", async () => {

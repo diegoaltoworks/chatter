@@ -237,6 +237,58 @@ see would silently un-drop them on its own error. Scope decisions belong in
 `bucketsFor`, which fails closed by design - use `rerankContext` only for
 relevance and ordering.
 
+### Handling empty retrieval (`fallbackFn`)
+
+`rewriteQuery` and `rerankContext` can still leave a turn with nothing to
+fold into the prompt - the query is genuinely out of scope, or a reranker
+filtered every candidate out. Left alone, that turn just gets an empty
+`Context:` section and the model is on its own to notice. `fallbackFn` is
+the deterministic seam for that case: it runs only when the chunks that
+would otherwise reach the prompt are empty, and its return value becomes its
+own system-prompt layer for that turn - it never touches any other
+completion's prompt.
+
+A worked example: a deployment wants two different behaviors for an
+empty-retrieval turn - a question close to what the knowledge base *should*
+cover gets a clearly-labelled guess, a question with no plausible connection
+to it gets a plain decline. Doing this with prompt text alone means writing
+the distinction into the base system rules and hoping the model reads it
+correctly for every single completion, whether or not retrieval was empty.
+`fallbackFn` moves the branch into code the two cases can be tested against
+directly:
+
+```ts
+const server = await createServer({
+  // ...
+  fallbackFn: ({ query, retrievedChunks }) => {
+    if (retrievedChunks.length > 0) {
+      // rerankContext filtered out low-confidence matches - some signal
+      // existed, so it's plausibly near the edge of what the bot knows.
+      return "No context passed the relevance bar. If you can offer a " +
+        "reasonable guess, label it clearly as a guess and say what you " +
+        "are unsure about. Otherwise, say you don't know.";
+    }
+    // store.query found nothing at all - genuinely out of scope.
+    return "No matching context exists for this question. Decline plainly " +
+      "and briefly; do not guess.";
+  },
+});
+```
+
+`retrievedChunks` is the signal that tells the two cases above apart: it is
+what `store.query` returned before `rerankContext` ran, so it stays
+non-empty when a reranker is what emptied the prompt's context, and is
+empty itself when the store found nothing at all. `fallbackFn` also
+receives `query`, `mode`, `buckets` and, where the surface knows one,
+`sender`.
+
+Consulted everywhere `bucketsFor` is, immediately after `rerankContext`. It
+fails open like the other retrieval hooks: a throw, rejection, or a
+non-string return value proceeds without fallback guidance rather than
+breaking the chat path. Leave it unset and an empty retrieval changes
+nothing about the assembled prompt - the same behavior as before this hook
+existed.
+
 ## Bringing your own brain (`answerFn`)
 
 Prompt shaping stops at the completion call. `answerFn` replaces the call
