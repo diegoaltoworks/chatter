@@ -4,7 +4,7 @@ import type { PromptLoader } from "../../core/prompts";
 import type { VectorStore } from "../../core/retrieval";
 import type { ChatterConfig, ServerDependencies } from "../../types";
 import { createSenderRegistry } from "../senders";
-import type { MatrixApi, MatrixEvent, MatrixSyncResponse } from "./api";
+import type { MatrixApi, MatrixEvent, MatrixInvitedRoom, MatrixSyncResponse } from "./api";
 import { createMatrixChannel, type MatrixChannelConfig } from "./channel";
 
 const ME = "@bot:example.org";
@@ -14,17 +14,26 @@ interface FakeApi extends MatrixApi {
   media: Array<{ roomId: string; payload: unknown }>;
   joins: string[];
   syncs: Array<string | undefined>;
+  signals: Array<AbortSignal | undefined>;
+  accountDataWrites: Array<{ userId: string; type: string; content: Record<string, unknown> }>;
 }
 
 /** A homeserver that serves one scripted batch of sync responses and then hangs — no network, no token. */
 function fakeApi(
   batches: MatrixSyncResponse[],
-  options: { whoamiFails?: boolean; accountData?: Record<string, unknown> } = {},
+  options: {
+    whoamiFails?: boolean;
+    /** The bot account's stored `m.direct` document, exactly as `GET /account_data/m.direct` returns it. */
+    accountData?: Record<string, unknown>;
+    accountDataWriteFails?: boolean;
+  } = {},
 ): FakeApi {
   const sent: FakeApi["sent"] = [];
   const media: FakeApi["media"] = [];
   const joins: FakeApi["joins"] = [];
   const syncs: FakeApi["syncs"] = [];
+  const signals: FakeApi["signals"] = [];
+  const accountDataWrites: FakeApi["accountDataWrites"] = [];
   let round = 0;
   let eventCounter = 0;
 
@@ -33,13 +42,16 @@ function fakeApi(
     media,
     joins,
     syncs,
+    signals,
+    accountDataWrites,
     call: async () => undefined as never,
     whoami: async () => {
       if (options.whoamiFails) throw new Error("M_UNKNOWN_TOKEN");
       return { userId: ME };
     },
-    sync: ({ since }) => {
+    sync: ({ since, signal }) => {
       syncs.push(since);
+      signals.push(signal);
       const batch = batches[round++];
       // Past the script, hold the request open like a real long poll instead
       // of resolving forever — a test that spun that loop would starve the
@@ -61,6 +73,10 @@ function fakeApi(
       joins.push(roomId);
     },
     getAccountData: async () => options.accountData as never,
+    setAccountData: async (userId, type, content) => {
+      if (options.accountDataWriteFails) throw new Error("M_FORBIDDEN");
+      accountDataWrites.push({ userId, type, content });
+    },
   };
 }
 
@@ -125,6 +141,50 @@ function syncWithRoomMessages(
     next_batch: "s1",
     rooms: { join: { [roomId]: { timeline: { events } } } },
     ...extra,
+  };
+}
+
+/**
+ * An invite exactly as `/sync` delivers one: stripped state events with no
+ * event id or timestamp, the room's creation and join rules, and the bot's
+ * own `m.room.member` carrying `is_direct` when the inviting client opened a
+ * DM. This is the only place a homeserver ever tells a bot a room is a DM.
+ */
+function invitedRoom(options: { inviter?: string; isDirect?: boolean } = {}): MatrixInvitedRoom {
+  const inviter = options.inviter ?? "@alice:example.org";
+  return {
+    invite_state: {
+      events: [
+        {
+          type: "m.room.create",
+          state_key: "",
+          sender: inviter,
+          content: { creator: inviter, room_version: "10" },
+        },
+        {
+          type: "m.room.join_rules",
+          state_key: "",
+          sender: inviter,
+          content: { join_rule: "invite" },
+        },
+        {
+          type: "m.room.member",
+          state_key: inviter,
+          sender: inviter,
+          content: { membership: "join", displayname: "Alice" },
+        },
+        {
+          type: "m.room.member",
+          state_key: ME,
+          sender: inviter,
+          content: {
+            membership: "invite",
+            displayname: "bot",
+            ...(options.isDirect ? { is_direct: true } : {}),
+          },
+        },
+      ],
+    },
   };
 }
 
@@ -217,7 +277,7 @@ describe("createMatrixChannel", () => {
 
   test("auto-joins an invited room", async () => {
     const { api } = await runChannel([
-      { next_batch: "s1", rooms: { invite: { "!invited:example.org": {} } } },
+      { next_batch: "s1", rooms: { invite: { "!invited:example.org": invitedRoom() } } },
     ]);
 
     expect(api.joins).toEqual(["!invited:example.org"]);
@@ -225,11 +285,164 @@ describe("createMatrixChannel", () => {
 
   test("autoJoin: false leaves invites alone", async () => {
     const { api } = await runChannel(
-      [{ next_batch: "s1", rooms: { invite: { "!invited:example.org": {} } } }],
+      [{ next_batch: "s1", rooms: { invite: { "!invited:example.org": invitedRoom() } } }],
       { autoJoin: false },
     );
 
     expect(api.joins).toEqual([]);
+  });
+
+  test("an is_direct invite makes the room a DM, answered without a mention", async () => {
+    const { api } = await runChannel([
+      {
+        next_batch: "s1",
+        rooms: { invite: { "!dm:example.org": invitedRoom({ isDirect: true }) } },
+      },
+      syncWithRoomMessages("!dm:example.org", [
+        roomEvent({ content: { msgtype: "m.text", body: "hi" } }),
+      ]),
+    ]);
+
+    expect(api.joins).toEqual(["!dm:example.org"]);
+    expect(api.sent).toHaveLength(1);
+    expect(api.sent[0]?.roomId).toBe("!dm:example.org");
+  });
+
+  test("an accepted DM invite is written to the bot's own m.direct, so a restart still knows", async () => {
+    const { api } = await runChannel([
+      {
+        next_batch: "s1",
+        rooms: { invite: { "!dm:example.org": invitedRoom({ isDirect: true }) } },
+      },
+    ]);
+
+    expect(api.accountDataWrites).toEqual([
+      {
+        userId: ME,
+        type: "m.direct",
+        content: { "@alice:example.org": ["!dm:example.org"] },
+      },
+    ]);
+  });
+
+  test("a DM room already in the bot's m.direct is not written again", async () => {
+    const api = fakeApi(
+      [
+        {
+          next_batch: "s1",
+          rooms: { invite: { "!dm:example.org": invitedRoom({ isDirect: true }) } },
+        },
+      ],
+      { accountData: { "@alice:example.org": ["!dm:example.org"] } },
+    );
+    const logger = silentLogger();
+    const channel = createMatrixChannel({
+      homeserverUrl: "https://example.org",
+      accessToken: "t",
+      api,
+      sleep: async () => undefined,
+      logger,
+    });
+
+    await channel.start(fakeDeps(logger));
+    await settle();
+    await channel.stop?.();
+
+    expect(api.accountDataWrites).toEqual([]);
+  });
+
+  test("a failed m.direct write is logged but the room is still a DM this session", async () => {
+    const api = fakeApi(
+      [
+        {
+          next_batch: "s1",
+          rooms: { invite: { "!dm:example.org": invitedRoom({ isDirect: true }) } },
+        },
+        syncWithRoomMessages("!dm:example.org", [
+          roomEvent({ content: { msgtype: "m.text", body: "hi" } }),
+        ]),
+      ],
+      { accountDataWriteFails: true },
+    );
+    const logger = silentLogger();
+    const channel = createMatrixChannel({
+      homeserverUrl: "https://example.org",
+      accessToken: "t",
+      api,
+      sleep: async () => undefined,
+      logger,
+    });
+
+    await channel.start(fakeDeps(logger));
+    await settle();
+    await channel.stop?.();
+
+    expect(api.sent).toHaveLength(1);
+    expect(logger.lines.some((line) => line.includes("could not record"))).toBe(true);
+  });
+
+  test("a plain (non-direct) invite stays a group, so an unaddressed message is ignored", async () => {
+    const { api } = await runChannel([
+      {
+        next_batch: "s1",
+        rooms: { invite: { "!room:example.org": invitedRoom() } },
+      },
+      syncWithRoomMessages("!room:example.org", [
+        roomEvent({ content: { msgtype: "m.text", body: "lunch?" } }),
+      ]),
+    ]);
+
+    expect(api.accountDataWrites).toEqual([]);
+    expect(api.sent).toEqual([]);
+  });
+
+  test("an invite outside allowedChats is left pending and logged once", async () => {
+    const { api, logger } = await runChannel(
+      [
+        { next_batch: "s1", rooms: { invite: { "!stranger:example.org": invitedRoom() } } },
+        { next_batch: "s2", rooms: { invite: { "!stranger:example.org": invitedRoom() } } },
+      ],
+      { allowedChats: ["!allowed:example.org"] },
+    );
+
+    expect(api.joins).toEqual([]);
+    expect(logger.lines.filter((line) => line.includes("left invite"))).toHaveLength(1);
+  });
+
+  test("an invite to an allowlisted room is still accepted", async () => {
+    const { api } = await runChannel(
+      [{ next_batch: "s1", rooms: { invite: { "!allowed:example.org": invitedRoom() } } }],
+      { allowedChats: ["!allowed:example.org"] },
+    );
+
+    expect(api.joins).toEqual(["!allowed:example.org"]);
+  });
+
+  test("an edit of an already-answered message is not answered again", async () => {
+    const { api, deps } = await runChannel([
+      syncWithRoomMessages("!room:example.org", [
+        roomEvent({
+          event_id: "$edit",
+          content: {
+            msgtype: "m.text",
+            body: "* @Bot hello there",
+            "m.mentions": { user_ids: [ME] },
+            "m.new_content": { msgtype: "m.text", body: "@Bot hello there" },
+            "m.relates_to": { rel_type: "m.replace", event_id: "$1" },
+          },
+        }),
+      ]),
+    ]);
+
+    expect(deps.answered).toEqual([]);
+    expect(api.sent).toEqual([]);
+  });
+
+  test("stop aborts the in-flight sync instead of waiting out its timeout", async () => {
+    const { api } = await runChannel([{ next_batch: "s1" }]);
+
+    expect(api.signals[0]).toBeDefined();
+    expect(api.signals[0]?.aborted).toBe(true);
   });
 
   test("mute/unmute acknowledgements are sent unthreaded", async () => {

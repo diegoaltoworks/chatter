@@ -32,6 +32,7 @@
 
 export {
   createMatrixApi,
+  DEFAULT_MAX_MEDIA_BYTES,
   type MatrixAccountDataEvent,
   type MatrixApi,
   type MatrixApiConfig,
@@ -42,6 +43,7 @@ export {
   type MatrixMediaKind,
   type MatrixMediaPayload,
   type MatrixRoomTimeline,
+  type MatrixStrippedStateEvent,
   type MatrixSyncResponse,
   redactToken,
 } from "./api";
@@ -53,13 +55,19 @@ export {
 } from "./handler";
 export { retryDelayMs, runMatrixSyncLoop, syncBackoffMs } from "./sync";
 export {
+  directInviteFrom,
+  directMappingFromEvents,
+  directMappingRooms,
   directRoomIds,
   isReplyToBot,
   MAX_TRACKED_SENT_EVENTS,
+  type MatrixDirectMapping,
   type MatrixIdentity,
   matrixSenderKey,
   mentionsBot,
   messageText,
   recordSentEventId,
   toChannelMessage,
+  toDirectMapping,
+  withDirectRoom,
 } from "./updates";

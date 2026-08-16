@@ -77,7 +77,7 @@ this v1; it would need an Olm/Megolm implementation (a real dependency, not a
 | `homeserverUrl` | *(required)* | The bot account's homeserver client-server API origin. |
 | `accessToken` | *(required)* | From a login call - see above. |
 | `name` | `"matrix"` | Channel and sender-registry name. Give each bot its own when running several in one process. |
-| `allowedChats` | `[]` (all) | Group room ids eligible for a reply. DMs always reply. |
+| `allowedChats` | `[]` (all) | Group room ids eligible for a reply. DMs always reply. When set, it also gates which invites `autoJoin` accepts. |
 | `answerFn` / `bucketsFor` / `rewriteQuery` / `rerankContext` / `transformReply` | `deps.config.*` | The brain, retrieval-scope, retrieval-shaping and outbound-reply hooks; fall back to the server's own. |
 | `model` | server default | Model override for this channel. |
 | `channelHint` | `"Channel: Matrix."` | Extra system-prompt section describing the delivery channel. |
@@ -86,7 +86,8 @@ this v1; it would need an Olm/Megolm implementation (a real dependency, not a
 | `muteRegex` / `unmuteRegex` | none | Group mute switch. Inert unless set - this package ships no bot personality. |
 | `muteReply` / `unmuteReply` | none | Acknowledgements. Unset = silent. |
 | `dmRateLimit` / `groupRateLimit` | 20/h, 30/h | Sliding-window reply budgets, per room. |
-| `autoJoin` | `true` | Auto-accept room invites so the bot can actually receive messages in a room it was just invited to. |
+| `autoJoin` | `true` | Auto-accept room invites so the bot can actually receive messages in a room it was just invited to. Gated by `allowedChats` when that is set - see [The invite surface](#the-invite-surface). |
+| `maxMediaBytes` | 25 MiB | Ceiling on the bytes `sendMedia` pulls from an https URL before uploading it. |
 | `syncTimeoutMs` | `30000` | How long the homeserver holds an idle `/sync` open. |
 | `initialSince` / `onSince` | none | `/sync` token resume point and observer - see [below](#sync-tokens-and-restarts). |
 | `fetch` | `globalThis.fetch` | For a proxy, or for tests. |
@@ -131,12 +132,48 @@ own.
 ## Direct messages vs. groups
 
 Matrix has no per-room "this is a DM" flag the way Telegram's `chat.type`
-does. This channel reads the account-data `m.direct` mapping the inviting
-client set - every homeserver-standard client maintains it - to tell a DM
-room from a group. A room absent from that mapping is treated as a group,
-the safer default when a client never populated it for some reason (an
-unaddressed message there is ignored rather than answered as if it were
-private).
+does. Two things tell this channel a room is a DM:
+
+1. **The invite.** A client opening a DM sets `is_direct: true` on the
+   `m.room.member` invite it sends the bot. That invite is the moment, and
+   the only moment, the homeserver says "this room is a direct message".
+   Accepting it marks the room a DM for the rest of the session.
+2. **The bot's own `m.direct` account data**, read once at `start()`, which
+   is how a restart still recognises a DM opened days ago.
+
+The link between the two matters: the inviting client records the DM in
+**its own** `m.direct`, never in the bot's, so nothing would populate the
+bot's copy on its own. This channel writes it: accepting an `is_direct`
+invite merges the room into the bot's `m.direct` document (a whole-document
+PUT, so existing entries are preserved) before the first message arrives.
+
+A room that arrives through neither path is treated as a group, the safer
+default (an unaddressed message there is ignored rather than answered as if
+it were private). If you join the bot to a DM room out of band, add the room
+to the bot account's `m.direct` yourself, or it will keep asking to be
+addressed.
+
+## The invite surface
+
+`autoJoin` (on by default) accepts room invites on the next sync after they
+arrive. An invite is an unauthenticated request: **any** user on **any**
+federated homeserver that can see the bot's user id can send one, and with
+`autoJoin` on and no allowlist the bot joins every one of them.
+
+- **With `allowedChats` set, invites are gated by it.** A room that is not on
+  the list is left pending (not joined, not rejected) and logged once, the
+  same way a non-allowlisted message is. The bot only ever ends up in rooms
+  you listed.
+- **With `allowedChats` empty (the default), every invite is accepted.** The
+  bot still will not *answer* an unaddressed group message, but it is in the
+  room and visible to whoever invited it.
+- **Gating invites also gates DMs**, because a DM room id is created by the
+  inviting client and cannot be known in advance. A deployment with
+  `allowedChats` set is a closed one: to take DMs there, leave `allowedChats`
+  empty and use `dmRateLimit`, a `personaResolver` or an `answerFn` to decide
+  who gets served.
+- **`autoJoin: false`** leaves every invite pending, for a deployment that
+  joins rooms by hand.
 
 ## Group behaviour
 
@@ -144,6 +181,10 @@ Identical policy to the [WhatsApp](./channels.md) and
 [Telegram](./telegram.md) channels, because all three run the same gates:
 
 - **DMs always answer.**
+- **An edit is not a new question.** A client edit arrives as a fresh event
+  relating to the original with `rel_type: "m.replace"`. This channel ignores
+  those, so correcting a typo in a message the bot already answered does not
+  produce a second answer.
 - **Groups answer only when addressed** - an intentional mention
   (`content["m.mentions"].user_ids`, the mechanism every current Matrix
   client sets, with a matrix.to pill in `formatted_body` as a fallback for a
@@ -152,7 +193,9 @@ Identical policy to the [WhatsApp](./channels.md) and
 - **`allowedChats`, when set, wins over everything.** A group not on the
   list is skipped, and its room id is logged once - Matrix room ids
   (`!opaque:server.tld`) are not something you can guess in advance; that log
-  line is how you learn what to add.
+  line is how you learn what to add. It gates invites too, so a bot with an
+  allowlist never joins a room outside it: see
+  [The invite surface](#the-invite-surface).
 - **Mute/unmute apply to groups only**, and only when you configure the
   patterns.
 
@@ -182,6 +225,14 @@ await deps.senders.sendReaction("matrix", roomId, messageRef, "👍");
 bare string is shorthand for an image). `messageRef` for `sendReaction` is
 the Matrix event id, which the channel puts on every `ChannelMessage`.
 
+A URL that is not `mxc://` is fetched by this process, so two limits apply:
+**https only** (`http:`, `file:`, `data:` and anything unparseable are
+rejected without a request), and **`maxMediaBytes`** (25 MiB by default),
+enforced on the declared `content-length` and again on the bytes actually
+streamed. Both reject before the upload. The fetch still goes out from
+wherever the server runs, so point it at content you control rather than at
+a URL a user supplied.
+
 Every send degrades to `false` rather than throwing when the channel is
 stopped or the API call fails - see
 [Server Setup](./server.md#sending-without-a-transport).
@@ -190,9 +241,8 @@ stopped or the API call fails - see
 
 `start()` resolves the bot's own identity (`whoami`) and then long-polls
 `/sync` in the background; `stop()` flips a flag the loop checks between
-requests - unlike the Telegram long poll there is no in-flight request to
-abort, so the current `/sync` call (already waiting on the homeserver) is
-left to return on its own `syncTimeoutMs`.
+requests and aborts the in-flight request, so shutdown does not wait out the
+`syncTimeoutMs` an idle `/sync` is parked on.
 
 - **Failures back off exponentially** (2s, 4s, 8s ... capped at a minute),
   and an `M_LIMIT_EXCEEDED` rate-limit response's own `retry_after_ms` is
@@ -202,7 +252,10 @@ left to return on its own `syncTimeoutMs`.
   rest of the server still boots.
 - **One bad batch never wedges the loop**: the `since` token advances before
   the batch is handled, so a batch whose handling throws is logged and
-  skipped rather than reprocessed forever.
+  skipped rather than reprocessed forever. It advances only for a batch the
+  loop is going to handle, though - a `stop()` that lands while a batch is in
+  flight leaves that batch's token unacknowledged, so a host persisting
+  `onSince` resumes at it rather than past messages nobody answered.
 - **A limited timeline is not a gap to backfill.** When a room has more
   activity than fits in one `/sync` response, the homeserver marks its
   timeline `limited` and only sends the tail. This channel only cares about
@@ -239,8 +292,12 @@ of this channel per bot access token.
 Nothing here needs a real homeserver: `createMatrixChannel` takes an `api` (or
 a `fetch`) override, and `src/channels/matrix/*.test.ts` drives the full
 inbound path against a fake client-server API - mention gating, mute/unmute,
-allowlists, invite auto-join, direct-message detection, and the sender
-registry. Copy that shape for your own tests rather than pointing a test at a
+allowlists, invite auto-join and its allowlist gate, `is_direct` DM detection
+and the `m.direct` write behind it, edit filtering, and the sender registry.
+Its fixtures are the shapes a homeserver actually sends (an invite is stripped
+state events with no event ids, `m.direct` is the account-data document
+verbatim), so a test that passes there is not passing against an invented
+payload. Copy that shape for your own tests rather than pointing a test at a
 live homeserver.
 
 ## Related

@@ -24,7 +24,7 @@ import { createInboundPipeline } from "../pipeline";
 import { createMatrixApi, type MatrixApi } from "./api";
 import { createMatrixSender, createMatrixSyncHandler } from "./handler";
 import { runMatrixSyncLoop } from "./sync";
-import { directRoomIds } from "./updates";
+import { type MatrixDirectMapping, toDirectMapping } from "./updates";
 
 /** Long-poll hold time. The homeserver holds the request open this long when nothing new happened, so a sync is one request per 30s idle — not a busy loop. */
 const DEFAULT_SYNC_TIMEOUT_MS = 30_000;
@@ -89,6 +89,8 @@ export interface MatrixChannelConfig {
   onSince?: (since: string) => void;
   /** Overridable for tests and for hosts routing through a proxy; defaults to `globalThis.fetch`. */
   fetch?: typeof fetch;
+  /** Cap on the bytes a `sendMedia` https URL may pull before upload. @default 25 MiB */
+  maxMediaBytes?: number;
   /** Overridable for tests, which fake the client-server API instead of calling it; defaults to a `fetch` client over {@link MatrixChannelConfig.homeserverUrl}/{@link MatrixChannelConfig.accessToken}. */
   api?: MatrixApi;
   /** Overridable for tests; defaults to a `setTimeout`-based sleep. */
@@ -113,6 +115,10 @@ export function createMatrixChannel(config: MatrixChannelConfig): Channel {
 
   let stopped = false;
   let registered = false;
+  // Cuts the in-flight `/sync` on stop(): without it, teardown would block
+  // for up to `syncTimeoutMs` waiting for a long poll whose result is
+  // already unwanted.
+  let abort: AbortController | undefined;
   let senders: { unregister(name: string): void } | undefined;
   // This session's own sent event ids — shared between the sync handler
   // (reply-to-bot detection) and the registered sender (a scheduler/flow
@@ -129,6 +135,7 @@ export function createMatrixChannel(config: MatrixChannelConfig): Channel {
           homeserverUrl: config.homeserverUrl,
           accessToken: config.accessToken,
           fetch: config.fetch,
+          maxMediaBytes: config.maxMediaBytes,
         });
 
       // Resolved eagerly, before returning: the bot's own user id is what
@@ -144,13 +151,15 @@ export function createMatrixChannel(config: MatrixChannelConfig): Channel {
       // `/sync` response — an incremental sync (resuming from
       // `initialSince`) only repeats an account-data event when it actually
       // changes, so without this every already-known DM would need a fresh
-      // `m.direct` write before this process would recognise it again.
-      // Best-effort: a fetch failure just means DM detection lags until the
-      // next `m.direct` change reaches `/sync`, not a broken start().
-      let initialDirectRooms: Set<string> | undefined;
+      // `m.direct` write before this process would recognise it again. What
+      // makes this mapping non-empty in the first place is the handler's own
+      // write when it accepts an `is_direct` invite (see `./handler`).
+      // Best-effort: a fetch failure just means DM detection starts from the
+      // invites this session sees, not a broken start().
+      let initialDirect: MatrixDirectMapping | undefined;
       try {
         const direct = await api.getAccountData<Record<string, unknown>>(me.userId, "m.direct");
-        if (direct) initialDirectRooms = directRoomIds([{ type: "m.direct", content: direct }]);
+        if (direct) initialDirect = toDirectMapping(direct);
       } catch (error) {
         log.warn(`${label}: could not load m.direct account data at start:`, error);
       }
@@ -193,20 +202,21 @@ export function createMatrixChannel(config: MatrixChannelConfig): Channel {
         allowedChats,
         sentEventIds,
         autoJoin: config.autoJoin,
-        initialDirectRooms,
+        initialDirect,
         logger: log,
         label,
       });
 
+      abort = new AbortController();
+      const signal = abort.signal;
+
       // Not awaited: `start` must return once the transport is initiated,
-      // not once syncing ends (which is at shutdown). Unlike the Telegram
-      // long poll, there is no AbortController here — `/sync` has no
-      // in-flight request to cut short quickly: `stop()` just flips
-      // `stopped`, and the current sync call (already waiting on the
-      // homeserver) is left to return on its own timeout, same as a sync
-      // that happened to be idle when shutdown began.
+      // not once syncing ends (which is at shutdown). `stop()` flips
+      // `stopped` and aborts `signal`, so an idle `/sync` already parked on
+      // the homeserver for up to `syncTimeoutMs` is cut immediately instead
+      // of holding shutdown open until it times out on its own.
       void runMatrixSyncLoop({
-        sync: (since) => api.sync({ since, timeoutMs: syncTimeoutMs }),
+        sync: (since) => api.sync({ since, timeoutMs: syncTimeoutMs, signal }),
         handleSync,
         isStopped: () => stopped,
         sleep,
@@ -220,6 +230,7 @@ export function createMatrixChannel(config: MatrixChannelConfig): Channel {
     },
     stop() {
       stopped = true;
+      abort?.abort();
       if (registered) {
         senders?.unregister(channelName);
         registered = false;

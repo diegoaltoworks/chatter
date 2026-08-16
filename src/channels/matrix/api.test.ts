@@ -284,6 +284,96 @@ describe("createMatrixApi", () => {
     expect(fetchCount).toBe(3);
   });
 
+  test("sendMedia refuses a non-https url instead of fetching it", async () => {
+    const { doFetch, calls } = fakeFetch([{ body: { event_id: "$never" } }]);
+    const api = createMatrixApi({
+      homeserverUrl: "https://example.org",
+      accessToken: "tok",
+      fetch: doFetch,
+    });
+
+    for (const url of [
+      "http://cdn.example/photo.jpg",
+      "file:///etc/passwd",
+      "data:image/png;base64,AAAA",
+      "not a url",
+    ]) {
+      await expect(api.sendMedia("!room:example.org", url)).rejects.toThrow(TypeError);
+    }
+    expect(calls).toEqual([]);
+  });
+
+  test("sendMedia refuses a media source whose content-length is over the cap, before reading it", async () => {
+    let fetched = 0;
+    const doFetch = (async () => {
+      fetched += 1;
+      return new Response(new Uint8Array([1, 2, 3]), {
+        headers: { "content-type": "image/jpeg", "content-length": "999999" },
+      });
+    }) as unknown as typeof fetch;
+    const api = createMatrixApi({
+      homeserverUrl: "https://example.org",
+      accessToken: "tok",
+      fetch: doFetch,
+      maxMediaBytes: 1024,
+    });
+
+    await expect(
+      api.sendMedia("!room:example.org", "https://cdn.example/huge.jpg"),
+    ).rejects.toThrow(/over the 1024 byte cap/);
+    expect(fetched).toBe(1);
+  });
+
+  test("sendMedia caps a body that streams past the limit without declaring its size", async () => {
+    const doFetch = (async () => {
+      const stream = new ReadableStream<Uint8Array>({
+        start(controller) {
+          controller.enqueue(new Uint8Array(600));
+          controller.enqueue(new Uint8Array(600));
+          controller.close();
+        },
+      });
+      return new Response(stream, { headers: { "content-type": "image/jpeg" } });
+    }) as unknown as typeof fetch;
+    const api = createMatrixApi({
+      homeserverUrl: "https://example.org",
+      accessToken: "tok",
+      fetch: doFetch,
+      maxMediaBytes: 1024,
+    });
+
+    await expect(
+      api.sendMedia("!room:example.org", "https://cdn.example/chunked.jpg"),
+    ).rejects.toThrow(/exceeds the 1024 byte cap/);
+  });
+
+  test("sendMedia uploads a source that fits under the cap", async () => {
+    const doFetch = (async (url: string | URL) => {
+      const href = String(url);
+      if (href === "https://cdn.example/small.jpg") {
+        return new Response(new Uint8Array(512), { headers: { "content-type": "image/jpeg" } });
+      }
+      if (href.includes("/_matrix/media/v3/upload")) {
+        return new Response(JSON.stringify({ content_uri: "mxc://example.org/uploaded" }), {
+          headers: { "content-type": "application/json" },
+        });
+      }
+      return new Response(JSON.stringify({ event_id: "$m3" }), {
+        headers: { "content-type": "application/json" },
+      });
+    }) as unknown as typeof fetch;
+    const api = createMatrixApi({
+      homeserverUrl: "https://example.org",
+      accessToken: "tok",
+      fetch: doFetch,
+      maxMediaBytes: 1024,
+    });
+
+    await expect(
+      api.sendMedia("!room:example.org", "https://cdn.example/small.jpg"),
+    ).resolves.toEqual({ eventId: "$m3" });
+  });
+
   test("sendMedia throws a TypeError on a payload with no url, so the registry reports false", async () => {
     const api = createMatrixApi({
       homeserverUrl: "https://example.org",
@@ -338,6 +428,24 @@ describe("createMatrixApi", () => {
       });
 
       await expect(api.getAccountData("@bot:example.org", "m.direct")).resolves.toBeUndefined();
+    });
+
+    test("setAccountData PUTs the whole document back", async () => {
+      const { doFetch, calls } = fakeFetch([{ body: {} }]);
+      const api = createMatrixApi({
+        homeserverUrl: "https://example.org",
+        accessToken: "tok",
+        fetch: doFetch,
+      });
+
+      await api.setAccountData("@bot:example.org", "m.direct", {
+        "@alice:example.org": ["!dm:example.org"],
+      });
+      expect(calls[0]?.method).toBe("PUT");
+      expect(calls[0]?.url).toBe(
+        "https://example.org/_matrix/client/v3/user/%40bot%3Aexample.org/account_data/m.direct",
+      );
+      expect(calls[0]?.body).toEqual({ "@alice:example.org": ["!dm:example.org"] });
     });
 
     test("still rejects on a different error", async () => {

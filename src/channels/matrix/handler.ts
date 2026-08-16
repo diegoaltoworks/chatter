@@ -12,11 +12,15 @@ import type { InboundPipeline, InboundReplySender } from "../pipeline";
 import type { ChannelSender } from "../senders";
 import type { MatrixApi, MatrixSyncResponse } from "./api";
 import {
-  directRoomIds,
+  directInviteFrom,
+  directMappingFromEvents,
+  directMappingRooms,
+  type MatrixDirectMapping,
   type MatrixIdentity,
   matrixSenderKey,
   recordSentEventId,
   toChannelMessage,
+  withDirectRoom,
 } from "./updates";
 
 async function sendText(
@@ -49,17 +53,24 @@ export interface MatrixSyncHandlerDeps {
    * pipeline turn (a scheduler, a flow) is still recognised.
    */
   sentEventIds: Set<string>;
-  /** Auto-accept room invites so the bot can actually receive messages there. @default true */
+  /**
+   * Auto-accept room invites so the bot can actually receive messages there.
+   * Gated by {@link MatrixSyncHandlerDeps.allowedChats} when that is set:
+   * an invite is an unauthenticated request from any user on any federated
+   * homeserver, so a configured allowlist governs which rooms the bot will
+   * join, not just which ones it will answer in.
+   * @default true
+   */
   autoJoin?: boolean;
   /**
-   * The DM room set as of `start()` (see `./channel`'s upfront
-   * `getAccountData("m.direct")` fetch) — seeded here because an initial
-   * `/sync` response's `account_data` isn't guaranteed to repeat `m.direct`
-   * and a resumed sync (with `initialSince`) never carries it again unless
-   * it changes, so without this a restart would treat every known DM as an
-   * addressing-required group until the user's `m.direct` next changes.
+   * The bot's own `m.direct` mapping as of `start()` (see `./channel`'s
+   * upfront `getAccountData("m.direct")` fetch), seeded here because an
+   * initial `/sync` response's `account_data` isn't guaranteed to repeat
+   * `m.direct` and a resumed sync (with `initialSince`) never carries it
+   * again unless it changes, so without this a restart would treat every
+   * known DM as an addressing-required group until it next changes.
    */
-  initialDirectRooms?: ReadonlySet<string>;
+  initialDirect?: MatrixDirectMapping;
   logger: Logger;
   /** Log-line prefix, e.g. `Matrix[@bot:example.org]`. */
   label: string;
@@ -78,7 +89,30 @@ export function createMatrixSyncHandler(
   const { api, me, pipeline, allowedChats, sentEventIds, logger, label } = deps;
   const autoJoin = deps.autoJoin ?? true;
   const loggedUnallowedChats = new Set<string>();
-  let directRooms = new Set<string>(deps.initialDirectRooms ?? []);
+  const loggedDeclinedInvites = new Set<string>();
+  let directMapping: MatrixDirectMapping = { ...(deps.initialDirect ?? {}) };
+  let directRooms = directMappingRooms(directMapping);
+
+  /**
+   * Records a room the inviting client told us is a DM. The bot's own
+   * `m.direct` is what DM detection reads at the next `start()`, and nothing
+   * else ever writes it: the inviting client records the DM in its own
+   * account data, not the bot's. Without this write every DM would come back
+   * from a restart classified as a group, silently needing a mention.
+   */
+  async function rememberDirectRoom(peer: string, roomId: string): Promise<void> {
+    directRooms.add(roomId);
+    const merged = withDirectRoom(directMapping, peer, roomId);
+    if (!merged) return;
+    directMapping = merged;
+    try {
+      await api.setAccountData(me.userId, "m.direct", directMapping);
+    } catch (error) {
+      // Best effort: this session already treats the room as a DM in memory,
+      // so a failed write only costs the next restart its head start.
+      logger.warn(`${label}: could not record ${roomId} in m.direct:`, error);
+    }
+  }
 
   return async function handleSync(response) {
     // Only overwrite the known direct-message rooms when this batch actually
@@ -86,18 +120,33 @@ export function createMatrixSyncHandler(
     // push-rules update, say) has no `m.direct` entry, and treating its
     // *absence* as "no direct rooms" would wipe every DM this session has
     // already learned about back to "needs addressing".
-    if (response.account_data?.events?.some((event) => event.type === "m.direct")) {
-      directRooms = directRoomIds(response.account_data.events);
+    const syncedDirect = directMappingFromEvents(response.account_data?.events ?? []);
+    if (syncedDirect) {
+      directMapping = syncedDirect;
+      directRooms = directMappingRooms(directMapping);
     }
 
     if (autoJoin) {
-      for (const roomId of Object.keys(response.rooms?.invite ?? {})) {
+      for (const [roomId, room] of Object.entries(response.rooms?.invite ?? {})) {
+        // An allowlist is the operator's list of rooms this bot belongs in.
+        // Joining anything else on a stranger's invite puts the bot in rooms
+        // it will then refuse to speak in, visible to whoever invited it.
+        if (allowedChats.length > 0 && !allowedChats.includes(roomId)) {
+          if (!loggedDeclinedInvites.has(roomId)) {
+            loggedDeclinedInvites.add(roomId);
+            logger.warn(`${label}: left invite to ${roomId} pending - not in allowedChats`);
+          }
+          continue;
+        }
+        const directInviter = directInviteFrom(room, me);
         try {
           await api.joinRoom(roomId);
           logger.info(`${label}: joined ${roomId} (accepted invite)`);
         } catch (error) {
           logger.warn(`${label}: failed to join ${roomId}:`, error);
+          continue;
         }
+        if (directInviter) await rememberDirectRoom(directInviter, roomId);
       }
     }
 

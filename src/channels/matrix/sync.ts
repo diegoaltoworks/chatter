@@ -57,7 +57,10 @@ export interface MatrixSyncLoopDeps {
  * The token advances BEFORE the batch is handled, matching the Telegram
  * poll loop's offset-first ordering: a handler that throws on one bad
  * batch must not make the homeserver redeliver it forever, which would
- * wedge the loop on a single poison event and starve every later one.
+ * wedge the loop on a single poison event and starve every later one. It
+ * advances only for a batch this loop is actually going to handle, though:
+ * a stop that lands between the sync and the handler leaves the token where
+ * it was, so a restart resumes at the unhandled batch rather than past it.
  */
 export async function runMatrixSyncLoop(deps: MatrixSyncLoopDeps): Promise<string | undefined> {
   const logger = deps.logger ?? createConsoleLogger();
@@ -81,9 +84,12 @@ export async function runMatrixSyncLoop(deps: MatrixSyncLoopDeps): Promise<strin
     }
 
     failures = 0;
+    // Before the token moves: a batch this loop is not going to handle must
+    // stay unacknowledged, or a host persisting `onSince` would resume after
+    // messages nobody ever answered.
+    if (deps.isStopped()) break;
     since = response.next_batch;
     deps.onSince?.(since);
-    if (deps.isStopped()) break;
     try {
       await deps.handleSync(response);
     } catch (error) {
