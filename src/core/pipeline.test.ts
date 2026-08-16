@@ -8,7 +8,7 @@
 import { describe, expect, test } from "bun:test";
 import { type PipelineMessage, prepareChat } from "./pipeline";
 import type { PromptLoader } from "./prompts";
-import type { VectorStore } from "./retrieval";
+import type { Retriever } from "./retrieval";
 
 interface QueryCall {
   query: string;
@@ -24,7 +24,7 @@ function createFakes() {
       queries.push({ query, topK, buckets });
       return ["some context"];
     },
-  } as unknown as VectorStore;
+  } satisfies Retriever;
 
   const prompts = {
     baseSystemRules: "rules",
@@ -307,7 +307,7 @@ describe("prepareChat", () => {
       const { prompts } = createFakes();
       const store = {
         query: async () => ["first chunk", "second chunk"],
-      } as unknown as VectorStore;
+      } satisfies Retriever;
 
       const result = await prepareChat({
         store,

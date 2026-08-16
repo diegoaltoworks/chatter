@@ -373,3 +373,67 @@ describe("createServer security headers and body limits", () => {
     expect((await res.json()).error).toContain("too large");
   });
 });
+
+describe("createServer retriever", () => {
+  test("fails fast, naming the missing config, when neither database nor retriever is set", async () => {
+    const { database: _database, ...withoutDatabase } = baseConfig();
+
+    await expect(createServer(withoutDatabase)).rejects.toThrow(
+      /config\.database is required unless config\.retriever is set/,
+    );
+  });
+
+  test("a custom retriever skips the default VectorStore and libsql connection entirely", async () => {
+    const { database: _database, ...withoutDatabase } = baseConfig();
+    let built = false;
+    const retriever = {
+      build: async () => {
+        built = true;
+      },
+      query: async () => ["custom context"],
+    };
+
+    let receivedDb: unknown = "not set";
+    let receivedStore: unknown;
+    await createServer({
+      ...withoutDatabase,
+      retriever,
+      customRoutes: (_app, deps) => {
+        receivedDb = deps.db;
+        receivedStore = deps.store;
+      },
+    });
+
+    // build() ran before the app was handed back, deps.store is the exact
+    // retriever instance (not a VectorStore wrapping it), and deps.db was
+    // never opened - no config.database means no @libsql/client connection.
+    expect(built).toBe(true);
+    expect(receivedStore).toBe(retriever);
+    expect(receivedDb).toBeUndefined();
+  });
+
+  test("a retriever without build() boots fine - build is optional on the interface", async () => {
+    const { database: _database, ...withoutDatabase } = baseConfig();
+    const retriever = { query: async () => [] };
+
+    await expect(createServer({ ...withoutDatabase, retriever })).resolves.toBeDefined();
+  });
+
+  test("database and retriever together: deps.db opens for channels/customRoutes, deps.store is the retriever", async () => {
+    const retriever = { query: async () => ["custom context"] };
+
+    let receivedDb: unknown;
+    let receivedStore: unknown;
+    await createServer({
+      ...baseConfig(),
+      retriever,
+      customRoutes: (_app, deps) => {
+        receivedDb = deps.db;
+        receivedStore = deps.store;
+      },
+    });
+
+    expect(receivedStore).toBe(retriever);
+    expect(receivedDb).toBeDefined();
+  });
+});

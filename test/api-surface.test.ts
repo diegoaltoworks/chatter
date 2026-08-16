@@ -26,14 +26,22 @@ import type {
   BrainHooks,
   BucketsFor,
   Channel,
+  Embedder,
   Logger,
   PipelineMessage,
   RerankContext,
+  Retriever,
   RewriteQuery,
   ServerDependencies,
   TransformReply,
 } from "../src";
-import { createConsoleLogger, prepareChat, resolveBuckets } from "../src";
+import {
+  createConsoleLogger,
+  createOpenAIEmbedder,
+  prepareChat,
+  resolveBuckets,
+  VectorStore,
+} from "../src";
 import {
   type ChannelMessage,
   createInboundPipeline,
@@ -72,6 +80,33 @@ describe("API surface", () => {
     const deps = fakeDeps();
     expect(deps.senders.available("anything")).toBe(false);
     expect(deps.db).toBeDefined();
+  });
+
+  test("ServerDependencies.store is the Retriever interface, satisfiable by a plain object literal", () => {
+    const retriever: Retriever = {
+      query: async (_query, _k, allowedBuckets) => allowedBuckets,
+    };
+    const deps: ServerDependencies = { ...fakeDeps(), store: retriever };
+    expect(deps.store).toBe(retriever);
+  });
+
+  test("ChatterConfig.retriever accepts the same Retriever shape", () => {
+    const retriever: Retriever = {
+      build: async () => {},
+      query: async () => [],
+    };
+    const config: Pick<ChatterConfig, "retriever"> = { retriever };
+    expect(config.retriever).toBe(retriever);
+  });
+
+  test("VectorStore takes an injected Embedder and an existing libsql client (docs/server.md's snippet)", () => {
+    const embed: Embedder = async (input) => input.map(() => [0]);
+    const db = {} as ServerDependencies["db"];
+    const store = new VectorStore(createOpenAIEmbedder({} as never), { databaseClient: db });
+    const custom = new VectorStore(embed, { databaseClient: db, knowledgeDir: "./knowledge" });
+
+    expect(store.db).toBe(db);
+    expect(custom.db).toBe(db);
   });
 
   test("ServerDependencies.logger is a leveled Logger, satisfiable by a custom implementation", () => {

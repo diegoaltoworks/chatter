@@ -178,6 +178,9 @@
     "@hono/node-server": {
       "optional": true
     },
+    "@libsql/client": {
+      "optional": true
+    },
     "@modelcontextprotocol/sdk": {
       "optional": true
     },

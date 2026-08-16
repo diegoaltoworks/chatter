@@ -14,7 +14,7 @@ import type { BucketsFor } from "./core/buckets";
 import type { Logger, LogLevel } from "./core/logger";
 import type { RerankContext, RewriteQuery } from "./core/pipeline";
 import type { PromptLoader } from "./core/prompts";
-import type { VectorStore } from "./core/retrieval";
+import type { Retriever } from "./core/retrieval";
 
 export type { Logger, LogLevel } from "./core/logger";
 
@@ -182,12 +182,31 @@ export interface ChatterConfig extends BrainHooks {
   };
 
   // Database
-  database: {
+  /**
+   * Turso/libsql credentials for the default knowledge store. Required
+   * unless `retriever` is set - the default `VectorStore` has nowhere else
+   * to keep chunks and embeddings. A server started with neither fails fast
+   * at startup naming the missing one, rather than throwing on the first
+   * chat request.
+   */
+  database?: {
     /** Turso database URL */
     url: string;
     /** Turso auth token */
     authToken: string;
   };
+
+  /**
+   * Retrieval backend for `prepareChat`, replacing the default `VectorStore`
+   * (brute-force cosine similarity over embeddings in Turso). Set this to
+   * scale past the default's storage or search strategy (pgvector,
+   * sqlite-vec, Qdrant, a managed vector database) without touching any chat
+   * surface. See
+   * [patterns/adding-a-retriever.md](../docs/patterns/adding-a-retriever.md).
+   *
+   * Unset: `database` is required, and the built-in `VectorStore` is used.
+   */
+  retriever?: Retriever;
 
   // Auth
   auth?: {
@@ -377,12 +396,18 @@ export type CustomRoutes =
 export interface ServerDependencies {
   /** OpenAI client instance */
   client: OpenAI;
-  /** Vector store instance */
-  store: VectorStore;
+  /** The retrieval backend `prepareChat` queries - the default `VectorStore`, or `config.retriever` when set. */
+  store: Retriever;
   /**
-   * The libsql database client, shared with the vector store. Custom routes
-   * should use this handle rather than opening their own connection to the
-   * same database.
+   * The libsql database client, shared with the default vector store when
+   * one was built. Custom routes should use this handle rather than opening
+   * their own connection to the same database.
+   *
+   * Only actually present when `config.database` was set - the type stays
+   * required for now (narrowing it to reflect that is deferred, tracked as a
+   * follow-up ticket), so a host that configures `config.retriever` with no
+   * `config.database` and then reads `deps.db` gets `undefined` at runtime
+   * despite the type.
    */
   db: LibsqlClient;
   /** Chatter configuration */

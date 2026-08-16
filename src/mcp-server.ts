@@ -15,7 +15,7 @@ import { resolveLogger } from "./core/logger";
 import { lastUserMessage } from "./core/messages";
 import { prepareChat } from "./core/pipeline";
 import { PromptLoader } from "./core/prompts";
-import { VectorStore } from "./core/retrieval";
+import type { Retriever } from "./core/retrieval";
 import { getOrGenerateConversationId } from "./mcp-server/conversation-id";
 import { calculateCost } from "./mcp-server/cost-tracker";
 import { createLogger } from "./mcp-server/logger";
@@ -102,14 +102,33 @@ export async function createMCPServer(config: MCPServerOptions) {
   });
   const model = config.openai.model || DEFAULT_MODEL;
 
-  // Build vector store
-  const store = new VectorStore(client, {
-    databaseUrl: config.database.url,
-    databaseAuthToken: config.database.authToken,
-    knowledgeDir,
-    logger: log,
-  });
-  await store.build();
+  // Build the retrieval backend: a caller-supplied Retriever (see
+  // `config.retriever` in ./types), or the default VectorStore backed by
+  // libsql + OpenAI embeddings. `@libsql/client` is only imported along the
+  // default path, so a host supplying `config.retriever` with no
+  // `config.database` never needs it installed.
+  let store: Retriever;
+  if (config.retriever) {
+    store = config.retriever;
+  } else {
+    if (!config.database) {
+      throw new Error(
+        "config.database is required unless config.retriever is set - Chatter's default " +
+          "knowledge store (VectorStore) needs a Turso/libsql connection. Set config.database, " +
+          "or supply config.retriever to use your own retrieval backend instead.",
+      );
+    }
+    const { VectorStore, createOpenAIEmbedder, openLibsqlClient } = await import(
+      "./core/retrieval"
+    );
+    const db = await openLibsqlClient(config.database);
+    store = new VectorStore(createOpenAIEmbedder(client), {
+      databaseClient: db,
+      knowledgeDir,
+      logger: log,
+    });
+  }
+  await store.build?.();
   log.info("✅ Knowledge base ready");
 
   // Create prompt loader

@@ -50,7 +50,7 @@ import type { WAMessage, WASocket } from "@whiskeysockets/baileys";
 import type OpenAI from "openai";
 import { createConsoleLogger, type Logger } from "../../core/logger";
 import type { PromptLoader } from "../../core/prompts";
-import type { VectorStore } from "../../core/retrieval";
+import type { Retriever } from "../../core/retrieval";
 import type { HistoryCompactionOptions } from "../../history/compaction";
 import type { HistoryStore } from "../../history/types";
 import type { BrainHooks } from "../../types";
@@ -300,7 +300,7 @@ export function resolveWaMessage(
 
 export interface WhatsAppInboundConfig extends BrainHooks {
   client: OpenAI;
-  store: VectorStore;
+  store: Retriever;
   prompts: PromptLoader;
   /**
    * Fallback source for the brain hooks above, each consulted only when this

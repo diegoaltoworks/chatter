@@ -20,7 +20,7 @@ import { resolveBuckets } from "../core/buckets";
 import type { Logger } from "../core/logger";
 import { type PipelineMessage, type PipelineMode, prepareChat } from "../core/pipeline";
 import type { PromptLoader } from "../core/prompts";
-import type { VectorStore } from "../core/retrieval";
+import type { Retriever } from "../core/retrieval";
 import type { HistoryCompactionOptions } from "../history/compaction";
 import { createHistoryCompactor } from "../history/compaction";
 import type { HistoryStore } from "../history/types";
@@ -61,7 +61,7 @@ export interface InboundReplySender {
 
 export interface InboundPipelineDeps {
   client: OpenAI;
-  store: VectorStore;
+  store: Retriever;
   prompts: PromptLoader;
 }
 

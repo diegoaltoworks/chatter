@@ -100,7 +100,7 @@ transport:
 import { prepareChat, completeOnce, completeStream } from "@diegoaltoworks/chatter";
 
 const { system, messages } = await prepareChat({
-  store,           // VectorStore
+  store,           // Retriever (a VectorStore, or your own implementation)
   prompts,         // PromptLoader
   mode: "public",  // or "private"
   messages: [{ role: "user", content: "Hello!" }],

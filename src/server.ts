@@ -5,7 +5,7 @@
  */
 
 import { relative } from "node:path";
-import { createClient } from "@libsql/client";
+import type { Client as LibsqlClient } from "@libsql/client";
 import { Hono } from "hono";
 import OpenAI from "openai";
 import { ApiKeyManager } from "./auth/apikeys";
@@ -13,7 +13,7 @@ import type { Channel } from "./channels";
 import { createSenderRegistry } from "./channels";
 import { resolveLogger } from "./core/logger";
 import { PromptLoader } from "./core/prompts";
-import { VectorStore } from "./core/retrieval";
+import type { Retriever } from "./core/retrieval";
 import { loadServeStatic, type ServeStaticFn } from "./core/serve-static";
 import { resolveStatic } from "./core/widgets";
 import { cors } from "./middleware/cors";
@@ -70,20 +70,40 @@ export async function createServer(config: ChatterConfig): Promise<ChatterApp> {
     apiKey: config.openai.apiKey,
   });
 
-  // Open the single database connection shared by the vector store, the route
-  // factories and anything mounted through customRoutes or channels.
-  const db = createClient({
-    url: config.database.url,
-    authToken: config.database.authToken,
-  });
+  // Open the single database connection shared by the default vector store,
+  // the route factories and anything mounted through customRoutes or
+  // channels - only when something actually needs one. `@libsql/client` is
+  // a required peer along this path alone: a host that supplies
+  // `config.retriever` and never sets `config.database` never imports it, so
+  // that host can install Chatter without libsql at all.
+  let db: LibsqlClient | undefined;
+  if (config.database) {
+    const { openLibsqlClient } = await import("./core/retrieval");
+    db = await openLibsqlClient(config.database);
+  }
 
-  // Build vector store
-  const store = new VectorStore(client, {
-    databaseClient: db,
-    knowledgeDir,
-    logger,
-  });
-  await store.build();
+  // Build the retrieval backend: a caller-supplied Retriever (see
+  // `config.retriever` in ./types), or the default VectorStore backed by
+  // libsql + OpenAI embeddings.
+  let store: Retriever;
+  if (config.retriever) {
+    store = config.retriever;
+  } else {
+    if (!db) {
+      throw new Error(
+        "config.database is required unless config.retriever is set - Chatter's default " +
+          "knowledge store (VectorStore) needs a Turso/libsql connection. Set config.database, " +
+          "or supply config.retriever to use your own retrieval backend instead.",
+      );
+    }
+    const { VectorStore, createOpenAIEmbedder } = await import("./core/retrieval");
+    store = new VectorStore(createOpenAIEmbedder(client), {
+      databaseClient: db,
+      knowledgeDir,
+      logger,
+    });
+  }
+  await store.build?.();
   logger.info("✅ Knowledge base ready");
 
   // Create prompt loader
@@ -202,7 +222,10 @@ export async function createServer(config: ChatterConfig): Promise<ChatterApp> {
   const deps: ServerDependencies = {
     client,
     store,
-    db,
+    // See ServerDependencies.db's doc comment: undefined here (cast to
+    // satisfy the still-required type) exactly when config.database was
+    // never set - i.e. a config.retriever host with nothing else needing db.
+    db: db as LibsqlClient,
     config,
     prompts,
     apiKeyManager,

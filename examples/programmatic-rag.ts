@@ -14,8 +14,9 @@
  *   Run: bun run examples/programmatic-rag.ts
  */
 
+import { createClient } from "@libsql/client";
 import OpenAI from "openai";
-import { completeOnce, PromptLoader, VectorStore } from "../src/index";
+import { completeOnce, createOpenAIEmbedder, PromptLoader, VectorStore } from "../src/index";
 
 async function main() {
   console.log("🔧 Programmatic RAG Example\n");
@@ -27,9 +28,12 @@ async function main() {
 
   // Create vector store (this will build/update the knowledge base)
   console.log("📚 Building knowledge base...");
-  const store = new VectorStore(client, {
-    databaseUrl: process.env.TURSO_URL || "",
-    databaseAuthToken: process.env.TURSO_AUTH_TOKEN || "",
+  const db = createClient({
+    url: process.env.TURSO_URL || "",
+    authToken: process.env.TURSO_AUTH_TOKEN || "",
+  });
+  const store = new VectorStore(createOpenAIEmbedder(client), {
+    databaseClient: db,
     knowledgeDir: "./knowledge",
   });
   await store.build();

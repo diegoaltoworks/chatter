@@ -7,7 +7,7 @@ import type OpenAI from "openai";
 import type { AnswerFnInput } from "../../core/answer";
 import type { Logger } from "../../core/logger";
 import type { PromptLoader } from "../../core/prompts";
-import type { VectorStore } from "../../core/retrieval";
+import type { Retriever } from "../../core/retrieval";
 import type { HistoryMessage, HistoryStore } from "../../history/types";
 import { createPersonaResolver } from "../../personas/resolver";
 import type { SessionIdentityRegistry } from "../gates";
@@ -338,7 +338,7 @@ function createHarness(overrides: Partial<WhatsAppInboundConfig> = {}): Harness 
   const registry: SessionIdentityRegistry = overrides.registry ?? new Map();
   const answerCalls: unknown[] = [];
 
-  const store = { query: async () => ["some context"] } as unknown as VectorStore;
+  const store = { query: async () => ["some context"] } satisfies Retriever;
   const prompts = {
     baseSystemRules: "rules",
     publicPersona: "persona",
@@ -520,7 +520,7 @@ describe("createWhatsAppInboundHandler", () => {
     const answerCalls: AnswerFnInput[] = [];
     const handler = createWhatsAppInboundHandler({
       client: {} as unknown as OpenAI,
-      store: { query: async () => ["some context"] } as unknown as VectorStore,
+      store: { query: async () => ["some context"] } satisfies Retriever,
       prompts: {
         baseSystemRules: "rules",
         publicPersona: "persona",
@@ -885,7 +885,7 @@ describe("createWhatsAppInboundHandler", () => {
         queries.push(buckets);
         return ["context"];
       },
-    } as unknown as VectorStore;
+    } satisfies Retriever;
     let capturedInput: { system: string; sender?: string; conversationId?: string } | undefined;
 
     const { handler, sock } = createHarness({
@@ -915,7 +915,7 @@ describe("createWhatsAppInboundHandler", () => {
         queries.push(q);
         return ["context"];
       },
-    } as unknown as VectorStore;
+    } satisfies Retriever;
     const seen: unknown[] = [];
 
     const { handler, sock } = createHarness({
@@ -933,7 +933,7 @@ describe("createWhatsAppInboundHandler", () => {
   });
 
   test("rerankContext reorders the chunks folded into the assembled system prompt", async () => {
-    const store = { query: async () => ["first", "second"] } as unknown as VectorStore;
+    const store = { query: async () => ["first", "second"] } satisfies Retriever;
     let capturedSystem = "";
 
     const { handler, sock } = createHarness({
@@ -957,7 +957,7 @@ describe("createWhatsAppInboundHandler", () => {
         queries.push(q);
         return ["context"];
       },
-    } as unknown as VectorStore;
+    } satisfies Retriever;
     const { logger, allCalls } = fakeLogger();
 
     const { handler, sock, answerCalls } = createHarness({

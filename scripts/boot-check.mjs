@@ -24,7 +24,7 @@ import { join } from "node:path";
 
 /**
  * @param {(config: unknown) => Promise<{ request: typeof fetch; stopChannels: () => Promise<void> }>} createServer
- * @param {{ chatterJsStatus: number; expectActionableLog: boolean }} spec
+ * @param {{ chatterJsStatus: number; expectActionableLog: boolean; retriever?: boolean }} spec
  */
 export async function runBootCheck(createServer, spec) {
   const logs = [];
@@ -40,7 +40,13 @@ export async function runBootCheck(createServer, spec) {
     const app = await createServer({
       bot: { name: "Boot Check", personName: "Tester", publicUrl: "http://localhost" },
       openai: { apiKey: "test-key-not-used" },
-      database: { url: "file::memory:", authToken: "" },
+      // `spec.retriever` proves config.retriever works with no config.database
+      // at all - the scenario that lets a consumer skip @libsql/client
+      // entirely (see docs/patterns/adding-a-retriever.md). Every other
+      // scenario keeps exercising the default VectorStore path.
+      ...(spec.retriever
+        ? { retriever: { query: async () => [] } }
+        : { database: { url: "file::memory:", authToken: "" } }),
       knowledgeDir,
       features: { headless: false },
       logger,

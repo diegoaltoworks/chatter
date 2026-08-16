@@ -1,9 +1,77 @@
-import { createClient, type Client as LibsqlClient } from "@libsql/client";
+import type { Client as LibsqlClient } from "@libsql/client";
 import type OpenAI from "openai";
 import { type Bucket, loadKnowledge } from "./loaders";
 import { createConsoleLogger, type Logger } from "./logger";
 
 const EMB_MODEL = "text-embedding-3-large";
+
+/**
+ * The retrieval seam `prepareChat` runs against: given a query, return up to
+ * `k` chunks drawn only from `allowedBuckets`. {@link VectorStore} is the
+ * shipped implementation (brute-force cosine similarity over embeddings in
+ * Turso) - this interface is the scaling path for a host that outgrows it
+ * (pgvector, sqlite-vec, Qdrant, a managed vector database) without touching
+ * `prepareChat`, `ServerDependencies`, or any chat surface. See
+ * [patterns/adding-a-retriever.md](../../docs/patterns/adding-a-retriever.md).
+ */
+export interface Retriever {
+  /** Retrieve up to `k` chunks across `allowedBuckets` for `query`, most relevant first. */
+  query(query: string, k: number, allowedBuckets: string[]): Promise<string[]>;
+  /**
+   * Optional one-time ingest/warm-up step, run once at server startup before
+   * the store answers any query. Omit it for a retriever that is always
+   * already up to date (a remote index another process maintains).
+   */
+  build?(): Promise<void>;
+}
+
+/**
+ * Embeds a batch of texts into vectors, in input order. Lets
+ * {@link VectorStore} stay decoupled from any specific embeddings provider -
+ * {@link createOpenAIEmbedder} is the shipped adapter for OpenAI's API.
+ */
+export type Embedder = (input: string[]) => Promise<number[][]>;
+
+/**
+ * Wraps an OpenAI client's `embeddings.create` as an {@link Embedder}, pinned
+ * to the same model `VectorStore` has always used - the model isn't a
+ * parameter because `VectorStore` labels every stored row with `EMB_MODEL`
+ * and never re-embeds rows written under a different one, so swapping models
+ * here without also handling that migration would silently corrupt search
+ * quality.
+ */
+export function createOpenAIEmbedder(client: OpenAI): Embedder {
+  return async (input: string[]) => {
+    const res = await client.embeddings.create({ model: EMB_MODEL, input });
+    return res.data.map((d) => d.embedding as number[]);
+  };
+}
+
+/** Wraps a failed dynamic import of the optional `@libsql/client` peer in an actionable message. Exported separately so the message content is unit-testable without simulating a real missing module. */
+export function wrapMissingLibsqlError(cause: unknown): Error {
+  return new Error(
+    "Chatter's default knowledge store needs the optional peer dependency '@libsql/client', " +
+      "which is not installed. Install it with `bun add @libsql/client` (or npm/pnpm/yarn), or " +
+      "set config.retriever to use your own retrieval backend instead.",
+    { cause },
+  );
+}
+
+/**
+ * Opens a libsql client for `database`, the one place `createServer`/
+ * `createMCPServer` touch `@libsql/client` at runtime - called lazily, only
+ * when a connection is actually needed, so a host running with
+ * `config.retriever` and no `config.database` never imports it at all.
+ */
+export async function openLibsqlClient(database: {
+  url: string;
+  authToken: string;
+}): Promise<LibsqlClient> {
+  const mod = await import("@libsql/client").catch((error) => {
+    throw wrapMissingLibsqlError(error);
+  });
+  return mod.createClient({ url: database.url, authToken: database.authToken });
+}
 
 function chunk(text: string, max = 900) {
   const out: string[] = [];
@@ -27,38 +95,29 @@ async function sha256(input: string) {
 }
 
 /**
- * How a {@link VectorStore} obtains its database connection: either credentials
- * to open its own, or an existing libsql client to reuse.
- *
- * Reusing a client is preferred when the store lives alongside other consumers
- * of the same database (route factories, custom routes) — the process then
- * holds one connection instead of one per consumer.
+ * `VectorStore` always takes an already-open libsql client rather than
+ * credentials to open its own - the same rule every other store in this
+ * codebase follows (see
+ * [patterns/adding-a-store.md](../../docs/patterns/adding-a-store.md)), so
+ * `@libsql/client`'s runtime is never imported here: the caller (`createServer`,
+ * `createMCPServer`, or your own code) opens the connection and this module
+ * only ever sees the resulting value. Reusing one client is also what lets
+ * `ServerDependencies.db` and the store share a single connection instead of
+ * opening a second one.
  */
-export type VectorStoreOptions = {
+export interface VectorStoreOptions {
+  /** An existing libsql client this store queries and writes through. */
+  databaseClient: LibsqlClient;
   /** Directory of markdown knowledge files. Default: `./config/knowledge` */
   knowledgeDir?: string;
   /** Logger for build progress. Default: a console logger writing to stderr. */
   logger?: Logger;
-} & (
-  | {
-      /** Turso database URL */
-      databaseUrl: string;
-      /** Turso auth token */
-      databaseAuthToken: string;
-      databaseClient?: never;
-    }
-  | {
-      /** An existing libsql client to reuse instead of opening a second connection */
-      databaseClient: LibsqlClient;
-      databaseUrl?: never;
-      databaseAuthToken?: never;
-    }
-);
+}
 
-export class VectorStore {
+export class VectorStore implements Retriever {
   /**
-   * The libsql client backing this store. When a client was injected this is
-   * that same instance, so callers holding it (e.g. `ServerDependencies.db`)
+   * The libsql client backing this store - the same instance passed in as
+   * `databaseClient`, so callers holding it (e.g. `ServerDependencies.db`)
    * and the store share one connection.
    */
   readonly db: LibsqlClient;
@@ -66,15 +125,10 @@ export class VectorStore {
   private logger: Logger;
 
   constructor(
-    private client: OpenAI,
+    private embed: Embedder,
     options: VectorStoreOptions,
   ) {
-    this.db = options.databaseClient
-      ? options.databaseClient
-      : createClient({
-          url: options.databaseUrl,
-          authToken: options.databaseAuthToken,
-        });
+    this.db = options.databaseClient;
     this.knowledgeDir = options.knowledgeDir || "./config/knowledge";
     this.logger = options.logger ?? createConsoleLogger();
   }
@@ -157,13 +211,13 @@ export class VectorStore {
     for (let i = 0; i < missing.length; i += BATCH) {
       const batchIds = missing.slice(i, i + BATCH);
       const inputs = batchIds.map((id) => textById.get(id) || "");
-      const emb = await this.client.embeddings.create({ model: EMB_MODEL, input: inputs });
+      const vectors = await this.embed(inputs);
       // See the chunks upsert above: batch(), not transaction(), to keep
       // the connection alive for whatever reads this store does next.
       await this.db.batch(
-        emb.data.map((d, idx) => ({
+        vectors.map((embedding, idx) => ({
           sql: "INSERT INTO embeddings(id,model,embedding) VALUES(?,?,?)",
-          args: [batchIds[idx], EMB_MODEL, JSON.stringify(d.embedding)],
+          args: [batchIds[idx], EMB_MODEL, JSON.stringify(embedding)],
         })),
         "write",
       );
@@ -229,8 +283,7 @@ export class VectorStore {
   async query(q: string, k = 6, allowed: string[] = ["base"]): Promise<string[]> {
     if (allowed.length === 0) return [];
 
-    const qv = (await this.client.embeddings.create({ model: EMB_MODEL, input: [q] })).data[0]
-      .embedding as number[];
+    const [qv] = await this.embed([q]);
 
     // Pull candidate rows (you can optimize by limiting rows per bucket)
     const placeholders = allowed.map(() => "?").join(",");

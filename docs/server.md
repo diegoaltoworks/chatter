@@ -45,6 +45,9 @@ Bun.serve({
 });
 ```
 
+`database` is required unless you supply your own `retriever` - see
+[Retrieval Backend](#retrieval-backend) below.
+
 ## Configuration
 
 ### Bot Identity
@@ -217,6 +220,26 @@ Omit it to use the built-in OpenAI completion. See
 [integrations.md](./integrations.md) for the streaming behaviour and the
 programmatic equivalents.
 
+### Retrieval Backend
+
+Replace the store `prepareChat` queries entirely - past sqlite-vec, pgvector,
+Qdrant, or any managed vector database, once the default outgrows a
+deployment:
+
+```typescript
+{
+  retriever: myRetriever  // { query(query, k, allowedBuckets), build?() }
+}
+```
+
+Omit it and `database` is required: the built-in `VectorStore` (brute-force
+cosine similarity over OpenAI embeddings in Turso) is built from it at
+startup. Set `retriever` and drop `database` to skip that connection (and the
+`@libsql/client` peer) entirely - see
+[patterns/adding-a-retriever.md](./patterns/adding-a-retriever.md) for the
+interface and how to keep `database` around for channels/customRoutes while
+still using your own retriever.
+
 ### Retrieval Scope
 
 Gate knowledge buckets per caller. Every chat surface consults the hook with
@@ -322,8 +345,8 @@ Custom routes receive the same dependencies the built-in route factories use:
 {
   customRoutes: (app, deps) => {
     // deps.client         OpenAI client
-    // deps.store          VectorStore (retrieval)
-    // deps.db             libsql database client
+    // deps.store          Retriever `prepareChat` queries (VectorStore by default)
+    // deps.db             libsql database client, when config.database was set
     // deps.config         the resolved ChatterConfig
     // deps.prompts        PromptLoader
     // deps.apiKeyManager  API key manager, when configured
@@ -337,25 +360,29 @@ Custom routes receive the same dependencies the built-in route factories use:
 }
 ```
 
-`deps.db` is the ready libsql client the server opened for the vector store.
-Custom routes should use it rather than calling `createClient` again - the
-process then holds one connection to the database instead of one per consumer.
+`deps.db` is the ready libsql client the server opened for the default vector
+store, present whenever `config.database` was set. Custom routes should use it
+rather than calling `createClient` again - the process then holds one
+connection to the database instead of one per consumer. It is only absent when
+a host supplies `config.retriever` and never sets `config.database` - see
+[patterns/adding-a-retriever.md](./patterns/adding-a-retriever.md) for
+swapping `deps.store` for your own retrieval backend entirely.
 
 Constructing a `VectorStore` yourself follows the same rule: pass an existing
-client instead of credentials when one is already open.
+client instead of credentials when one is already open. `VectorStore` takes an
+`Embedder` function rather than an OpenAI client directly -
+`createOpenAIEmbedder` is the adapter for OpenAI's embeddings API.
 
 ```typescript
 import { createClient } from "@libsql/client";
-import { VectorStore } from "@diegoaltoworks/chatter";
+import { createOpenAIEmbedder, VectorStore } from "@diegoaltoworks/chatter";
 
 const db = createClient({ url, authToken });
-const store = new VectorStore(openai, { databaseClient: db, knowledgeDir });
+const store = new VectorStore(createOpenAIEmbedder(openai), { databaseClient: db, knowledgeDir });
 await store.build();
 ```
 
-Passing `databaseUrl` / `databaseAuthToken` instead makes the store open its
-own connection; either way the client it ends up using is available as
-`store.db`.
+The client it ends up using is available as `store.db`.
 
 #### Async mounting
 

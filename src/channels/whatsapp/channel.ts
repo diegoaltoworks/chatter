@@ -258,6 +258,17 @@ export function createWhatsAppChannel(config: WhatsAppChannelConfig): Channel {
       // lifecycle without every caller having to also pass it into
       // `createWhatsAppChannel` directly.
       const log = config.logger ?? deps.logger ?? createConsoleLogger();
+      // `deps.db` is only actually opened when `config.database` was set (see
+      // ServerDependencies.db's doc comment) - a host running with
+      // `config.retriever` and no `config.database` would otherwise hit this
+      // channel's first db call as a bare `undefined.execute` TypeError deep
+      // inside the lease-gated retry loop instead of a clear message here.
+      if (!deps.db) {
+        throw new Error(
+          "The WhatsApp channel needs a libsql client for auth state and the session lease: " +
+            "set config.database (config.retriever alone does not open one).",
+        );
+      }
       const db: Client = deps.db;
       const leaseStore = createTursoWaLeaseStore(db);
       senders = deps.senders;

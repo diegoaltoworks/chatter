@@ -148,11 +148,13 @@ function consumerDependencies(
   return deps;
 }
 
-/** What runBootCheck (scripts/boot-check.mjs) asserts, computed per consumer by the two call sites below. */
+/** What runBootCheck (scripts/boot-check.mjs) asserts, computed per consumer by the call sites below. */
 interface BootCheckSpec {
   chatterJsStatus: number;
   expectActionableLog: boolean;
   label: string;
+  /** Boot with `config.retriever` and no `config.database` instead of the default VectorStore path. */
+  retriever?: boolean;
 }
 
 /** Install the tarball into a fresh consumer and load every subpath in it. Returns the consumer's directory. */
@@ -297,10 +299,17 @@ try {
     name: "lean",
     optional: false,
     bootCheck: {
+      // @libsql/client is optional too (see docs/patterns/adding-a-retriever.md),
+      // so this consumer's default VectorStore/config.database path can't
+      // boot - retriever: true exercises config.retriever instead, proving
+      // the root entry point works with every optional peer absent,
+      // @libsql/client included.
+      retriever: true,
       chatterJsStatus: 404,
       expectActionableLog: true,
       label:
-        "chatter.js absence without @hono/node-server is a logged, actionable error, not a silent 404",
+        "chatter.js absence without @hono/node-server is a logged, actionable error, and createServer " +
+        "boots via config.retriever with no optional peer installed (@libsql/client included)",
     },
   });
 

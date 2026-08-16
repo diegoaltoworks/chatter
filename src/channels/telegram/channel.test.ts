@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 import type { TransformReplyInput } from "../../core/answer";
 import type { Logger } from "../../core/logger";
 import type { PromptLoader } from "../../core/prompts";
-import type { VectorStore } from "../../core/retrieval";
+import type { Retriever } from "../../core/retrieval";
 import type { ChatterConfig, ServerDependencies } from "../../types";
 import { createSenderRegistry } from "../senders";
 import type { TelegramApi, TelegramMessage, TelegramUpdate, TelegramUser } from "./api";
@@ -74,7 +74,7 @@ function fakeDeps(
     answered,
     client: {} as ServerDependencies["client"],
     db: {} as ServerDependencies["db"],
-    store: { query: async () => ["context"] } as unknown as VectorStore,
+    store: { query: async () => ["context"] } satisfies Retriever,
     prompts: {
       baseSystemRules: "rules",
       publicPersona: "persona",

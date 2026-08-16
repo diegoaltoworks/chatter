@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { type PipelineMessage, prepareChat } from "../core/pipeline";
 import type { PromptLoader } from "../core/prompts";
-import type { VectorStore } from "../core/retrieval";
+import type { Retriever } from "../core/retrieval";
 import { createPersonaResolver, type PersonaRegistry } from "./resolver";
 
 let dir: string;
@@ -248,7 +248,7 @@ describe("createPersonaResolver", () => {
 
     const store = {
       query: async () => ["some context"],
-    } as unknown as VectorStore;
+    } satisfies Retriever;
     const prompts = {
       baseSystemRules: "rules",
       publicPersona: "the mode's own persona, never expected in the result",
