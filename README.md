@@ -90,7 +90,6 @@ Complete guides for setup, deployment, and integration:
 - **[Usage Metering](./docs/usage.md)** - Daily spend caps for paid features
 - **[Deployment](./docs/deployment.md)** - Google Cloud Run, Fly.io, Railway, VPS
 - **[Testing](./docs/testing.md)** - Comprehensive testing guide
-- **[Code Quality](./docs/CODE_QUALITY.md)** - Security assessment and architecture review
 - **[Sprint Review](./docs/sprint-review.md)** - Cross-module & security-invariant audit
 - **[FAQs](./docs/faqs.md)** - Troubleshooting and common questions
 

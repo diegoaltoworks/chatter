@@ -129,8 +129,11 @@ chatter/
 1. **Update Documentation**: Update README.md and relevant docs for any new features
 2. **Add Tests**: Ensure new code is covered by tests
 3. **Pass CI**: All tests, linting, and type checks must pass
-4. **Update Changelog**: Add entry to CHANGELOG.md under "Unreleased"
-5. **Request Review**: Tag maintainers for review
+4. **Request Review**: Tag maintainers for review
+
+Release notes are generated automatically from commit/PR history when a
+version publishes (see [GitHub Releases](https://github.com/diegoaltoworks/chatter/releases))
+— there's no CHANGELOG.md entry to add by hand.
 
 ## Release Process
 

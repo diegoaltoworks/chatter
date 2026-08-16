@@ -50,7 +50,7 @@ For more information, see the [Chatter server documentation](https://github.com/
 #### Node.js / ES Modules
 
 ```typescript
-import { ChatBot } from '@diegoaltoworks/chatter';
+import { ChatBot } from '@diegoaltoworks/chatter/client';
 
 const bot = new ChatBot({
   host: 'bot.diegoalto.app',
@@ -90,8 +90,8 @@ await bot.streamMessage('Tell me a story', {
 ### 2. Chat Window Component
 
 ```typescript
-import { Chat } from '@diegoaltoworks/chatter';
-import '@diegoaltoworks/chatter/style.css';
+import { Chat } from '@diegoaltoworks/chatter/client';
+import '@diegoaltoworks/chatter/client/style.css';
 
 const chat = new Chat({
   host: 'bot.diegoalto.app',
@@ -125,8 +125,8 @@ const chat = new Chat({
 ### 3. Floating Chat Button
 
 ```typescript
-import { ChatButton } from '@diegoaltoworks/chatter';
-import '@diegoaltoworks/chatter/style.css';
+import { ChatButton } from '@diegoaltoworks/chatter/client';
+import '@diegoaltoworks/chatter/client/style.css';
 
 const chatButton = new ChatButton({
   host: 'bot.diegoalto.app',
