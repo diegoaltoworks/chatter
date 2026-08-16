@@ -142,37 +142,73 @@ dependency to the registry worth stating explicitly:
 
 ```
 merge to main → CI (the gates, plus the build/runtime/tarball/image jobs)
-              → publish workflow re-runs the gates, verifies the tarball and
-                the Node load, bumps the version, tags,
-                `npm publish --provenance`, then cuts the GitHub release
+              → the release job refuses an unreviewed dependency change, then
+                opens a release PR carrying the version bump
+              → CI on the release PR (dispatched explicitly — see below),
+                waited for in the same run
+              → the release job merges the PR itself once that CI passes
+              → the same run re-runs the gates, verifies the tarball and the
+                Node load, `npm publish --provenance`, then cuts the GitHub
+                release (which creates the tag)
 ```
 
-The publish workflow cuts the release itself rather than leaving it to a
-workflow listening for the tag push. A tag pushed with the default
-`GITHUB_TOKEN` does not trigger workflows, so a listener like that never runs —
-which is exactly what happened here for the whole tag history while the docs
-told readers to look at GitHub Releases for the notes.
+The publish workflow never pushes to `main` directly — the release PR's merge
+is the only thing that lands a release commit there. That is what keeps this
+compatible with `main-protection`'s required-status-checks stage: that rule
+blocks any push of a commit that has not itself already passed the check, with
+no bypass actor available on a personal-account repo, so a job pushing
+straight to `main` would be unable to release at all once the rule is
+tightened to require it. Routing the same commit through a PR instead makes
+the merge the gate, with no bypass actor needed — required checks are enforced
+against the merge itself, not against who is merging.
 
-It also re-runs `test:pack` and `test:node` itself, rather than trusting the CI
-run that triggered it. `workflow_dispatch` is a real release path — it is the
-one a maintainer uses to ship a reviewed dependency bump — and it does not pass
-through CI at all.
+Opening the PR, pushing its branch, and merging it all go through
+`GITHUB_TOKEN`, and GitHub does not let a `GITHUB_TOKEN`-created push, pull
+request, or merge trigger other workflows — the guard that stops an action
+from recursively triggering itself. Two things follow from that, and both are
+why this is one job rather than a release job and a separate listener:
 
-Nobody types a version number: the publish workflow derives the next version
-from the highest `v*` tag and commits the bump itself, which is why its own
-`chore(release): v…` commit is excluded from re-triggering it. The bump type
-carries signal instead of always being a minor: `scripts/next-version.ts`
-scans every commit since the last tag and ships a minor if any of them is a
-`feat`, a patch otherwise (`fix`, `chore`, `docs`, …), and a major if any of
-them is breaking (a `!` before the colon, or a `BREAKING CHANGE:` /
-`BREAKING-CHANGE:` footer) — but only once the package is past 1.0. Before
-1.0 a breaking commit still only reaches minor, the strongest tier semver
-defines for 0.x. A husky `commit-msg` hook runs `commitlint` against
-`commitlint.config.js` locally, but the commit `next-version.ts` actually
-scans is the squash-merge commit on `main`, whose subject is the PR title —
-composed on GitHub, never passed through the hook. The hook catches a typo'd
-type on the commits inside a branch; a mistyped PR title still falls back to
-patch silently.
+- Left alone, CI would never run on the release branch, so nothing would ever
+  post a status for a merge to wait on. `workflow_dispatch` is exempt from
+  that guard, so the release job dispatches CI on the release branch
+  explicitly, then waits for that specific run (`gh run watch`) before doing
+  anything else.
+- The merge itself is also a `GITHUB_TOKEN` push to `main`, so it does not
+  retrigger CI either — a design that merged the PR and then waited for a
+  fresh `workflow_run` on `main` to publish would wait forever, on every
+  release after the first. The same run that merges the PR keeps going and
+  does the publishing itself, with no second trigger to wait on. A version
+  bump can therefore land on `main` with nothing published yet if this run
+  dies between the merge and the publish; the next run's first step checks
+  for exactly that (`package.json`'s version ahead of the latest tag) and
+  finishes that release — from the actual `chore(release): v…` commit found
+  by message, not from whatever is at `HEAD` by then, which is already the
+  next merge past it — instead of starting a new one.
+
+A release can also get stuck the other way: if CI never goes green on the
+release branch, the PR is left open rather than closed automatically, and
+every run after that refuses to open a second, competing release PR — loudly
+(the job fails) rather than quietly, since a green "nothing to do" run would
+hide a wedged release train behind an ordinary-looking Actions log. Closing or
+fixing the stuck PR by hand is what unsticks it.
+
+Nobody types a version number: the release job derives the next version from
+the highest `v*` tag and opens the release PR with the bump already committed,
+which is why the resulting `chore(release): v…` commit is excluded from
+re-triggering the job — moot in practice, since that commit's merge does not
+retrigger CI at all, but real protection against a human manually re-running
+CI on it. The bump type carries signal instead of always being a minor:
+`scripts/next-version.ts` scans every commit since the last tag and ships a
+minor if any of them is a `feat`, a patch otherwise (`fix`, `chore`, `docs`,
+…), and a major if any of them is breaking (a `!` before the colon, or a
+`BREAKING CHANGE:` / `BREAKING-CHANGE:` footer) — but only once the package is
+past 1.0. Before 1.0 a breaking commit still only reaches minor, the strongest
+tier semver defines for 0.x. A husky `commit-msg` hook runs `commitlint`
+against `commitlint.config.js` locally, but the commits `next-version.ts`
+actually scans are the squash-merge commits on `main`, whose subjects are
+human-written PR titles — composed on GitHub, never passed through the hook.
+The hook catches a typo'd type on the commits inside a branch; a mistyped PR
+title still falls back to patch silently.
 
 ### The human gate
 
@@ -182,12 +218,16 @@ code would reach npm under our name with no human having read it.
 
 Two guards close that path, because a bump can reach a release two ways:
 
-- The publish job declines to run when dependabot authored the commit that
-  triggered it. That is the auto-merge case, and it costs nothing to check.
-- Before publishing anything, the job runs `scripts/release-guard.ts` over
-  every commit since the last release tag. Without this, a bump merged on
+- The release job declines to open a release PR when dependabot authored the
+  commit that triggered it. That is the auto-merge case, and it costs nothing
+  to check.
+- Before opening a release PR — or resuming one already merged, in the
+  stranded-release case above — the same job runs `scripts/release-guard.ts`
+  over every commit since the last release tag. Without this, a bump merged on
   Monday ships inside somebody else's Wednesday release — the first guard looks
-  at one commit, and the bump is not it.
+  at one commit, and the bump is not it. It runs this early deliberately: a
+  block found only after the version bump had already merged to main would
+  leave main dirty with nothing able to finish that release.
 
 The second guard distinguishes two kinds of bump, and the distinction is what
 keeps it from wedging the release train against itself:
@@ -206,7 +246,10 @@ single routine bump stopped every subsequent release until someone noticed.
 A block is skipped for `workflow_dispatch`, which is the point: a maintainer
 reviewing the change and running **Publish to NPM** from the Actions tab *is*
 the approval, and the release it cuts moves the tag past the commit so ordinary
-merges publish again.
+merges publish again. Opening the release PR, merging it, and publishing all
+happen in the one job a dispatched run triggers, so that approval needs no
+extra plumbing to carry across a trigger boundary — the same `github.event_name`
+check that skipped the guard before the release-PR split still does.
 
 ### What "CI was green" is allowed to mean
 

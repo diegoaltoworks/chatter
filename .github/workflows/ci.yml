@@ -5,6 +5,11 @@ on:
     branches: [main, develop]
   pull_request:
     branches: [main, develop]
+  # Lets npm-publish.yml's release job put a status on a release branch's
+  # commit: a push/PR made with GITHUB_TOKEN does not trigger other
+  # workflows, but a workflow_dispatch does, so this is how CI still runs on
+  # a release PR without a bot PAT.
+  workflow_dispatch:
 
 jobs:
   # The gates, exactly as they run locally. Bun is the development runtime, so

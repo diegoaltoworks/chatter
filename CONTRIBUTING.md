@@ -181,10 +181,14 @@ version publishes (see [GitHub Releases](https://github.com/diegoaltoworks/chatt
 ## Release Process
 
 Releases are automated. Merging a PR to `main` runs CI; when CI is green the
-publish workflow re-runs the gates, builds, verifies the packed tarball and the
-built package under Node, bumps the version, tags, publishes to npm with
-provenance, and cuts the GitHub release with its notes. Do not bump
-`package.json` by hand — the workflow owns the version.
+publish workflow opens a release PR carrying the version bump, waits for CI on
+that PR to pass, and merges it itself — routed through a PR rather than pushed
+straight to `main` so the flow works the same way once branch protection
+requires status checks on `main`. Once merged, the same run re-runs the gates,
+builds, verifies the packed tarball and the built package under Node, tags the
+commit, publishes to npm with provenance, and cuts the GitHub release with its
+notes. Do not bump `package.json` by hand — the workflow owns the version. See
+[docs/packaging.md](./docs/packaging.md#the-release-chain) for the full chain.
 
 The bump type is derived from the conventional-commit type of every commit
 since the last release tag (not just the one that triggered the run): any
