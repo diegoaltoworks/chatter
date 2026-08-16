@@ -138,10 +138,10 @@ version publishes (see [GitHub Releases](https://github.com/diegoaltoworks/chatt
 ## Release Process
 
 Releases are automated. Merging a PR to `main` runs CI; when CI is green the
-publish workflow re-runs the gates, builds, bumps the version, tags, and
-publishes to npm with provenance. The tag push then publishes the GitHub
-release notes. Do not bump `package.json` by hand — the workflow owns the
-version.
+publish workflow re-runs the gates, builds, verifies the packed tarball and the
+built package under Node, bumps the version, tags, publishes to npm with
+provenance, and cuts the GitHub release with its notes. Do not bump
+`package.json` by hand — the workflow owns the version.
 
 The bump type is derived from the conventional-commit type of every commit
 since the last release tag (not just the one that triggered the run): any
@@ -152,13 +152,16 @@ CHANGE:` commit-body footers are not read. See `scripts/next-version.ts` for
 the derivation.
 
 One thing is deliberately **not** automatic: nothing authored by
-`dependabot[bot]` publishes itself. Dependency PRs are opened, approved and
-merged by bots, so releasing off one would ship an upstream change nobody read.
-The publish job declines when dependabot authored the triggering commit, *and*
-fails outright if dependabot authored anything since the last release tag — so
-a bump cannot ride along inside a later release either. To ship a reviewed
-bump, run the **Publish to NPM** workflow from the Actions tab; dispatching it
-is the approval.
+`dependabot[bot]` triggers its own release. Dependency PRs are opened, approved
+and merged by bots, so releasing off one would ship an upstream change nobody
+read. The publish job declines when dependabot authored the triggering commit,
+and `scripts/release-guard.ts` scans everything since the last release tag so a
+change cannot ride along inside a later release either. That scan blocks on a
+bump that edits a workflow, a Dockerfile or source — anything that changes what
+*runs* — and lets a manifest- or lockfile-only bump through, since it ships no
+upstream code and the gates run against it like any other commit. To ship a
+blocked change, review it and run the **Publish to NPM** workflow from the
+Actions tab; dispatching is the approval, and it moves the tag past the commit.
 
 The rest of the chain is pinned so that "CI was green" means something
 specific: every third-party action is referenced by commit SHA (with a `# vX.Y.Z`

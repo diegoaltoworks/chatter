@@ -44,9 +44,11 @@ bun test --coverage
   `.github/workflows/` plus the Dockerfile, and fails if an action is
   referenced by a mutable tag, Bun floats or drifts between the two, an install
   skips `--frozen-lockfile`, or a workflow that publishes loses its dependabot
-  gate (see [Packaging](./packaging.md)). These are the properties that keep a
-  green CI run meaningful, and each is a line or two that nothing else would
-  notice going missing.
+  gate or its artifact checks (see [Packaging](./packaging.md)). These are the
+  properties that keep a green CI run meaningful, and each is a line or two
+  that nothing else would notice going missing. `scripts/release-guard.test.ts`
+  covers the gate's own logic: which commits in an unreleased range may publish
+  automatically, and which need a human to dispatch the release.
 
 - **Node runtime tests** cover the other runtime the package supports. Every
   test above runs under Bun, where a `Bun` global exists and `require()` works
