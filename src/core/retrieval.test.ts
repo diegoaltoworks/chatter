@@ -148,6 +148,78 @@ describe("VectorStore connection", () => {
       rmSync(dir, { recursive: true, force: true });
     }
   });
+
+  test("build() refuses to run and preserves existing chunks when the knowledge dir resolves to zero documents", async () => {
+    // Root cause of a real incident: a knowledgeDir that resolves to zero
+    // documents (wrong cwd, an emptied folder) made every existing chunk
+    // read as stale, and cleanupStaleChunks deleted the entire knowledge
+    // base with no error anywhere in the process. build() must fail loudly
+    // before it ever reaches cleanup.
+    const dir = mkdtempSync(join(tmpdir(), "chatter-retrieval-zero-docs-"));
+    const knowledgeDir = join(dir, "knowledge");
+    mkdirSync(join(knowledgeDir, "base"), { recursive: true });
+    writeFileSync(join(knowledgeDir, "base", "info.md"), "# Info\nSupport hours are 9-5.");
+
+    try {
+      const db = createClient({ url: "file::memory:", authToken: "" });
+      const store = new VectorStore(fakeEmbedder([1, 0]), { databaseClient: db, knowledgeDir });
+      await store.build();
+      expect(await store.query("support hours", 3, ["base"])).toEqual([
+        "# Info\nSupport hours are 9-5.",
+      ]);
+
+      const emptyDir = join(dir, "empty");
+      mkdirSync(emptyDir, { recursive: true });
+      const brokenStore = new VectorStore(fakeEmbedder([1, 0]), {
+        databaseClient: db,
+        knowledgeDir: emptyDir,
+      });
+
+      await expect(brokenStore.build()).rejects.toThrow(/loaded 0 knowledge documents/);
+
+      // The original content must still be there and still queryable.
+      expect(await store.query("support hours", 3, ["base"])).toEqual([
+        "# Info\nSupport hours are 9-5.",
+      ]);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  test("cleanupStaleChunks deletes embeddings for chunks removed from the knowledge dir", async () => {
+    // Regression test for the false "cascade delete" assumption: there is no
+    // FK between chunks and embeddings, so a stale chunk's embedding row was
+    // left behind unless deleted explicitly.
+    const dir = mkdtempSync(join(tmpdir(), "chatter-retrieval-stale-embeddings-"));
+    const knowledgeDir = join(dir, "knowledge");
+    mkdirSync(join(knowledgeDir, "base"), { recursive: true });
+    writeFileSync(join(knowledgeDir, "base", "info.md"), "# Info\nSupport hours are 9-5.");
+
+    try {
+      const db = createClient({ url: "file::memory:", authToken: "" });
+      const store = new VectorStore(fakeEmbedder([1, 0]), { databaseClient: db, knowledgeDir });
+      await store.build();
+
+      const before = await db.execute("SELECT id FROM embeddings");
+      expect(before.rows.length).toBeGreaterThan(0);
+
+      // Overwrite the source file's content so the old chunk id (derived
+      // from a hash of the text) no longer appears among current ids, then
+      // rebuild - the old chunk and its embedding become stale.
+      writeFileSync(join(knowledgeDir, "base", "info.md"), "# Info\nNew content entirely.");
+      await store.build();
+
+      const after = await db.execute("SELECT id FROM embeddings");
+      const staleIds = before.rows.map((r) => String(r.id));
+      const survivingStaleIds = after.rows
+        .map((r) => String(r.id))
+        .filter((id) => staleIds.includes(id));
+
+      expect(survivingStaleIds).toEqual([]);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
 });
 
 describe("wrapMissingLibsqlError", () => {
