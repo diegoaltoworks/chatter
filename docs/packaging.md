@@ -153,14 +153,18 @@ merge to main → CI (the gates, plus the build/runtime/tarball/image jobs)
 ```
 
 The publish workflow never pushes to `main` directly — the release PR's merge
-is the only thing that lands a release commit there. That is what keeps this
-compatible with `main-protection`'s `required_status_checks` rule: that rule
-blocks any push of a commit that has not itself already passed the check.
-`GITHUB_TOKEN`, which is all this workflow runs as, has no bypass on this
-ruleset — only the repository-admin role does — so a job pushing straight to
-`main` would be unable to release at all. Routing the same commit through a PR
-instead makes the merge the gate: required checks are enforced against the
-merge itself, not against who is merging, so no bypass is needed.
+is the only thing that lands a release commit there. That was built so this
+stays compatible with a `required_status_checks` rule on `main-protection`,
+which blocks any push of a commit that has not itself already passed the
+check; `GITHUB_TOKEN`, which is all this workflow runs as, has no bypass on
+the ruleset (only the repository-admin role does), so a job pushing straight
+to `main` would be unable to release at all under that rule. See
+[process.md](../.claude/process.md)'s main-protection gotcha for why that rule
+is not currently enabled despite the release flow being built for it: it was
+turned on once, and `GITHUB_TOKEN`'s own PR merges got stuck (GitHub's
+`mergeable_state` reported `blocked` indefinitely even with every required
+check green), wedging the release train until an admin merged by hand. The
+release-PR routing stays regardless, since it's what a re-attempt would need.
 
 Opening the PR, pushing its branch, and merging it all go through
 `GITHUB_TOKEN`, and GitHub does not let a `GITHUB_TOKEN`-created push, pull
