@@ -6,6 +6,7 @@ import { resolveBuckets } from "../core/buckets";
 import { normalizeChatBody } from "../core/messages";
 import { prepareChat } from "../core/pipeline";
 import { createAuthMiddleware } from "../middleware/auth";
+import { chatBodyLimit } from "../middleware/bodyLimit";
 import { createRateLimiter } from "../middleware/ratelimit";
 import { requireReferrer } from "../middleware/referrer";
 import { validateSessionKey } from "../middleware/session";
@@ -33,6 +34,7 @@ export function publicRoutes(deps: ServerDependencies) {
     : [config.bot.publicUrl, "http://localhost:8181", "http://127.0.0.1:8181"];
 
   // Security middleware stack
+  app.use("/api/public/*", chatBodyLimit(config.server?.maxRequestBytes)); // Reject oversized bodies first
   app.use("/api/public/*", validateSessionKey(logger)); // Validate session keys first
   app.use("/api/public/*", requirePublicKey); // Then check API key
   // Referrer checking for demo keys

@@ -437,18 +437,47 @@ Monitor:
 - **Fly.io**: Configure `min_machines_running` in `fly.toml`
 - **Railway**: Increase `numReplicas` in config
 
-**Note**: Chatter is stateless and can scale horizontally without issues.
+Chat itself is stateless — retrieval, prompt assembly and completions don't
+depend on which instance handles a request. Two things are per-instance
+in-process state, though: see
+[Rate limiting and multiple instances](#rate-limiting-and-multiple-instances)
+below, and demo session keys (`getActiveSessions`), which the instance that
+issued them is the only one that can validate.
+
+### Rate limiting and multiple instances
+
+`rateLimit.public`/`private` and the demo session/chat limits are fixed-window
+counters (not sliding-window — a caller can get up to 2x the configured limit
+across a window boundary) held in each process's memory, not in Turso or any
+shared store. Behind a load balancer with more than one instance running,
+each instance enforces its own limit independently — effective per-caller
+throughput scales with instance count instead of staying capped at the
+configured number. If that matters for your deployment, put the limiting
+in front of Chatter instead (an API gateway, Cloudflare rate limiting, an
+nginx/Envoy sidecar) rather than relying on the built-in limiter for a
+multi-instance guarantee.
+
+Per-IP keying (`rateLimit.trustProxy`, default `true`) also assumes a proxy
+in front of Chatter overwrites `X-Forwarded-For` with the real client
+address. Set it `false` if Chatter is reachable directly — otherwise a
+caller can rotate a fake `X-Forwarded-For` per request and evade the limit
+entirely rather than just riding the multi-instance slack above.
 
 ## Security Checklist
 
 - [ ] Use HTTPS in production
 - [ ] Store secrets in secure secret managers (not in code)
-- [ ] Enable rate limiting
+- [ ] Enable rate limiting, and put a shared limiter in front if you run
+      multiple instances (see [above](#rate-limiting-and-multiple-instances))
 - [ ] Configure CORS appropriately
 - [ ] Use strong CHATTER_SECRET (min 32 chars)
 - [ ] Keep dependencies updated
 - [ ] Monitor for suspicious activity
 - [ ] Set appropriate rate limits
+- [ ] Review the default Content-Security-Policy and Strict-Transport-Security
+      headers (`server.contentSecurityPolicy`, `server.strictTransportSecurity`)
+      against your own deployment — see [Server: Security Headers and Body
+      Limits](./server.md#security-headers-and-body-limits)
 
 ## Troubleshooting
 

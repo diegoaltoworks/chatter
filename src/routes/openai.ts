@@ -30,6 +30,7 @@ import { resolveBuckets } from "../core/buckets";
 import { DEFAULT_MODEL } from "../core/llm";
 import { normalizeMessages } from "../core/messages";
 import { type PipelineMode, prepareChat } from "../core/pipeline";
+import { chatBodyLimit } from "../middleware/bodyLimit";
 import { createJWTMiddleware, jwtSubject } from "../middleware/jwt";
 import { createRateLimiter } from "../middleware/ratelimit";
 import type { ServerDependencies } from "../types";
@@ -79,6 +80,11 @@ function errorJson(c: Context, status: 400 | 401, message: string) {
     { error: { message, type: status === 401 ? "authentication_error" : "invalid_request_error" } },
     status,
   );
+}
+
+/** Matches `errorJson`'s `{ error: { message, type } }` shape for the 413 from `chatBodyLimit`. */
+function oversizedBodyError(message: string) {
+  return { error: { message, type: "invalid_request_error" } };
 }
 
 export function openaiRoutes(deps: ServerDependencies) {
@@ -225,12 +231,14 @@ export function openaiRoutes(deps: ServerDependencies) {
   };
 
   if (enablePublic) {
+    app.use("/v1/*", chatBodyLimit(config.server?.maxRequestBytes, oversizedBodyError)); // Reject oversized bodies first
     app.use("/v1/*", requireApiKey);
     app.use("/v1/*", limitPublic());
     app.post("/v1/chat/completions", handleChatCompletions("public"));
   }
 
   if (enablePrivate) {
+    app.use("/api/private/v1/*", chatBodyLimit(config.server?.maxRequestBytes, oversizedBodyError)); // Reject oversized bodies first
     app.use("/api/private/v1/*", requirePrivateJWT);
     app.use("/api/private/v1/*", limitPrivate());
     app.post("/api/private/v1/chat/completions", handleChatCompletions("private"));

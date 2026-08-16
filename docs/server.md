@@ -166,6 +166,37 @@ client can set to anything. For local development against a restricted
 `allowedOrigins` on the demo routes generally — is a convenience against
 browser-driven abuse, not a substitute for authentication.
 
+Every limiter (`rateLimit.public`/`private`, the demo session/chat limits) is
+a fixed-window counter held in process memory — see
+[Deployment: Rate limiting and multiple instances](./deployment.md#rate-limiting-and-multiple-instances)
+for what that means once you run more than one instance.
+
+### Security Headers and Body Limits
+
+Every response carries a `Content-Security-Policy`, `X-Content-Type-Options:
+nosniff`, and (over HTTPS, or when `NODE_ENV=production`) a
+`Strict-Transport-Security` header. Chat routes (`/api/public/chat`,
+`/api/private/chat`, `/api/demo/chat`, and the OpenAI-compatible
+`/v1/chat/completions` endpoints) reject oversized bodies with a 413 before
+parsing JSON:
+
+```typescript
+{
+  server: {
+    maxRequestBytes: 262144,             // Default: 256 KiB
+    contentSecurityPolicy: "default-src 'self'; ...", // Override the default CSP
+    strictTransportSecurity: "max-age=15552000; includeSubDomains", // or `false` to disable
+  }
+}
+```
+
+The default CSP allows `'unsafe-inline'` scripts/styles (this repo's own
+example pages use inline `<script>` blocks), so it's a baseline — not
+XSS-proof — and only governs pages Chatter itself renders (demo pages,
+`chat.html`, `private.html`, not a consumer site that merely embeds the
+widget script). Override it if your own `publicDir` pages load a script from
+an external host, which `script-src 'self'` would otherwise block.
+
 ### Brain
 
 Replace the completion call on every chat surface with your own answer

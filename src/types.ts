@@ -206,6 +206,38 @@ export interface ChatterConfig {
      * Default: false.
      */
     allowLocalhostDemo?: boolean;
+    /**
+     * Maximum accepted request body size in bytes, enforced on chat routes
+     * (`/api/public/chat`, `/api/private/chat`, `/api/demo/chat`, and the
+     * OpenAI-compatible `/v1/chat/completions` endpoints). Oversized bodies
+     * are rejected with 413 before JSON parsing. `0` rejects every request
+     * that has a body — it does not mean "unlimited". Default: 262144 (256
+     * KiB) — generous for chat text, small enough to bound worst-case
+     * parse/memory cost per request.
+     */
+    maxRequestBytes?: number;
+    /**
+     * `Content-Security-Policy` header value applied to every response.
+     * Governs pages this server itself renders (demo pages, `chat.html`,
+     * `private.html`) — it has no effect on a consumer's own site that only
+     * embeds the widget script. The default allows `'unsafe-inline'` scripts
+     * and styles (this repo's own example pages use inline `<script>`
+     * blocks), so treat its presence as a baseline, not XSS-proof hardening.
+     * Override this if your own static pages under `publicDir` load a script
+     * from a CDN or other external host — the default's `script-src 'self'`
+     * would block it. Default: `"default-src 'self'; script-src 'self'
+     * 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:
+     * https:; connect-src 'self' https:; frame-ancestors 'self'"`.
+     */
+    contentSecurityPolicy?: string;
+    /**
+     * `Strict-Transport-Security` header value, sent only when the request
+     * arrived over HTTPS (or `NODE_ENV=production`). Set `false` to disable
+     * HSTS entirely — e.g. if a subdomain your deployment doesn't control
+     * shouldn't be pinned to HTTPS by `includeSubDomains`. Default:
+     * `"max-age=15552000; includeSubDomains"` (180 days).
+     */
+    strictTransportSecurity?: string | false;
   };
 
   // Brain (advanced)

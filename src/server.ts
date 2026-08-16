@@ -17,6 +17,7 @@ import { VectorStore } from "./core/retrieval";
 import { loadServeStatic, type ServeStaticFn } from "./core/serve-static";
 import { resolveStatic } from "./core/widgets";
 import { cors } from "./middleware/cors";
+import { securityHeaders } from "./middleware/securityHeaders";
 import { demoRoutes } from "./routes/demo";
 import { openaiRoutes } from "./routes/openai";
 import { privateRoutes } from "./routes/private";
@@ -107,6 +108,9 @@ export async function createServer(config: ChatterConfig): Promise<ChatterApp> {
   if (config.server?.cors !== false) {
     app.use("*", cors(config.server?.allowedOrigins));
   }
+
+  // Baseline security headers (CSP, HSTS, nosniff) on every response
+  app.use("*", securityHeaders(config));
 
   // Health check
   app.get("/healthz", (c) => c.text("ok"));
