@@ -17,6 +17,11 @@
  * docs/telegram.md for configuration and docs/build-a-channel.md for the SPI
  * this implements.
  *
+ * `createTelegramWebhookRoute` is the alternative to `createTelegramChannel`:
+ * updates over an HTTPS webhook instead of long-polling, mounted via
+ * `ChatterConfig.customRoutes` — see docs/telegram.md for choosing between
+ * the two.
+ *
  * @packageDocumentation
  */
 
@@ -38,6 +43,11 @@ export {
   toTelegramMediaRequest,
 } from "./api";
 export { createTelegramChannel, type TelegramChannelConfig } from "./channel";
+export {
+  createTelegramSender,
+  createTelegramUpdateHandler,
+  type TelegramUpdateHandlerDeps,
+} from "./handler";
 export { type LongPollDeps, pollBackoffMs, retryDelayMs, runLongPoll } from "./poll";
 export {
   mentionsBot,
@@ -48,3 +58,4 @@ export {
   telegramSenderKey,
   toChannelMessage,
 } from "./updates";
+export { createTelegramWebhookRoute, type TelegramWebhookConfig } from "./webhook";

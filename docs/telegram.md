@@ -143,6 +143,24 @@ Telegram `message_id`, which the channel puts on every `ChannelMessage`.
 Every send degrades to `false` rather than throwing when the channel is stopped
 or the API call fails — see [Server Setup](./server.md#sending-without-a-transport).
 
+## Choosing how updates arrive: long polling or webhook
+
+`createTelegramChannel` long-polls by default — that's everything above. A
+webhook is the alternative: Telegram POSTs each update to a URL you host
+instead of you asking for them. Both run the exact same inbound pipeline,
+gates and sender registry, sharing that logic internally so it never diverges
+between the two — but the two transports differ in real ways past that,
+covered below and in [Webhook mode](#webhook-mode):
+
+| | Long polling (`createTelegramChannel`) | Webhook (`createTelegramWebhookRoute`) |
+| --- | --- | --- |
+| Needs | Nothing — works behind NAT, on a laptop, anywhere outbound HTTPS reaches | A publicly reachable HTTPS URL |
+| Connection | One held-open request at a time | None between updates |
+| A bad token at boot | Fails only this channel; the rest of the server still starts | Fails the whole server's startup (see [Webhook mode](#webhook-mode)) |
+| A slow answer | Never redelivered — the poll offset already advanced | Can be redelivered by Telegram, risking a duplicate reply |
+| Multiple instances of one bot | Not supported — Telegram itself 409s a second poller | Supported for delivery, but mute/rate-limit state is still per-process (see [Webhook mode](#webhook-mode)) |
+| Setup | `channels: [createTelegramChannel(...)]` | `customRoutes` + one `setWebhook` call |
+
 ## Long polling, offsets and restarts
 
 `start()` resolves the bot's own identity (`getMe`) and then long-polls
@@ -183,13 +201,101 @@ suppresses polling entirely. Run one instance of this channel per bot token —
 unlike the WhatsApp channel there is no lease to arbitrate that for you,
 because Telegram arbitrates it itself.
 
+## Webhook mode
+
+`createTelegramWebhookRoute` builds a `customRoutes` mount instead of a
+`Channel` — Telegram POSTs updates to it directly, so there is no `channels:
+[]` entry and no poll loop to run:
+
+```ts
+import { createServer } from "@diegoaltoworks/chatter/server";
+import { createTelegramWebhookRoute } from "@diegoaltoworks/chatter/telegram";
+
+await createServer({
+  // ...your usual config
+  customRoutes: createTelegramWebhookRoute({
+    botToken: process.env.TELEGRAM_BOT_TOKEN as string,
+    webhookSecret: process.env.TELEGRAM_WEBHOOK_SECRET as string,
+  }),
+});
+```
+
+Every option from [Configuration](#configuration) applies here too — the same
+`allowedChats`, `history`, `answerFn`/`bucketsFor`/hooks, mute regexes and rate
+limits, since both transports build the identical pipeline underneath.
+`pollTimeoutSeconds`, `initialOffset` and `onOffset` don't apply (there is no
+poll loop); the config field unique to this mode is `path` (`@default
+"/webhooks/telegram"`).
+
+**`webhookSecret` is required, not optional.** Telegram signs nothing on a
+webhook POST by itself — the only proof of authenticity is a shared secret you
+choose, hand to `setWebhook`, and Telegram echoes back on every POST as
+`X-Telegram-Bot-Api-Secret-Token`. `createTelegramWebhookRoute` fails closed by
+construction: a missing/blank `webhookSecret`, or one outside the charset
+Telegram's own `secret_token` parameter accepts (`[A-Za-z0-9_-]{1,256}`),
+throws immediately rather than mounting a route that would accept forged
+updates from anyone who finds the URL, or reject every genuine one forever.
+Every POST is checked against it with a constant-time comparison, and a
+missing or mismatched header is rejected with `403` before the body is ever
+parsed or handed to the pipeline.
+
+**Registering the URL with Telegram** is a one-time call, separate from
+mounting the route — the library has no way to know your own public origin:
+
+```ts
+import { createTelegramApi } from "@diegoaltoworks/chatter/telegram";
+
+const api = createTelegramApi({ botToken: process.env.TELEGRAM_BOT_TOKEN as string });
+await api.setWebhook("https://yourapp.example/webhooks/telegram", {
+  secretToken: process.env.TELEGRAM_WEBHOOK_SECRET as string,
+});
+```
+
+Call `api.deleteWebhook()` to switch a bot back to long polling — a registered
+webhook suppresses `getUpdates` entirely, so `createTelegramChannel` would
+otherwise never see anything. The channel never calls this for you, since it
+has no way to know a webhook was ever registered.
+
+A handler failure (a throwing `answerFn`, a downed vector store) is logged and
+still answered with `200` rather than a `5xx` — Telegram treats a non-2xx as
+"retry this update later" and would otherwise redeliver a poison update
+forever.
+
+**A slow answer can still be redelivered, though — this is the one place the
+two transports genuinely differ, not just share code.** The poll loop
+advances its offset *before* handling an update, so a slow or hung handler
+never blocks acknowledgement. The webhook route can't do that: the HTTP
+response *is* the acknowledgement, so it only returns once the full pipeline —
+gates, retrieval, the model call — has finished. A handler slow enough to miss
+Telegram's own webhook timeout gets that update redelivered, which can produce
+a duplicate reply. Keep `answerFn` latency reasonable, or prefer long-poll mode
+if that risk isn't acceptable.
+
+**A bad token fails the whole server's startup, not just this transport.**
+`customRoutes` is awaited bare by `createServer` (unlike a `Channel`'s
+`start()`, which is wrapped in its own try/catch so one broken transport can't
+take the rest down) — so if `getMe` rejects while mounting this route, nothing
+else in the server boots either. Confirm the token before wiring this in.
+
+**Mute state and rate limits are per-process**, same as every other
+channel — a scheduler, the flows engine, or two replicas behind a load
+balancer each keep their own. Long-poll mode is inherently single-instance
+(Telegram itself rejects a second `getUpdates`), so this never mattered there.
+Webhook mode is exactly the shape you'd run behind a load balancer with
+several replicas, where it does: a `/mute` in one replica and the next message
+landing on another replica won't see it muted, and `dmRateLimit`/
+`groupRateLimit` budgets fragment per instance rather than being shared. Pin a
+bot's webhook traffic to one instance, or treat these as best-effort until a
+shared backing store exists for them.
+
 ## Testing your wiring
 
-Nothing here needs a real bot: the channel takes an `api` (or a `fetch`)
+Nothing here needs a real bot: both transports take an `api` (or a `fetch`)
 override, and `src/channels/telegram/*.test.ts` drives the full inbound path
 against a fake Bot API — mention gating, mute/unmute, allowlists, the sender
-registry and the poll loop's backoff. Copy that shape for your own tests rather
-than pointing a test at a live token.
+registry, the poll loop's backoff, and the webhook route's secret-token check.
+Copy that shape for your own tests rather than pointing a test at a live
+token.
 
 ## Related
 

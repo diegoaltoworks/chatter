@@ -10,7 +10,10 @@
  * per bot token. It is deliberately self-contained — `start(deps)` has
  * everything it needs, so there is no `customRoutes` wiring step (contrast
  * `./channels/whatsapp/inbound.ts`, whose transport and interpretation are
- * separate modules).
+ * separate modules). `./webhook` is the alternative transport for hosts that
+ * would rather receive updates over HTTPS than long-poll; the two share
+ * their update-handling logic via `./handler` so gate behaviour never
+ * diverges between them — see docs/telegram.md on choosing a mode.
  *
  * One caveat worth knowing before choosing this over a user-mode client: a bot
  * cannot start a conversation (the user must message it first), and in groups
@@ -23,13 +26,12 @@ import type { BucketsFor } from "../../core/buckets";
 import { createConsoleLogger, type Logger } from "../../core/logger";
 import type { RerankContext, RewriteQuery } from "../../core/pipeline";
 import type { HistoryStore } from "../../history/types";
-import { isBlockedByAllowlist } from "../gates";
 import type { Channel } from "../index";
-import { createInboundPipeline, type InboundReplySender } from "../pipeline";
-import type { ChannelSender } from "../senders";
-import { createTelegramApi, type TelegramApi, type TelegramUpdate } from "./api";
+import { createInboundPipeline } from "../pipeline";
+import { createTelegramApi, type TelegramApi } from "./api";
+import { createTelegramSender, createTelegramUpdateHandler } from "./handler";
 import { runLongPoll } from "./poll";
-import { type TelegramBotIdentity, telegramSenderKey, toChannelMessage } from "./updates";
+import type { TelegramBotIdentity } from "./updates";
 
 /** Long-poll hold time. Telegram holds the request open this long when no update arrives, so a poll is one request per 30s idle — not a busy loop. */
 const DEFAULT_POLL_TIMEOUT_SECONDS = 30;
@@ -137,13 +139,7 @@ export function createTelegramChannel(config: TelegramChannelConfig): Channel {
       const me: TelegramBotIdentity = await api.getMe();
       const label = `Telegram[${me.username ?? me.id}]`;
 
-      const sender: ChannelSender = {
-        sendText: (chatId, text) => api.sendMessage(chatId, text),
-        sendMedia: (chatId, payload) => api.sendMedia(chatId, payload),
-        sendReaction: (chatId, messageRef, emoji) =>
-          api.setMessageReaction(chatId, Number(messageRef), emoji),
-      };
-      deps.senders.register(channelName, sender);
+      deps.senders.register(channelName, createTelegramSender(api));
       senders = deps.senders;
       registered = true;
 
@@ -174,37 +170,14 @@ export function createTelegramChannel(config: TelegramChannelConfig): Channel {
         },
       );
 
-      // Chat ids already reported as blocked by the allowlist — a group id
-      // isn't guessable in advance, so a host needs to see it once to add it,
-      // and a chatty non-allowlisted group would otherwise flood the log.
-      const loggedUnallowedChats = new Set<string>();
-
-      async function handleUpdate(update: TelegramUpdate): Promise<void> {
-        const message = update.message;
-        const msg = toChannelMessage(update, me);
-        if (!msg || !message) return;
-
-        if (isBlockedByAllowlist(msg, { allowedChats })) {
-          if (!loggedUnallowedChats.has(msg.chatId)) {
-            loggedUnallowedChats.add(msg.chatId);
-            log.warn(`${label}: skipped chat ${msg.chatId} - not in allowedChats`);
-          }
-        }
-
-        const reply: InboundReplySender = {
-          // Threaded onto the incoming message: in a busy group an untethered
-          // answer reads as a non-sequitur.
-          sendAnswer: (chatId, text) =>
-            api.sendMessage(chatId, text, { replyToMessageId: message.message_id }),
-          sendGateReply: (chatId, text) => api.sendMessage(chatId, text),
-        };
-
-        await pipeline(msg, {
-          reply,
-          conversationId: msg.chatId,
-          sender: telegramSenderKey(msg.senderId),
-        });
-      }
+      const handleUpdate = createTelegramUpdateHandler({
+        api,
+        me,
+        pipeline,
+        allowedChats,
+        logger: log,
+        label,
+      });
 
       abort = new AbortController();
       const signal = abort.signal;
