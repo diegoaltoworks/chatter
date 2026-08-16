@@ -103,14 +103,19 @@ dependency to the registry worth stating explicitly:
 
 ```
 merge to main → CI (the gates, plus the build/runtime/tarball/image jobs)
-              → publish workflow re-runs the gates, bumps the minor, tags,
+              → publish workflow re-runs the gates, bumps the version, tags,
                 `npm publish --provenance`
               → the tag push publishes the GitHub release and its notes
 ```
 
-Nobody types a version number: the publish workflow derives the next minor from
-the highest `v*` tag and commits the bump itself, which is why its own
-`chore(release): v…` commit is excluded from re-triggering it.
+Nobody types a version number: the publish workflow derives the next version
+from the highest `v*` tag and commits the bump itself, which is why its own
+`chore(release): v…` commit is excluded from re-triggering it. The bump type
+carries signal instead of always being a minor: `scripts/next-version.ts`
+scans every commit subject since the last tag and ships a minor if any of them
+is a `feat` (a `!` breaking-change marker still only reaches minor; `BREAKING
+CHANGE:` footers are not read), a patch otherwise (`fix`, `chore`, `docs`, …).
+A distinct major-bump tier is reserved for when that matters, post-1.0.
 
 ### The human gate
 

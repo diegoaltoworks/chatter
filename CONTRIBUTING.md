@@ -138,10 +138,18 @@ version publishes (see [GitHub Releases](https://github.com/diegoaltoworks/chatt
 ## Release Process
 
 Releases are automated. Merging a PR to `main` runs CI; when CI is green the
-publish workflow re-runs the gates, builds, bumps the minor version, tags, and
+publish workflow re-runs the gates, builds, bumps the version, tags, and
 publishes to npm with provenance. The tag push then publishes the GitHub
 release notes. Do not bump `package.json` by hand — the workflow owns the
 version.
+
+The bump type is derived from the conventional-commit type of every commit
+since the last release tag (not just the one that triggered the run): any
+`feat` commit ships a minor, everything else (`fix`, `chore`, `docs`, etc.)
+ships a patch. A `!` breaking-change marker (`feat!:`) still only reaches
+minor — a distinct major-bump tier is reserved for after 1.0; `BREAKING
+CHANGE:` commit-body footers are not read. See `scripts/next-version.ts` for
+the derivation.
 
 One thing is deliberately **not** automatic: nothing authored by
 `dependabot[bot]` publishes itself. Dependency PRs are opened, approved and
