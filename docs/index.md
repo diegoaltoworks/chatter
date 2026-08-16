@@ -6,14 +6,19 @@ Welcome to the Chatter documentation! This guide will help you set up and deploy
 
 ### Getting Started
 
-1. **[Requirements](./requirements.md)** - What you need before starting
+1. **[Architecture](./ARCHITECTURE.md)** - The invariants this codebase depends on, and the test that enforces each one
+   - Also see [docs/patterns/](./patterns/) for worked "how do I add X" guides
+     and [docs/decisions/](./decisions/) for the ADRs behind the shape of the
+     codebase
+
+2. **[Requirements](./requirements.md)** - What you need before starting
    - OpenAI API setup
    - Turso database configuration
    - Clerk authentication (optional)
    - Runtime and platform requirements
    - Cost estimates
 
-2. **[Server Setup](./server.md)** - Configure and run your Chatter server
+3. **[Server Setup](./server.md)** - Configure and run your Chatter server
    - Installation
    - Configuration options
    - Knowledge base setup
@@ -22,14 +27,14 @@ Welcome to the Chatter documentation! This guide will help you set up and deploy
    - Channels (transport SPI, reply gates, sender registry)
    - Running locally
 
-3. **[Client Setup](./client.md)** - Integrate chat widgets into your website
+4. **[Client Setup](./client.md)** - Integrate chat widgets into your website
    - Vanilla JavaScript widgets
    - React components
    - Theming and customization
    - Authentication modes
    - Framework integration
 
-4. **[UI Integrations & OpenAI-Compatible API](./integrations.md)** - Bring your own chat UI
+5. **[UI Integrations & OpenAI-Compatible API](./integrations.md)** - Bring your own chat UI
    - OpenAI-compatible endpoints (`/v1/chat/completions`)
    - Headless mode (API only, no built-in widget)
    - Programmatic RAG pipeline (no HTTP)
@@ -38,48 +43,48 @@ Welcome to the Chatter documentation! This guide will help you set up and deploy
    - Graph frameworks (LangGraph, either direction)
    - Deep Chat and assistant-ui sample apps
 
-5. **[Usage Metering](./usage.md)** - Cap what paid features cost per day
+6. **[Usage Metering](./usage.md)** - Cap what paid features cost per day
    - Per-caller and global daily caps
    - Reserve-once semantics and cache-before-spend ordering
    - Multi-instance-safe Turso store, or bring your own
 
-6. **[Personas](./personas.md)** - Dynamic prompt layers and named greetings
+7. **[Personas](./personas.md)** - Dynamic prompt layers and named greetings
    - Windowed, per-contact persona rolls from a JSON registry
    - Prompt-file loading with template interpolation
    - Content-free greeter and time-context helper
 
-7. **[WhatsApp Channel](./channels.md)** - Link a WhatsApp number as a transport
+8. **[WhatsApp Channel](./channels.md)** - Link a WhatsApp number as a transport
    - Configuration, pairing (QR and pairing-code modes)
    - Encrypted, multi-session auth state
    - Deploy lease and reconnect behaviour
    - Full wiring: [`examples/full-bot`](../examples/full-bot/)
 
-8. **[Flows](./flows.md)** - Multi-turn, schema-driven slot-filling flows
+9. **[Flows](./flows.md)** - Multi-turn, schema-driven slot-filling flows
    - Directory-loaded flow contract (flow.json/handler.ts/instructions.md)
    - Hybrid keyword + LLM intent matching
    - Multi-instance-safe session state via a Turso-backed store
 
-9. **[Images](./images.md)** - Generate and cache images on demand
-   - OpenAI edit/generate with caller-composed prompts
-   - Cache-before-spend ordering, optional Cloudinary upload
-   - Optional caption helper with pool + LLM compose fallback
+10. **[Images](./images.md)** - Generate and cache images on demand
+    - OpenAI edit/generate with caller-composed prompts
+    - Cache-before-spend ordering, optional Cloudinary upload
+    - Optional caption helper with pool + LLM compose fallback
 
-10. **[Conversation History](./history.md)** - Structural, host-replaceable multi-turn context
+11. **[Conversation History](./history.md)** - Structural, host-replaceable multi-turn context
     - `HistoryStore`: append/load(conversationId, limit)
     - Multi-instance-safe Turso store with bounded per-conversation pruning
     - Opt-in WhatsApp wiring; single-turn elsewhere until adopted
 
-11. **[Scheduler](./scheduler.md)** - Exactly-once outbound scheduling
+12. **[Scheduler](./scheduler.md)** - Exactly-once outbound scheduling
     - Content-free: candidate entries are always caller-supplied
     - Multi-instance-safe claim via Turso, with a fire-time grace window
     - Pluggable compose step and voice-attempted/text-guaranteed delivery
 
-12. **[Building a Channel](./build-a-channel.md)** - Plug in a new transport
+13. **[Building a Channel](./build-a-channel.md)** - Plug in a new transport
     - What a transport owns vs. what `createInboundPipeline` gives you free
     - A worked, non-WhatsApp example (Telegram)
     - The `intercept` hook, history, and allowlist observability
 
-13. **[Deployment](./deployment.md)** - Deploy to production
+14. **[Deployment](./deployment.md)** - Deploy to production
     - Platform compatibility
     - Docker deployment
     - Google Cloud Run
@@ -88,22 +93,22 @@ Welcome to the Chatter documentation! This guide will help you set up and deploy
     - VPS setup
     - Security best practices
 
-14. **[Packaging](./packaging.md)** - What the published package exposes
+15. **[Packaging](./packaging.md)** - What the published package exposes
     - The subpath contract and what each one gives you
     - Adding a subpath without breaking consumers
     - The packed-tarball check that verifies it before release
     - The release chain, its human gate, and how the toolchain is pinned
 
-15. **[Testing](./testing.md)** - Run and extend the test suite
+16. **[Testing](./testing.md)** - Run and extend the test suite
     - Unit vs. integration tests, and what each needs
     - Faking OpenAI/Turso for tests that must never call a paid API
     - Coverage and watch mode
 
-16. **[Sprint Review](./sprint-review.md)** - Cross-module & security-invariant audit
+17. **[Sprint Review](./sprint-review.md)** - Cross-module & security-invariant audit
     - Confirms cross-module paths are exercised end to end, not just per-module
     - A point-in-time snapshot, not a standing guarantee
 
-17. **[FAQs](./faqs.md)** - Common questions and troubleshooting
+18. **[FAQs](./faqs.md)** - Common questions and troubleshooting
     - General questions
     - Platform compatibility
     - Knowledge base and RAG
