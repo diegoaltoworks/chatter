@@ -15,4 +15,6 @@ export interface HistoryStore {
   append(conversationId: string, message: HistoryMessage): Promise<void>;
   /** Load up to `limit` most recent turns for `conversationId`, oldest first. */
   load(conversationId: string, limit: number): Promise<HistoryMessage[]>;
+  /** Reset primitive: erases all of `conversationId`'s history. Other conversations are untouched. */
+  clear(conversationId: string): Promise<void>;
 }

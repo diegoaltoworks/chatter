@@ -75,8 +75,9 @@ Welcome to the Chatter documentation! This guide will help you set up and deploy
     - Optional caption helper with pool + LLM compose fallback
 
 12. **[Conversation History](./history.md)** - Structural, host-replaceable multi-turn context
-    - `HistoryStore`: append/load(conversationId, limit)
+    - `HistoryStore`: append/load(conversationId, limit)/clear(conversationId)
     - Multi-instance-safe Turso store with bounded per-conversation pruning
+    - Privacy controls: retention TTL, `clear` reset, per-sender opt-out
     - Opt-in WhatsApp wiring; single-turn elsewhere until adopted
 
 13. **[Scheduler](./scheduler.md)** - Exactly-once outbound scheduling

@@ -237,6 +237,9 @@ handleInbound = createWhatsAppInboundHandler({
   `createTursoHistoryStore`'s `maxPerConversation`). Every loaded turn is a
   full message on every reply's prompt, so raising it raises token cost too —
   see [history.md](./history.md).
+- **`historyEnabledFor`** — excludes a sender from memory entirely; see
+  "Privacy controls" in [history.md](./history.md) for this, retention TTLs,
+  and the `clear` reset primitive.
 
 History is keyed by chat jid, so a group chat's history is shared across every
 participant in it — there is no per-sender history within a group. A message

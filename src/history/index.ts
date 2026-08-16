@@ -13,5 +13,6 @@
  * @packageDocumentation
  */
 
+export type { TursoHistoryStoreOptions } from "./tursoStore";
 export { createTursoHistoryStore } from "./tursoStore";
 export type { HistoryMessage, HistoryStore } from "./types";

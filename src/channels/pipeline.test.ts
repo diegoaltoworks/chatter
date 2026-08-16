@@ -79,6 +79,9 @@ function fakeHistoryStore(): HistoryStore & { data: Map<string, HistoryMessage[]
     async load(conversationId, limit) {
       return (data.get(conversationId) ?? []).slice(-limit);
     },
+    async clear(conversationId) {
+      data.delete(conversationId);
+    },
   };
 }
 
@@ -417,6 +420,60 @@ describe("createInboundPipeline", () => {
       expect(store.data.get("conv-x")).toEqual([
         { role: "user", content: "hi" },
         { role: "assistant", content: "a reply" },
+      ]);
+      expect(store.data.has("chat-1")).toBe(false);
+    });
+
+    test("historyEnabledFor returning false: opted-out sender's turns are never written or read", async () => {
+      const store = fakeHistoryStore();
+      await store.append("chat-1", { role: "user", content: "earlier" });
+      const { handle, reply, answers } = harness({
+        history: { store, historyEnabledFor: () => false },
+      });
+
+      await handle(msg({ text: "hello there" }), { reply });
+
+      // The earlier turn already in the store is never loaded back...
+      expect((answers[0] as AnswerFnInput).messages).toEqual([
+        { role: "user", content: "hello there" },
+      ]);
+      // ...and this turn is never appended either.
+      expect(store.data.get("chat-1")).toEqual([{ role: "user", content: "earlier" }]);
+    });
+
+    test("historyEnabledFor is consulted with the resolved sender", async () => {
+      const seen: string[] = [];
+      const store = fakeHistoryStore();
+      const { handle, reply } = harness({
+        history: {
+          store,
+          historyEnabledFor: (sender) => {
+            seen.push(sender);
+            return true;
+          },
+        },
+      });
+
+      await handle(msg(), { reply, sender: "+15550000" });
+
+      expect(seen).toEqual(["+15550000"]);
+    });
+
+    test("a throwing historyEnabledFor fails closed: history stays disabled for that turn", async () => {
+      const store = fakeHistoryStore();
+      const { handle, reply, answers } = harness({
+        history: {
+          store,
+          historyEnabledFor: () => {
+            throw new Error("policy store unavailable");
+          },
+        },
+      });
+
+      await handle(msg({ text: "hello there" }), { reply });
+
+      expect((answers[0] as AnswerFnInput).messages).toEqual([
+        { role: "user", content: "hello there" },
       ]);
       expect(store.data.has("chat-1")).toBe(false);
     });

@@ -78,6 +78,14 @@ export interface InboundPipelineConfig {
     store: HistoryStore;
     /** Most recent turns to load per reply. @default 20 */
     limit?: number;
+    /**
+     * Excludes a sender from history entirely — checked before both `load`
+     * and `append`, so an opted-out sender's turns are never read back and
+     * never written. A throw/rejection fails closed ("not enabled"): a
+     * broken predicate must never start recording a sender who may have
+     * opted out. @default every sender is enabled
+     */
+    historyEnabledFor?: (sender: string) => boolean | Promise<boolean>;
   };
   /** Group chats eligible for a reply. Empty (default) = every group. Has no effect on DMs, which always reply. */
   allowedChats?: string[];
@@ -146,6 +154,17 @@ async function resolvePersonaLayer(
   }
 }
 
+async function isHistoryEnabled(config: InboundPipelineConfig, sender: string): Promise<boolean> {
+  const predicate = config.history?.historyEnabledFor;
+  if (!predicate) return true;
+  try {
+    return await predicate(sender);
+  } catch (error) {
+    config.logger?.error("historyEnabledFor threw; disabling history for this turn", error);
+    return false;
+  }
+}
+
 /**
  * Builds the reusable per-session (or per-channel) inbound handler: gates
  * and rate limiters live in its closure, exactly like a hand-rolled
@@ -205,18 +224,23 @@ export function createInboundPipeline(
     const personaLayer = await resolvePersonaLayer(config, { sender, text: msg.text });
     const buckets = await resolveBuckets({ mode, sender, bucketsFor: config.bucketsFor });
 
-    const priorTurns = config.history
-      ? await config.history.store.load(
-          conversationId,
-          config.history.limit ?? DEFAULT_HISTORY_LIMIT,
-        )
-      : [];
+    const historyEnabled = config.history ? await isHistoryEnabled(config, sender) : false;
+
+    const priorTurns =
+      config.history && historyEnabled
+        ? await config.history.store.load(
+            conversationId,
+            config.history.limit ?? DEFAULT_HISTORY_LIMIT,
+          )
+        : [];
     const messages: PipelineMessage[] = [...priorTurns, { role: "user", content: msg.text }];
     // Appended right after the load/messages snapshot, not after the reply:
     // the window between another instance's load for this chat and this
     // turn landing in the store is as narrow as it can be without a
     // transactional read-modify-write.
-    await config.history?.store.append(conversationId, { role: "user", content: msg.text });
+    if (historyEnabled) {
+      await config.history?.store.append(conversationId, { role: "user", content: msg.text });
+    }
 
     const { system } = await prepareChat({
       store: deps.store,
@@ -259,7 +283,9 @@ export function createInboundPipeline(
       // "something was sent".
       return { action: "ignore" };
     }
-    await config.history?.store.append(conversationId, { role: "assistant", content });
+    if (historyEnabled) {
+      await config.history?.store.append(conversationId, { role: "assistant", content });
+    }
     await turn.reply.sendAnswer(msg.chatId, content);
 
     return { action: "reply", content };

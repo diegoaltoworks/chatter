@@ -361,6 +361,12 @@ export interface WhatsAppInboundConfig {
     store: HistoryStore;
     /** Most recent turns to load per reply. @default 20 */
     limit?: number;
+    /**
+     * Excludes a sender from history entirely — see
+     * `InboundPipelineConfig.history.historyEnabledFor` in `./channels`.
+     * @default every sender is enabled
+     */
+    historyEnabledFor?: (sender: string) => boolean | Promise<boolean>;
   };
   now?: () => number;
   /** Logger for gate/dispatch diagnostics. Default: a console logger writing to stderr. */

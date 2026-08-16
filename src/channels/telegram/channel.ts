@@ -58,7 +58,17 @@ export interface TelegramChannelConfig {
     text: string;
   }) => string | undefined | Promise<string | undefined>;
   /** Off by default — the channel stays single-turn until a store is configured. */
-  history?: { store: HistoryStore; limit?: number };
+  history?: {
+    store: HistoryStore;
+    /** Most recent turns to load per reply. @default 20 */
+    limit?: number;
+    /**
+     * Excludes a sender from history entirely — see
+     * `InboundPipelineConfig.history.historyEnabledFor` in `./channels`.
+     * @default every sender is enabled
+     */
+    historyEnabledFor?: (sender: string) => boolean | Promise<boolean>;
+  };
   muteRegex?: RegExp;
   unmuteRegex?: RegExp;
   /** Neutral, overridable acknowledgements — this module ships no bot personality; unset = silent mute/unmute. */
