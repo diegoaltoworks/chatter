@@ -362,9 +362,9 @@ what was asked, retrieved or answered:
 }
 ```
 
-Conversation content is opt-in twice over: `logging.content` has to be set,
-and the event lands at `debug`, so a host that leaves `logLevel` alone still
-logs nothing sensitive. The `logging.onChat` callback is unaffected by either
+Conversation content is opt-in twice over: `logging.content` has to be set
+(with `console` left on), and the event lands at `debug`, so a host that
+leaves `logLevel` alone still logs nothing sensitive. The `logging.onChat` callback is unaffected by either
 flag - it always receives the full event, because a host that registers a sink
 has chosen where that data goes. Everything emitted, console event or
 callback, is passed through the same credential scrubbing applied to answers,

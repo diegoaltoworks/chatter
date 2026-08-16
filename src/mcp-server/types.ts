@@ -75,9 +75,10 @@ export interface MCPServerOptions extends ChatterConfig {
     /**
      * Also emit the conversation itself - user message, history, retrieved
      * context, answer - as an `mcp_chat_content` event. Default: false, so
-     * the default log carries metadata only. Emitted at `debug`, so it also
-     * needs `logLevel: "debug"` (or a custom `logger` that keeps debug) to
-     * reach the log, and the content is scrubbed of credentials first.
+     * the default log carries metadata only. Needs `console` left on, and
+     * lands at `debug`, so it also needs `logLevel: "debug"` (or a custom
+     * `logger` that keeps debug) to reach the log. Scrubbed of credentials
+     * first, like every other logged content.
      */
     content?: boolean;
     /**
