@@ -1,5 +1,5 @@
 /**
- * Schema-driven parameter extraction — pulls structured params out of a
+ * Schema-driven parameter extraction - pulls structured params out of a
  * message using the flow's `instructions.md` and JSON schema, across as many
  * turns as it takes to fill every required field.
  */
@@ -86,6 +86,10 @@ Return JSON with:
 
 Do not compute "allParamsFilled" - the caller recomputes it from the merged params.`;
 
+  // Calls the OpenAI client directly rather than going through
+  // core/answer.ts: this extracts structured slot values, it never becomes
+  // a reply sent to the user, so it is not a "chat surface" and is exempt
+  // from the answerFn seam (see docs/ARCHITECTURE.md, invariant 1).
   const response = await client.chat.completions.create({
     model,
     temperature: 0.2,

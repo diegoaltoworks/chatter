@@ -223,11 +223,15 @@ jobs:
       # succeeds today and would keep succeeding if main-protection ever
       # requires the same checks: GitHub itself will refuse a merge before
       # they post, which this run already waited for above. The merge SHA
-      # comes from an explicit fetch rather than gh's own post-merge local
-      # branch cleanup (which only happens to leave main checked out) — that
-      # keeps a local git hiccup in branch deletion from being mistaken for a
-      # failed merge, so deleting the branch is a best-effort step of its own
-      # afterward.
+      # comes from the PR's own mergeCommit via the API, not from the tip of
+      # origin/main: a human push landing on main between the squash-merge
+      # above and a later `git fetch` would move that tip past the release
+      # commit, and everything below would then check out and publish the
+      # wrong tree under the release's version number. mergeCommit can still
+      # be null for a moment right after the merge call returns, so this
+      # polls briefly rather than reading it once and checking out "null".
+      # Branch deletion stays a best-effort step of its own afterward, so a
+      # local git hiccup there is never mistaken for a failed merge.
       - name: Merge the release PR
         id: merge
         if: steps.pr.outputs.branch != ''
@@ -235,8 +239,18 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           gh pr merge "${{ steps.pr.outputs.number }}" --repo "${{ github.repository }}" --squash
-          git fetch origin main
-          echo "sha=$(git rev-parse origin/main)" >> "$GITHUB_OUTPUT"
+          SHA=""
+          for _ in $(seq 1 10); do
+            SHA=$(gh pr view "${{ steps.pr.outputs.number }}" --repo "${{ github.repository }}" \
+              --json mergeCommit --jq '.mergeCommit.oid // empty')
+            [ -n "$SHA" ] && break
+            sleep 3
+          done
+          if [ -z "$SHA" ]; then
+            echo "::error::PR #${{ steps.pr.outputs.number }} merged but its mergeCommit never appeared - refusing to guess which commit to release."
+            exit 1
+          fi
+          echo "sha=$SHA" >> "$GITHUB_OUTPUT"
           echo "version=${{ steps.pr.outputs.version }}" >> "$GITHUB_OUTPUT"
           git push origin --delete "${{ steps.pr.outputs.branch }}" || true
 
@@ -279,11 +293,18 @@ jobs:
             echo "already_published=false" >> "$GITHUB_OUTPUT"
           fi
 
-      - name: Publish to NPM
+      # OIDC trusted publishing: no long-lived NPM_TOKEN, no NODE_AUTH_TOKEN.
+      # npm exchanges this job's `id-token: write` OIDC identity for a
+      # short-lived publish credential directly with the registry, which
+      # needs a client recent enough to speak that exchange. See
+      # docs/packaging.md.
+      - name: Update npm (OIDC trusted publishing needs a recent client)
+        if: steps.published.outputs.already_published == 'false'
+        run: npm install -g npm@12.0.2
+
+      - name: Publish to NPM (OIDC trusted publishing, no token)
         if: steps.published.outputs.already_published == 'false'
         run: npm publish --provenance --access public
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
       # The release notes are cut here rather than by a workflow listening for
       # a tag push: a tag pushed with the default GITHUB_TOKEN does not
