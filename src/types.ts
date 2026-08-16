@@ -66,9 +66,89 @@ export interface BotChatConfig {
 }
 
 /**
+ * The brain and retrieval hooks a chat surface consults, in the order a turn
+ * reaches them: `bucketsFor` scopes retrieval, `rewriteQuery` shapes the
+ * search, `rerankContext` post-processes what came back, `answerFn` replaces
+ * the completion call itself, and `transformReply` has the last word on what
+ * gets delivered. `ChatterConfig` sets the server-wide default for each; a
+ * channel config (`TelegramChannelConfig`, `MatrixChannelConfig`,
+ * `WhatsAppInboundConfig`, ...) extends this same interface so a single
+ * channel can override any of them for its own traffic, falling back to the
+ * server-level hook when unset: see `resolveBrainHooks` in `./channels`.
+ */
+export interface BrainHooks {
+  /**
+   * Replaces the completion call on every chat surface with your own brain —
+   * an agent framework, a graph runtime, a remote service. Receives the
+   * assembled system prompt and conversation from the pipeline and returns
+   * the answer text (optionally with token usage).
+   *
+   * Retrieval, prompt assembly, auth, rate limiting, transports and output
+   * guardrails all stay Chatter's. Errors surface as normal completion
+   * errors. Unset: the built-in OpenAI completion is used.
+   */
+  answerFn?: AnswerFn;
+  /**
+   * Decides which knowledge buckets each chat turn may retrieve from, given
+   * the pipeline mode and — where the surface knows it — the sender's
+   * identity. Use it for role-gated knowledge: entitle a signed-in operator
+   * to buckets an anonymous visitor cannot see.
+   *
+   * Consulted by the chat routes, the OpenAI-compatible endpoints, the MCP
+   * chat tools and the demo route. Return `undefined` to keep the mode
+   * defaults (`base` plus the mode's own bucket). For a caller the surface
+   * could not identify, the answer is filtered down to those same defaults —
+   * the hook can narrow retrieval for an unnamed caller but never widen it.
+   *
+   * Unset: the mode defaults apply everywhere.
+   */
+  bucketsFor?: BucketsFor;
+  /**
+   * Rewrites the retrieval query for a turn before it reaches the vector
+   * store — e.g. expanding an ambiguous follow-up into something embeddable
+   * on its own. Receives the same `sender` identity `answerFn` sees (not the
+   * retrieval-scope-restricted one `bucketsFor` sees on the public
+   * OpenAI-compatible route — rewriting a query widens nothing, so it isn't
+   * subject to that clamp).
+   *
+   * Consulted everywhere `bucketsFor` is. A throw/rejection, or a return
+   * value that isn't a non-blank string, falls back to the unmodified query
+   * — a broken rewrite degrades relevance, never the chat path. Unset:
+   * retrieval runs on the latest user message unmodified.
+   */
+  rewriteQuery?: RewriteQuery;
+  /**
+   * Post-processes the chunks retrieval returned — reordering, filtering, or
+   * otherwise reranking — before they're folded into the system prompt.
+   *
+   * Consulted everywhere `bucketsFor` is, immediately after retrieval runs.
+   * A throw/rejection, or a return value that isn't a string array, falls
+   * back to the chunks retrieval returned, unmodified. Unset: retrieved
+   * chunks are used as-is.
+   */
+  rerankContext?: RerankContext;
+  /**
+   * Modifies or vetoes an outgoing reply after it has already been produced
+   * (by `answerFn` or the built-in completion, past guardrails). Return a
+   * string to replace the reply, or `null` to veto it — a deliberate drop,
+   * treated the same as an empty answer: nothing is delivered, and the
+   * channel pipeline never records an assistant turn for it (the user's own
+   * turn, already appended before answering, stays recorded either way). A
+   * throw/rejection is logged and the ORIGINAL reply is sent.
+   *
+   * Consulted by the channel pipeline and every non-streaming HTTP chat
+   * surface (widget and demo routes, OpenAI-compatible endpoints, MCP chat
+   * tools). Streaming responses are delivered incrementally as they're
+   * produced, before a final answer exists to transform, so this hook is
+   * never consulted for them. Unset: replies pass through unchanged.
+   */
+  transformReply?: TransformReply;
+}
+
+/**
  * Main configuration for Chatter server
  */
-export interface ChatterConfig {
+export interface ChatterConfig extends BrainHooks {
   // Bot identity
   bot: BotIdentity;
   branding?: BotBranding;
@@ -242,78 +322,6 @@ export interface ChatterConfig {
      */
     strictTransportSecurity?: string | false;
   };
-
-  // Brain (advanced)
-  /**
-   * Replaces the completion call on every chat surface with your own brain —
-   * an agent framework, a graph runtime, a remote service. Receives the
-   * assembled system prompt and conversation from the pipeline and returns
-   * the answer text (optionally with token usage).
-   *
-   * Retrieval, prompt assembly, auth, rate limiting, transports and output
-   * guardrails all stay Chatter's. Errors surface as normal completion
-   * errors. Unset: the built-in OpenAI completion is used.
-   */
-  answerFn?: AnswerFn;
-
-  // Outbound reply hook (advanced)
-  /**
-   * Modifies or vetoes an outgoing reply after it has already been produced
-   * (by `answerFn` or the built-in completion, past guardrails). Return a
-   * string to replace the reply, or `null` to veto it — a deliberate drop,
-   * treated the same as an empty answer: nothing is delivered, and the
-   * channel pipeline never records an assistant turn for it (the user's own
-   * turn, already appended before answering, stays recorded either way). A
-   * throw/rejection is logged and the ORIGINAL reply is sent.
-   *
-   * Consulted by the channel pipeline and every non-streaming HTTP chat
-   * surface (widget and demo routes, OpenAI-compatible endpoints, MCP chat
-   * tools). Streaming responses are delivered incrementally as they're
-   * produced, before a final answer exists to transform, so this hook is
-   * never consulted for them. Unset: replies pass through unchanged.
-   */
-  transformReply?: TransformReply;
-
-  // Retrieval scope (advanced)
-  /**
-   * Decides which knowledge buckets each chat turn may retrieve from, given
-   * the pipeline mode and — where the surface knows it — the sender's
-   * identity. Use it for role-gated knowledge: entitle a signed-in operator
-   * to buckets an anonymous visitor cannot see.
-   *
-   * Consulted by the chat routes, the OpenAI-compatible endpoints, the MCP
-   * chat tools and the demo route. Return `undefined` to keep the mode
-   * defaults (`base` plus the mode's own bucket). For a caller the surface
-   * could not identify, the answer is filtered down to those same defaults —
-   * the hook can narrow retrieval for an unnamed caller but never widen it.
-   *
-   * Unset: the mode defaults apply everywhere.
-   */
-  bucketsFor?: BucketsFor;
-  /**
-   * Rewrites the retrieval query for a turn before it reaches the vector
-   * store — e.g. expanding an ambiguous follow-up into something embeddable
-   * on its own. Receives the same `sender` identity `answerFn` sees (not the
-   * retrieval-scope-restricted one `bucketsFor` sees on the public
-   * OpenAI-compatible route — rewriting a query widens nothing, so it isn't
-   * subject to that clamp).
-   *
-   * Consulted everywhere `bucketsFor` is. A throw/rejection, or a return
-   * value that isn't a non-blank string, falls back to the unmodified query
-   * — a broken rewrite degrades relevance, never the chat path. Unset:
-   * retrieval runs on the latest user message unmodified.
-   */
-  rewriteQuery?: RewriteQuery;
-  /**
-   * Post-processes the chunks retrieval returned — reordering, filtering, or
-   * otherwise reranking — before they're folded into the system prompt.
-   *
-   * Consulted everywhere `bucketsFor` is, immediately after retrieval runs.
-   * A throw/rejection, or a return value that isn't a string array, falls
-   * back to the chunks retrieval returned, unmodified. Unset: retrieved
-   * chunks are used as-is.
-   */
-  rerankContext?: RerankContext;
 
   // Custom routes (advanced)
   /** Custom route handler for advanced use cases. May be async — see {@link CustomRoutes} */

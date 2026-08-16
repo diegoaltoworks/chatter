@@ -20,6 +20,7 @@ import type { Client } from "@libsql/client";
 import type { WAMessage, WAMessageKey, WASocket } from "@whiskeysockets/baileys";
 import { assertStrongSecret } from "../../auth/secretStrength";
 import { createConsoleLogger, type Logger } from "../../core/logger";
+import { exponentialBackoffMs } from "../backoff";
 import type { Channel } from "../index";
 import type { ChannelSender } from "../senders";
 import type { AuthStateRuntime } from "./authState";
@@ -39,7 +40,7 @@ const RECONNECT_MAX_DELAY_MS = 10 * 60 * 1000;
 /** Exponential backoff: 5s, 10s, 20s ... capped at 10 minutes. Hammering
  * WhatsApp every few seconds during an outage or ban aggravates ban scoring. */
 export function reconnectDelayMs(failures: number): number {
-  return Math.min(RECONNECT_DELAY_MS * 2 ** Math.min(failures, 20), RECONNECT_MAX_DELAY_MS);
+  return exponentialBackoffMs(RECONNECT_DELAY_MS, RECONNECT_MAX_DELAY_MS, failures);
 }
 
 export interface WhatsAppMessageEvent {
@@ -250,11 +251,12 @@ export function createWhatsAppChannel(config: WhatsAppChannelConfig): Channel {
   return {
     name: channelName,
     async start(deps) {
-      // `config.logger` wins when set — otherwise fall back to the host's
-      // resolved `deps.logger` (same precedence as `config.answerFn ??
-      // deps.config.answerFn` elsewhere) so a `ChatterConfig.logger` reaches
-      // this channel's connection/lease lifecycle without every caller
-      // having to also pass it into `createWhatsAppChannel` directly.
+      // `config.logger` wins when set, otherwise fall back to the host's
+      // resolved `deps.logger` (the same config-then-server precedence
+      // `resolveBrainHooks` applies to the brain hooks) so a
+      // `ChatterConfig.logger` reaches this channel's connection/lease
+      // lifecycle without every caller having to also pass it into
+      // `createWhatsAppChannel` directly.
       const log = config.logger ?? deps.logger ?? createConsoleLogger();
       const db: Client = deps.db;
       const leaseStore = createTursoWaLeaseStore(db);

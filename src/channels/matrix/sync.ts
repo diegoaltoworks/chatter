@@ -11,6 +11,7 @@
  */
 
 import { createConsoleLogger, type Logger } from "../../core/logger";
+import { exponentialBackoffMs } from "../backoff";
 import { MatrixApiError, type MatrixSyncResponse } from "./api";
 
 const BASE_DELAY_MS = 1_000;
@@ -18,7 +19,7 @@ const MAX_DELAY_MS = 60_000;
 
 /** Exponential backoff: 2s, 4s, 8s ... capped at a minute. `failures` is the count including the one just seen. */
 export function syncBackoffMs(failures: number): number {
-  return Math.min(BASE_DELAY_MS * 2 ** Math.min(failures, 20), MAX_DELAY_MS);
+  return exponentialBackoffMs(BASE_DELAY_MS, MAX_DELAY_MS, failures);
 }
 
 /**

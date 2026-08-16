@@ -53,6 +53,7 @@ export {
   type InboundPipelineOutcome,
   type InboundReplySender,
   type InboundTurn,
+  resolveBrainHooks,
 } from "./pipeline";
 export type { ChannelSender, ChannelSenderRegistry } from "./senders";
 export { createSenderRegistry } from "./senders";
