@@ -50,6 +50,12 @@ bun test --coverage
   covers the gate's own logic: which commits in an unreleased range may publish
   automatically, and which need a human to dispatch the release.
 
+- **Docs ToC tests** cover documentation drift. `scripts/docs-toc.test.ts`
+  reads every `docs/*.md` file and fails if either README.md's Documentation
+  section or docs/index.md's Quick Navigation section forgot to link it — the
+  same "nothing else would notice going missing" shape as the supply-chain
+  check, applied to the doc set instead of CI config.
+
 - **Node runtime tests** cover the other runtime the package supports. Every
   test above runs under Bun, where a `Bun` global exists and `require()` works
   inside ESM, so `bun run build && bun run test:node` loads `dist/` under plain

@@ -25,7 +25,9 @@ function isHttps(c: Context, trustProxy: boolean): boolean {
  * `X-Forwarded-Proto` — see `rateLimit.trustProxy`) or `NODE_ENV=production`.
  * A browser ignores HSTS delivered over plain HTTP (RFC 6797 §8.1), so this
  * gate is about not asserting a guarantee the deployment doesn't back, not
- * about avoiding a localhost lockout.
+ * about avoiding a localhost lockout. `trustProxy` defaults to `false`: a
+ * deployment reachable directly must opt in before a client-suppliable
+ * header is trusted for anything.
  *
  * Headers are set after `next()` so they still land on a handler that
  * returns a raw `Response` (e.g. from `config.customRoutes`) rather than
@@ -35,7 +37,7 @@ function isHttps(c: Context, trustProxy: boolean): boolean {
 export function securityHeaders(config: ChatterConfig) {
   const csp = config.server?.contentSecurityPolicy || DEFAULT_CSP;
   const hsts = config.server?.strictTransportSecurity ?? DEFAULT_HSTS;
-  const trustProxy = config.rateLimit?.trustProxy ?? true;
+  const trustProxy = config.rateLimit?.trustProxy ?? false;
 
   return async (c: Context, next: Next) => {
     await next();

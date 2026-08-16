@@ -110,7 +110,7 @@ export function demoRoutes(deps: ServerDependencies) {
   // Derive demo allowed origins from configured origins, falling back to allow-all
   const demoOrigins = config.server?.allowedOrigins ?? [];
   const allowLocalhostDemo = config.server?.allowLocalhostDemo ?? false;
-  const trustProxy = config.rateLimit?.trustProxy ?? true;
+  const trustProxy = config.rateLimit?.trustProxy ?? false;
 
   /**
    * GET /api/demo/session

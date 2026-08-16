@@ -86,7 +86,8 @@ describe("Rate Limit Middleware", () => {
 
     it("should rate limit by IP address", async () => {
       const app = new Hono();
-      const limiter = createRateLimiter(baseConfig);
+      const config = { ...baseConfig, rateLimit: { ...baseConfig.rateLimit, trustProxy: true } };
+      const limiter = createRateLimiter(config);
       app.use("/api/*", limiter.limitPublic());
       app.post("/api/test", (c) => c.json({ ok: true }));
 
@@ -160,7 +161,8 @@ describe("Rate Limit Middleware", () => {
 
     it("should extract IP from x-forwarded-for header", async () => {
       const app = new Hono();
-      const limiter = createRateLimiter(baseConfig);
+      const config = { ...baseConfig, rateLimit: { ...baseConfig.rateLimit, trustProxy: true } };
+      const limiter = createRateLimiter(config);
       app.use("/api/*", limiter.limitPublic());
       app.post("/api/test", (c) => c.json({ ok: true }));
 

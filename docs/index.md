@@ -94,7 +94,16 @@ Welcome to the Chatter documentation! This guide will help you set up and deploy
     - The packed-tarball check that verifies it before release
     - The release chain, its human gate, and how the toolchain is pinned
 
-15. **[FAQs](./faqs.md)** - Common questions and troubleshooting
+15. **[Testing](./testing.md)** - Run and extend the test suite
+    - Unit vs. integration tests, and what each needs
+    - Faking OpenAI/Turso for tests that must never call a paid API
+    - Coverage and watch mode
+
+16. **[Sprint Review](./sprint-review.md)** - Cross-module & security-invariant audit
+    - Confirms cross-module paths are exercised end to end, not just per-module
+    - A point-in-time snapshot, not a standing guarantee
+
+17. **[FAQs](./faqs.md)** - Common questions and troubleshooting
     - General questions
     - Platform compatibility
     - Knowledge base and RAG
@@ -156,7 +165,7 @@ Chatter is an embeddable AI chatbot framework with:
 ```
 User Message → Chatter Server → OpenAI (Embeddings) → Turso (Vector Search)
                     ↓
-              GPT-4 Response ← Context from Knowledge Base
+        Configured Model's Response ← Context from Knowledge Base
                     ↓
               Streaming Response → User
 ```

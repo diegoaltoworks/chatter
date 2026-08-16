@@ -263,6 +263,22 @@ describe("createSlidingWindowRateLimiter", () => {
     const allow = createSlidingWindowRateLimiter(1, 1000);
     expect(allow("a")).toBe(true);
   });
+
+  test("sweeps stale keys that never come back, bounding memory", () => {
+    let now = 0;
+    const allow = createSlidingWindowRateLimiter(1, 1000, () => now);
+
+    // Each key is only ever seen once, then never returns — the pattern a
+    // long-lived deployment sees from one-off callers.
+    for (let i = 0; i < 5; i++) allow(`chat-${i}`);
+    expect(allow.size()).toBe(5);
+
+    // Past the window: the next call sweeps every entry whose sole hit has
+    // expired, including chats it isn't itself keyed on.
+    now = 1001;
+    allow("chat-new");
+    expect(allow.size()).toBe(1);
+  });
 });
 
 describe("underReplyRateLimit", () => {

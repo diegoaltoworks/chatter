@@ -457,11 +457,11 @@ in front of Chatter instead (an API gateway, Cloudflare rate limiting, an
 nginx/Envoy sidecar) rather than relying on the built-in limiter for a
 multi-instance guarantee.
 
-Per-IP keying (`rateLimit.trustProxy`, default `true`) also assumes a proxy
-in front of Chatter overwrites `X-Forwarded-For` with the real client
-address. Set it `false` if Chatter is reachable directly — otherwise a
-caller can rotate a fake `X-Forwarded-For` per request and evade the limit
-entirely rather than just riding the multi-instance slack above.
+Per-IP keying (`rateLimit.trustProxy`, default `false`) requires opting in
+once a proxy in front of Chatter overwrites `X-Forwarded-For` with the real
+client address. Left at the default with no proxy, every caller shares one
+bucket per limiter; enabling it without a real fronting proxy lets a caller
+rotate a fake `X-Forwarded-For` per request and evade the limit entirely.
 
 ## Security Checklist
 
@@ -474,6 +474,10 @@ entirely rather than just riding the multi-instance slack above.
 - [ ] Keep dependencies updated
 - [ ] Monitor for suspicious activity
 - [ ] Set appropriate rate limits
+- [ ] Behind a TLS-terminating proxy, set `rateLimit.trustProxy: true` (default
+      `false`) — besides per-IP rate-limit keying, it's also what lets HSTS be
+      sent for a request the proxy terminated as HTTPS outside of
+      `NODE_ENV=production`
 - [ ] Review the default Content-Security-Policy and Strict-Transport-Security
       headers (`server.contentSecurityPolicy`, `server.strictTransportSecurity`)
       against your own deployment — see [Server: Security Headers and Body

@@ -83,8 +83,8 @@ See [Deployment Guide](./deployment.md) for platform-specific instructions.
 4. When a user asks a question:
    - Question is embedded
    - Similar chunks are retrieved (cosine similarity)
-   - Chunks are passed as context to GPT-4
-   - GPT-4 generates response using context
+   - Chunks are passed as context to the configured model (`config.openai.model`)
+   - The model generates a response using that context
 
 ### How do I update the knowledge base?
 

@@ -17,7 +17,7 @@ export function createRateLimiter(config: ChatterConfig) {
 
   const publicLimit = config.rateLimit?.public || 60;
   const privateLimit = config.rateLimit?.private || 120;
-  const trustProxy = config.rateLimit?.trustProxy ?? true;
+  const trustProxy = config.rateLimit?.trustProxy ?? false;
   const demoApiKeys = config.rateLimit?.demoApiKeys ?? [];
 
   return {

@@ -169,8 +169,10 @@ export interface ChatterConfig {
      * Only set this when Chatter sits behind a reverse proxy (nginx,
      * Cloudflare, a cloud load balancer) that overwrites client-supplied
      * XFF with the real socket address — otherwise a caller can rotate a
-     * fake value per request and bypass limits entirely. When `false`,
-     * every caller shares one bucket per limiter. Default: true.
+     * fake value per request and bypass limits entirely. When `false`
+     * (the default), every caller shares one bucket per limiter — coarse
+     * but not spoofable, and the safe choice for a directly-exposed
+     * server. Default: false.
      */
     trustProxy?: boolean;
     /**

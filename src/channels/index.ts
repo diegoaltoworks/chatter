@@ -47,6 +47,7 @@ export interface Channel {
 export * from "./gates";
 export {
   createInboundPipeline,
+  type InboundPipeline,
   type InboundPipelineConfig,
   type InboundPipelineDeps,
   type InboundPipelineOutcome,

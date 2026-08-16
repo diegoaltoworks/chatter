@@ -75,7 +75,8 @@ describe("securityHeaders", () => {
   it("sets HSTS when a trusted proxy signals x-forwarded-proto: https", async () => {
     process.env.NODE_ENV = "test";
     const app = new Hono();
-    app.use("*", securityHeaders(baseConfig));
+    const config = { ...baseConfig, rateLimit: { trustProxy: true } };
+    app.use("*", securityHeaders(config));
     app.get("/test", (c) => c.text("ok"));
 
     const res = await app.fetch(
@@ -96,7 +97,7 @@ describe("securityHeaders", () => {
     expect(res.headers.get("strict-transport-security")).toContain("max-age=");
   });
 
-  it("ignores x-forwarded-proto when trustProxy is disabled", async () => {
+  it("ignores x-forwarded-proto when trustProxy is disabled (the default)", async () => {
     process.env.NODE_ENV = "test";
     const app = new Hono();
     const config = { ...baseConfig, rateLimit: { trustProxy: false } };
