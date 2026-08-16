@@ -55,7 +55,7 @@ A floating chat button that opens a modal chat window.
     host: 'your-bot.example.com',
     mode: 'public',
     apiKey: 'your-api-key',
-    position: 'bottom-right'  // or 'bottom-left'
+    position: 'bottom-right'
   });
 </script>
 ```
@@ -63,9 +63,13 @@ A floating chat button that opens a modal chat window.
 **Options**:
 - `host` - Your Chatter server hostname (without https://)
 - `mode` - `'public'` or `'private'`
-- `apiKey` - API key for public mode (get with `npx chatter create-apikey`)
-- `position` - Button position: `'bottom-right'` or `'bottom-left'`
-- `theme` - Optional theme overrides (see Theming section)
+- `apiKey` - API key, required in both modes (get with `npx chatter create-apikey`)
+- `token` - Access token, required when `mode` is `'private'`
+- `position` - `'bottom-right'`, `'bottom-left'`, `'top-right'` or `'top-left'`
+- `label` - Button text or icon. Default: `'💬'`
+- `styles` - Inline style overrides for the button, a `Partial<CSSStyleDeclaration>`
+- `chatConfig` - Options forwarded to the popup `Chat` (`title`, `subtitle`,
+  `placeholder`, `initialMessages`)
 
 #### Chat (Inline Chat)
 
@@ -87,29 +91,40 @@ An inline chat component that embeds directly in your page.
 **Options**:
 - `host` - Your Chatter server hostname
 - `mode` - `'public'` or `'private'`
-- `apiKey` - API key for public mode
-- `container` - CSS selector for container element
-- `theme` - Optional theme overrides
+- `apiKey` - API key, required in both modes
+- `token` - Access token, required when `mode` is `'private'`
+- `container` - CSS selector, or an `HTMLElement`, to render into
+- `title` - Chat window title. Default: `'Chat'`
+- `subtitle` - Optional line under the title
+- `placeholder` - Input placeholder. Default: `'Type your message...'`
+- `initialMessages` - Messages to display before the first exchange
+- `onClose` - Called when the close button is clicked
 
-#### ChatBot (Full-Page Chat)
+#### ChatBot (Headless API Client)
 
-A full-page chat interface that takes over the entire viewport.
+`ChatBot` is the transport the two widgets are built on: it talks to
+`/api/{mode}/chat` and renders nothing. Use it to drive your own UI.
 
 ```html
 <script>
-  new Chatter.ChatBot({
+  const bot = new Chatter.ChatBot({
     host: 'your-bot.example.com',
     mode: 'public',
     apiKey: 'your-api-key'
   });
+
+  bot.sendMessage('Hello').then((reply) => console.log(reply));
 </script>
 ```
 
 **Options**:
 - `host` - Your Chatter server hostname
 - `mode` - `'public'` or `'private'`
-- `apiKey` - API key for public mode
-- `theme` - Optional theme overrides
+- `apiKey` - API key, required in both modes
+- `token` - Access token, required when `mode` is `'private'`
+
+**Methods**: `sendMessage(text)`, `sendConversation(messages)`,
+`streamMessage(text, callbacks)`, `streamConversation(messages, callbacks)`.
 
 ### Public Mode Example
 
@@ -165,10 +180,14 @@ For authenticated users with Clerk:
       // Mount user button
       clerk.mountUserButton(document.getElementById('user-button'));
 
-      // Initialize chat
+      // Initialize chat. Private mode needs BOTH an API key and the
+      // signed-in user's token - the key authenticates the caller, the
+      // token authenticates the user.
       new Chatter.Chat({
         host: 'bot.example.com',
         mode: 'private',
+        apiKey: 'eyJhbGciOiJIUzI1NiJ9...',
+        token: await clerk.session.getToken(),
         container: '#chat-container'
       });
     });
@@ -269,28 +288,40 @@ export default function RootLayout({ children }) {
 }
 ```
 
-## Theming
+## Styling
 
-Customize the appearance with theme options:
+There is no theme object. The widgets ship plain CSS classes, all prefixed
+`chatter-ui-`, and you restyle them with your own stylesheet loaded after
+`/chatter.css`:
+
+```css
+.chatter-ui-chat-button { background: #2563eb; width: 60px; height: 60px; }
+.chatter-ui-chat { font-family: system-ui, sans-serif; border-radius: 12px; }
+.chatter-ui-chat-header { background: #2563eb; }
+```
+
+`ChatButton` additionally takes `styles`, applied inline to the floating
+button element. It is a `Partial<CSSStyleDeclaration>`, so the keys are DOM
+style properties (camelCase), not CSS property names:
 
 ```javascript
 new Chatter.ChatButton({
   host: 'bot.example.com',
   mode: 'public',
   apiKey: '...',
-  theme: {
-    primaryColor: '#2563eb',
-    fontFamily: 'system-ui, sans-serif',
-    borderRadius: '12px'
+  styles: {
+    backgroundColor: '#2563eb',
+    borderRadius: '12px',
+    width: '60px',
+    height: '60px'
   }
 });
 ```
 
-**Available theme options**:
-- `primaryColor` - Main accent color
-- `fontFamily` - Font family
-- `borderRadius` - Border radius for chat elements
-- `buttonSize` - Size of floating button (e.g., `'60px'`)
+Server-side `branding.publicPrimaryColor` / `branding.privatePrimaryColor` are
+published on `GET /config` for your own page to read. The built-in widgets do
+not consume them: they are a channel for passing your palette to the client,
+not a theming engine. See [Server Setup](./server.md).
 
 ## Authentication Modes
 
@@ -302,7 +333,8 @@ Uses API key for authentication:
 new Chatter.Chat({
   host: 'bot.example.com',
   mode: 'public',
-  apiKey: 'eyJhbGciOiJIUzI1NiJ9...'  // Get with: npx chatter create-apikey
+  apiKey: 'eyJhbGciOiJIUzI1NiJ9...',  // Get with: npx chatter create-apikey
+  container: '#chat-container'
 });
 ```
 
@@ -314,14 +346,18 @@ new Chatter.Chat({
 
 ### Private Mode
 
-Uses JWT authentication (typically via Clerk):
+Uses an API key plus a per-user JWT (typically from Clerk). Both are required:
+the constructor throws `token is required for private mode` without the token,
+and `apiKey is required` without the key.
 
 ```javascript
 // After Clerk is loaded and user is signed in
 new Chatter.Chat({
   host: 'bot.example.com',
-  mode: 'private'
-  // No API key needed - uses session token from Clerk
+  mode: 'private',
+  apiKey: 'eyJhbGciOiJIUzI1NiJ9...',
+  token: await clerk.session.getToken(),
+  container: '#chat-container'
 });
 ```
 
@@ -333,49 +369,43 @@ new Chatter.Chat({
 
 ## API Reference
 
-### ChatButton
+These are the exported types verbatim; `src/client/src/types.ts` is the source
+of truth.
+
+### ChatBotConfig
+
+The base every widget extends.
 
 ```typescript
-interface ChatButtonOptions {
-  host: string;              // Chatter server hostname
+interface ChatBotConfig {
+  host: string;              // Chatter server host, protocol added automatically
   mode: 'public' | 'private';
-  apiKey?: string;           // Required for public mode
-  position?: 'bottom-right' | 'bottom-left';
-  theme?: ThemeOptions;
+  apiKey: string;            // Required in both modes
+  token?: string;            // Required when mode is 'private'
 }
 ```
 
-### Chat
+### ChatConfig
 
 ```typescript
-interface ChatOptions {
-  host: string;
-  mode: 'public' | 'private';
-  apiKey?: string;           // Required for public mode
-  container: string;         // CSS selector
-  theme?: ThemeOptions;
+interface ChatConfig extends ChatBotConfig {
+  container: HTMLElement | string;   // CSS selector or element
+  placeholder?: string;
+  initialMessages?: ChatMessage[];
+  title?: string;
+  subtitle?: string;
+  onClose?: () => void;
 }
 ```
 
-### ChatBot
+### ChatButtonConfig
 
 ```typescript
-interface ChatBotOptions {
-  host: string;
-  mode: 'public' | 'private';
-  apiKey?: string;           // Required for public mode
-  theme?: ThemeOptions;
-}
-```
-
-### ThemeOptions
-
-```typescript
-interface ThemeOptions {
-  primaryColor?: string;
-  fontFamily?: string;
-  borderRadius?: string;
-  buttonSize?: string;
+interface ChatButtonConfig extends ChatBotConfig {
+  position?: 'bottom-right' | 'bottom-left' | 'top-right' | 'top-left';
+  label?: string;
+  styles?: Partial<CSSStyleDeclaration>;
+  chatConfig?: Partial<Omit<ChatConfig, 'host' | 'mode' | 'apiKey' | 'token'>>;
 }
 ```
 
@@ -415,7 +445,7 @@ Or check the [chatter-demo](https://github.com/diegoaltoworks/chatter-demo) repo
 **Check**:
 1. `/chatter.css` is loaded before widgets
 2. No CSS conflicts with existing styles
-3. Theme options are valid
+3. Your overrides target the `chatter-ui-` classes and load after `/chatter.css`
 
 ### Connection refused
 

@@ -2,8 +2,9 @@
 
 ## Supported Versions
 
-Chatter is pre-1.0 (currently 0.x). Only the latest published version receives
-security fixes - there is no maintained back-branch.
+Only the latest published version of Chatter receives security fixes. There is
+no maintained back-branch and no long-term-support line: fixes ship forward in
+the next release, so staying current is the supported posture.
 
 ## Security Scanning
 

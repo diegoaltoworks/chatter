@@ -58,7 +58,10 @@ way" reference they point back to.
    `patterns/`, is linked from both README.md's Documentation section and
    docs/index.md's Quick Navigation section.** A guide nobody can find from
    either entry point might as well not exist. Enforced:
-   `scripts/docs-toc.test.ts`.
+   `scripts/docs-toc.test.ts`. Every relative link in tracked markdown
+   resolves to a file that exists, and to a real heading when it carries a
+   `#fragment`, so a renamed guide or a retitled section cannot leave a
+   dangling cross-reference. Enforced: `scripts/docs-links.test.ts`.
 
 7. **An async `customRoutes` mount completes before the server is considered
    ready, and a rejecting mount fails start-up instead of yielding a

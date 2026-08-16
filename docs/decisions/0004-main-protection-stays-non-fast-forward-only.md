@@ -8,11 +8,13 @@ Accepted.
 
 `main` is protected by a ruleset ("main-protection") that blocks force-pushes
 and branch deletion; repository admins bypass it. The release flow already
-routes every version bump through a release PR (opened with auto-merge,
-merged once its checks pass, then tagged and published) rather than pushing
-a version bump straight to `main` - specifically so it would already be
-compatible with a `required_status_checks` rule on that ruleset, if one were
-ever added.
+routes every version bump through a release PR rather than pushing a version
+bump straight to `main` - specifically so it would already be compatible with
+a `required_status_checks` rule on that ruleset, if one were ever added. The
+release job opens that PR, waits for its checks, merges it synchronously in
+the same run, then tags and publishes. It is deliberately not auto-merge: the
+merge is itself a `GITHUB_TOKEN` action, so the push it produces on `main`
+would never trigger a fresh CI run for a second, later job to react to.
 
 That rule was tried. Adding `pull_request` + `required_status_checks` to
 main-protection left every check on the release commit (`Gates (Bun)`,

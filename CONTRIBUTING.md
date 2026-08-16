@@ -181,6 +181,7 @@ worked walkthroughs.
 | **New config field** | Additive, optional, safe default (existing behaviour unchanged when unset) | `test/api-surface.test.ts` (compiled via `bun run typecheck:api-surface`) + the relevant `test/integration/*.test.ts` |
 | **New store** (Turso-backed persistence) | Follow [docs/patterns/adding-a-store.md](docs/patterns/adding-a-store.md): idempotent `CREATE TABLE IF NOT EXISTS`, validated table name, atomic claim | A store-level test against a real in-memory libsql client |
 | **New doc** (`docs/*.md`) | Link it from both README.md's Documentation section and docs/index.md's Quick Navigation | `scripts/docs-toc.test.ts` (automatic) |
+| **Renamed doc or retitled section** | Update every relative link and `#fragment` pointing at it | `scripts/docs-links.test.ts` (automatic) |
 | **New/edited CI workflow** | Pin third-party actions to a commit SHA + version comment, pin Bun to the shared exact version, use `--frozen-lockfile` | `scripts/supply-chain.test.ts` (automatic) |
 
 Every "automatic" test above is a `*.test.ts` under `scripts/` that reads
@@ -243,8 +244,7 @@ the path back up. See [Packaging](docs/packaging.md) for the full chain.
 ## Questions?
 
 Feel free to:
-- Open an issue for questions
-- Start a discussion in GitHub Discussions
+- Open an issue for questions (GitHub Discussions is not enabled here)
 - Email: diego@diegoalto.works
 
 Thank you for contributing! 🎉

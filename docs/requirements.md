@@ -50,6 +50,28 @@ Chatter requires a few external services to function. This guide walks through w
 
 **Pricing**: Free tier available (500 databases, 1GB storage)
 
+## Bringing Your Own Retrieval Stack
+
+"Required" above describes the default wiring, not a hard dependency. Both
+required services sit behind seams:
+
+- **Replacing Turso.** `config.retriever` accepts any object implementing the
+  `Retriever` interface. Set it and the built-in `VectorStore` is never
+  constructed, so `config.database` is no longer required either - the server
+  fails fast at startup only when *neither* is present. Point it at pgvector,
+  sqlite-vec, Qdrant, a managed vector database, or an existing search service.
+  Worked example: [Adding a retriever](./patterns/adding-a-retriever.md).
+- **Replacing OpenAI embeddings.** The embedder is injected, not hardcoded:
+  `new VectorStore(embedder, options)` takes an `Embedder`, typed
+  `(input: string[]) => Promise<number[][]>`. `createOpenAIEmbedder(client)` is
+  just the shipped adapter. Pass your own to keep Turso storage while embedding
+  with a local or third-party model.
+- **Replacing OpenAI completions.** The `answerFn` brain hook replaces the
+  completion call outright. See [Architecture](./ARCHITECTURE.md).
+
+`Retriever`, `Embedder`, `VectorStore` and `createOpenAIEmbedder` are all
+exported from the package root.
+
 ## Optional Services
 
 ### Clerk (for Private Chat)

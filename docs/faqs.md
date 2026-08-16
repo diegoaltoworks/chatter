@@ -43,7 +43,18 @@ Partially. You can self-host the Chatter server on any VPS or container platform
 **Optional external services**:
 - Clerk (for authentication)
 
-You could swap OpenAI/Turso for alternatives, but Chatter currently only supports these providers out of the box.
+Both required services are replaceable through seams, not source edits:
+
+- **Turso**: set `config.retriever` to any object implementing `Retriever` and
+  the built-in `VectorStore` (and therefore `config.database`) drops out
+  entirely - pgvector, sqlite-vec, Qdrant, whatever you run. See
+  [Adding a retriever](./patterns/adding-a-retriever.md).
+- **OpenAI embeddings**: `VectorStore` takes an `Embedder`
+  (`(input: string[]) => Promise<number[][]>`) as its first constructor
+  argument. Pass your own instead of `createOpenAIEmbedder(client)` to keep
+  Turso storage with a local or third-party embedding model.
+- **OpenAI completions**: set the `answerFn` brain hook to answer from your own
+  model. See [Architecture](./ARCHITECTURE.md).
 
 ## Platform Compatibility
 
@@ -85,6 +96,10 @@ See [Deployment Guide](./deployment.md) for platform-specific instructions.
    - Similar chunks are retrieved (cosine similarity)
    - Chunks are passed as context to the configured model (`config.openai.model`)
    - The model generates a response using that context
+
+Steps 2-3 describe the default `VectorStore`. Set `config.retriever` and your
+backend answers the retrieval step instead, with no change to any chat surface;
+see [Adding a retriever](./patterns/adding-a-retriever.md).
 
 ### How do I update the knowledge base?
 
@@ -206,43 +221,38 @@ Use template variables:
 
 ### How do I change the colors?
 
-In your configuration:
+With CSS. The widgets ship classes prefixed `chatter-ui-`; load your own
+stylesheet after `/chatter.css` and override them:
 
-```typescript
-{
-  branding: {
-    publicPrimaryColor: '#2563eb',   // Blue
-    privatePrimaryColor: '#7c3aed'   // Purple
-  }
-}
+```css
+.chatter-ui-chat-button { background: #2563eb; }
+.chatter-ui-chat-header { background: #2563eb; }
 ```
 
-Or use theme options in the widget:
-
-```javascript
-new Chatter.ChatButton({
-  theme: {
-    primaryColor: '#2563eb'
-  }
-});
-```
+`branding.publicPrimaryColor` / `branding.privatePrimaryColor` in the server
+config are published on `GET /config` so your own page can read your palette.
+Nothing shipped applies them to the widgets.
 
 ### Can I customize the widget appearance?
 
-Yes! Use theme options:
+Yes, via the `chatter-ui-` CSS classes above. `ChatButton` also takes `styles`,
+applied inline to the floating button as DOM style properties:
 
 ```javascript
 new Chatter.ChatButton({
-  theme: {
-    primaryColor: '#2563eb',
-    fontFamily: 'system-ui, sans-serif',
+  host: 'bot.example.com',
+  mode: 'public',
+  apiKey: '...',
+  styles: {
+    backgroundColor: '#2563eb',
     borderRadius: '12px',
-    buttonSize: '60px'
+    width: '60px',
+    height: '60px'
   }
 });
 ```
 
-For deeper customization, you can override CSS classes (see widget source).
+There is no `theme` option. See [Client Setup](./client.md#styling).
 
 ## Troubleshooting
 
@@ -300,11 +310,9 @@ For deeper customization, you can override CSS classes (see widget source).
 }
 ```
 
-Or set via environment variables:
-```bash
-RATE_LIMIT_RPM_PUBLIC=100
-RATE_LIMIT_RPM_PRIVATE=200
-```
+Rate limits are config-only; there are no `RATE_LIMIT_*` environment variables.
+Read your own env in the object you pass to `createServer` if you want them
+tunable per deployment.
 
 ### Environment variable not found
 
@@ -318,24 +326,25 @@ For production, ensure secrets are configured in your platform (Secret Manager, 
 
 ### CORS errors in browser
 
-**Enable CORS in server config**:
+CORS is on by default. `server.cors` is a boolean switch, not an options
+object - set it to `false` to turn the middleware off entirely:
 
 ```typescript
 {
   server: {
-    cors: true  // Enables CORS for all origins
+    cors: true  // Default. false removes the CORS middleware.
   }
 }
 ```
 
-Or configure specific origins:
+The allowed origins live alongside it, in `server.allowedOrigins`. Unset, it
+defaults to `["*"]`:
 
 ```typescript
 {
   server: {
-    cors: {
-      origin: ['https://example.com', 'https://app.example.com']
-    }
+    cors: true,
+    allowedOrigins: ['https://example.com', 'https://app.example.com']
   }
 }
 ```
@@ -413,5 +422,5 @@ See [Client Setup](./client.md) for framework-specific examples.
 - 📚 [Server Setup](./server.md)
 - 🚀 [Deployment Guide](./deployment.md)
 - 🎨 [Client Setup](./client.md)
-- 💬 [GitHub Discussions](https://github.com/diegoaltoworks/chatter/discussions)
+- 💬 [Ask a question](https://github.com/diegoaltoworks/chatter/issues) - Discussions are not enabled; open an issue
 - 🐛 [Report Issues](https://github.com/diegoaltoworks/chatter/issues)
