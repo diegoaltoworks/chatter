@@ -34,8 +34,8 @@ Enhancement suggestions are tracked as GitHub issues. Create an issue using the 
 
 ### Prerequisites
 
-- [Bun](https://bun.sh) v1.0+
-- Node.js 18+ (for compatibility testing)
+- [Bun](https://bun.sh) v1.2+ (the development runtime; see `engines` in `package.json`)
+- Node.js 24+ (the published package's floor — `test:node` verifies the built package boots under it)
 
 ### Setup
 
@@ -113,6 +113,17 @@ chatter/
 - Use descriptive test names
 - Group related tests with `describe` blocks
 
+### Documentation
+
+- **No untested numbers.** A doc must not state a benchmark, a latency, a
+  size, a count, or any other figure that no test asserts. A number nobody
+  checks silently goes stale the first time the code it described changes,
+  and a stale number is worse than no number — it reads as authoritative.
+  Either point at what pins the figure (`bundle-size budget: see
+  BUNDLE_BUDGETS in scripts/pack-exports.ts, measured by bun run test:pack`)
+  or phrase it qualitatively instead ("fast", "bounded", "under the
+  tarball's size budget").
+
 ### Commits
 
 - Use clear and meaningful commit messages
@@ -133,6 +144,28 @@ chatter/
 - Mark a breaking change with `!` before the colon (`feat!:`, `fix(api)!:`) or
   a `BREAKING CHANGE:` footer in the commit body. Past 1.0 this ships a major
   version; before 1.0 it still only reaches minor (see Release Process).
+
+## Definition of Done
+
+What "done" requires depends on what kind of change it is. This table is the
+specific version of "add tests and update docs" — which test to extend, not
+just that one exists. See [ARCHITECTURE.md](docs/ARCHITECTURE.md) for the
+invariants these tests protect, and [docs/patterns/](docs/patterns/) for the
+worked walkthroughs.
+
+| Change type | Required steps | Test to extend |
+| --- | --- | --- |
+| **New chat surface** (route, channel, MCP tool) | Answer through `prepareChat` → `answerOnce`/`answerStream`, never `completeOnce`/`completeStream` directly | `scripts/architecture-invariants.test.ts` (automatic) + a surface-level test proving `answerFn` is honoured |
+| **New hook/seam** (like `answerFn`, `bucketsFor`) | Pure decision function with an explicit ceiling/default; document narrowing vs. widening | A dedicated `*.test.ts` beside the seam proving the ceiling can't be bypassed |
+| **New subpath** (optional integration) | Follow [docs/patterns/adding-a-capability.md](docs/patterns/adding-a-capability.md): `build:<name>` script, optional peer dependency, `exports` key last | `bun run test:pack` — packs the real tarball and resolves every declared `exports` key against it, so a new key is checked without editing the test |
+| **New config field** | Additive, optional, safe default (existing behaviour unchanged when unset) | `test/api-surface.test.ts` (compiled via `bun run typecheck:api-surface`) + the relevant `test/integration/*.test.ts` |
+| **New store** (Turso-backed persistence) | Follow [docs/patterns/adding-a-store.md](docs/patterns/adding-a-store.md): idempotent `CREATE TABLE IF NOT EXISTS`, validated table name, atomic claim | A store-level test against a real in-memory libsql client |
+| **New doc** (`docs/*.md`) | Link it from both README.md's Documentation section and docs/index.md's Quick Navigation | `scripts/docs-toc.test.ts` (automatic) |
+| **New/edited CI workflow** | Pin third-party actions to a commit SHA + version comment, pin Bun to the shared exact version, use `--frozen-lockfile` | `scripts/supply-chain.test.ts` (automatic) |
+
+Every "automatic" test above is a `*.test.ts` under `scripts/` that reads
+this repo's real files — `bun test` (part of `bun run check`) runs it without
+any extra step on your part; you only need to make the change conform.
 
 ## Pull Request Process
 

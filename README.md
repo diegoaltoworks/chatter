@@ -93,6 +93,7 @@ is runtime-neutral. Development and the quality gates run on Bun.
 Complete guides for setup, deployment, and integration — see
 [docs/index.md](./docs/index.md) for the full, ordered walkthrough:
 
+- **[Architecture](./docs/ARCHITECTURE.md)** - Load-bearing invariants, each linked to the test that enforces it
 - **[Requirements](./docs/requirements.md)** - OpenAI, Turso, Clerk setup and pricing
 - **[Server Setup](./docs/server.md)** - Configuration, knowledge base, prompts, API keys
 - **[Client Integration](./docs/client.md)** - Widgets, React components, theming
