@@ -7,16 +7,25 @@ on:
       - completed
   workflow_dispatch:
 
+# A merge landing mid-release must wait its turn rather than racing the
+# version this run already computed — cancelling a half-finished release
+# (a version bumped on main but not yet published) would be worse than
+# queueing.
+concurrency:
+  group: release-train
+  cancel-in-progress: false
+
 jobs:
-  # A human is in the loop on every release, either by authoring the commit that
-  # lands on main or by dispatching this workflow. Dependency bumps do not
-  # qualify: dependabot opens the PR, auto-merge lands it, and CI goes green
-  # without anyone reading the diff, so publishing off that commit would put an
-  # upstream maintainer's code on npm under our name unattended. The bump still
-  # ships — with the next human-authored merge, or when someone dispatches this
-  # workflow deliberately.
-  publish:
+  # A human is in the loop on every release, either by authoring the commit
+  # that lands on main or by dispatching this workflow. Dependency bumps do
+  # not qualify: dependabot opens the PR, auto-merge lands it, and CI goes
+  # green without anyone reading the diff, so releasing off that commit would
+  # put an upstream maintainer's code on npm under our name unattended. The
+  # bump still ships — with the next human-authored merge, or when someone
+  # dispatches this workflow deliberately.
+  release:
     runs-on: ubuntu-latest
+    timeout-minutes: 45
     if: |
       github.event_name == 'workflow_dispatch' ||
       (
@@ -31,6 +40,8 @@ jobs:
 
     permissions:
       contents: write
+      pull-requests: write
+      actions: write
       id-token: write
 
     env:
@@ -57,38 +68,66 @@ jobs:
       - name: Install dependencies
         run: bun install --frozen-lockfile
 
-      # The job condition only sees the commit that triggered this run, so a
-      # dependency bump merged earlier would ride out inside the next person's
-      # release with nobody having read it. This scans everything not yet
-      # released and stops the automated path on anything dependabot changed
-      # beyond a manifest or lockfile — a workflow or Dockerfile bump changes
-      # what runs, and that wants a human. Manifest-only bumps ride along, which
-      # is what keeps the guard from wedging the release train against itself:
-      # only a successful publish moves the tag the scan starts from. See
-      # scripts/release-guard.ts.
-      - name: Refuse to auto-release unreviewed dependency changes
-        if: github.event_name != 'workflow_dispatch'
+      # main can already be carrying a version bump with no publish if a
+      # previous run merged a release PR and then died before publishing it
+      # (flaky test, npm outage, runner failure) — the merge already
+      # happened, so there is nothing left to open a PR for. Finish that
+      # release instead of computing a new bump on top of it. The release
+      # commit is looked up by message rather than assumed to be HEAD: HEAD
+      # is whatever human commit triggered this run, which lands strictly
+      # after the stranded release and would publish the wrong tree under
+      # its version number.
+      - name: Check for an unfinished release already on main
+        id: pending
         run: |
           git fetch --tags --force
-          bun scripts/release-guard.ts
+          LATEST_TAG=$(git tag --list 'v*' --sort=-v:refname | head -n1)
+          BASE_VERSION="${LATEST_TAG#v}"
+          CURRENT_VERSION=$(node -p "require('./package.json').version")
+          if [ -n "$LATEST_TAG" ] && [ "$CURRENT_VERSION" != "$BASE_VERSION" ]; then
+            RELEASE_SHA=$(git rev-list -1 --grep "^chore(release): v${CURRENT_VERSION}" HEAD)
+            if [ -z "$RELEASE_SHA" ]; then
+              echo "::error::main's package.json (v$CURRENT_VERSION) is ahead of the latest tag (v$BASE_VERSION), but no matching chore(release) commit was found — refusing to guess which commit to finish releasing."
+              exit 1
+            fi
+            echo "version=$CURRENT_VERSION" >> "$GITHUB_OUTPUT"
+            echo "sha=$RELEASE_SHA" >> "$GITHUB_OUTPUT"
+          fi
 
-      # The same gates as CI, through the same entry point, so the publish path
-      # cannot quietly run a smaller set than a PR does.
-      - name: Run gates
-        run: bun run check
+      # The job condition only sees the commit that triggered this run, so a
+      # dependency bump merged earlier would ride out inside the next
+      # person's release with nobody having read it. This scans everything
+      # not yet released and stops the automated path on anything dependabot
+      # changed beyond a manifest or lockfile — a workflow or Dockerfile bump
+      # changes what runs, and that wants a human. Manifest-only bumps ride
+      # along, which is what keeps the guard from wedging the release train
+      # against itself: only a successful publish moves the tag the scan
+      # starts from. See scripts/release-guard.ts. Runs here, before a
+      # release PR is even opened, rather than after a merge — a block found
+      # after the version bump had already landed on main would leave main
+      # dirty with nothing able to finish it.
+      - name: Refuse to auto-release unreviewed dependency changes
+        if: github.event_name != 'workflow_dispatch'
+        run: bun scripts/release-guard.ts
 
-      - name: Build package
-        run: bun run build
-
-      # CI runs these as their own jobs, but a dispatched release does not pass
-      # through CI at all — and dispatch is exactly the path used to ship a
-      # reviewed dependency bump. Running them here makes every publish, however
-      # triggered, verify the artifact it is about to push.
-      - name: Verify published exports resolve
-        run: bun run test:pack
-
-      - name: Verify the built package under Node
-        run: bun run test:node
+      # A release PR left over from a previous run means CI on the release
+      # branch never went green (or nobody's looked at it yet) — a second,
+      # competing release PR would only make that worse. Fails loudly rather
+      # than skipping quietly: a green "did nothing" run here would hide a
+      # wedged release train behind an ordinary-looking Actions log.
+      - name: Skip if a release PR is already open
+        id: existing
+        if: steps.pending.outputs.version == ''
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          OPEN=$(gh pr list --repo "${{ github.repository }}" --state open --search "head:release/" \
+            --json headRefName --jq 'length')
+          echo "count=$OPEN" >> "$GITHUB_OUTPUT"
+          if [ "$OPEN" != "0" ]; then
+            echo "::error::A release PR is already open — refusing to open a second one. Close or merge it by hand to unstick the release train."
+            exit 1
+          fi
 
       # The bump type is derived from every commit since the last release tag
       # (not just the triggering one), so a chore/fix/docs merge ships a
@@ -99,9 +138,9 @@ jobs:
       # scripts/next-version.ts.
       - name: Bump version
         id: bump
+        if: steps.pending.outputs.version == '' && steps.existing.outputs.count == '0'
         run: |
           set -o pipefail
-          git fetch --tags --force
           LATEST_TAG=$(git tag --list 'v*' --sort=-v:refname | head -n1)
           if [ -n "$LATEST_TAG" ]; then
             BASE_VERSION="${LATEST_TAG#v}"
@@ -118,31 +157,148 @@ jobs:
             NEW_VERSION=$(bun scripts/next-version.ts apply "$NEW_VERSION" "patch")
           done
           npm version "$NEW_VERSION" --no-git-tag-version >/dev/null
-          echo "version=$NEW_VERSION" >> $GITHUB_OUTPUT
+          echo "version=$NEW_VERSION" >> "$GITHUB_OUTPUT"
 
-      - name: Commit and tag version bump
+      # Opens the release PR, proves it green on its own commit, and merges it
+      # synchronously in this same run — rather than enabling auto-merge and
+      # waiting on a second, later trigger. That second trigger is not just
+      # slower, it does not exist: merging is itself a GITHUB_TOKEN action, so
+      # the push it produces on main would never trigger a fresh CI run for
+      # `workflow_run` to react to, and every release after the first would
+      # silently do nothing. Doing the wait and the merge in the run that
+      # already holds the checked-out commit sidesteps that entirely.
+      - name: Open the release PR
+        id: pr
+        if: steps.pending.outputs.version == '' && steps.existing.outputs.count == '0'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
+          VERSION="${{ steps.bump.outputs.version }}"
+          BRANCH="release/v${VERSION}"
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git checkout -b "$BRANCH"
           git add package.json
-          git commit -m "chore(release): v${{ steps.bump.outputs.version }}"
-          git tag "v${{ steps.bump.outputs.version }}"
-          git push origin HEAD:main
-          git push origin "v${{ steps.bump.outputs.version }}"
+          git commit -m "chore(release): v${VERSION}"
+          git push origin "$BRANCH"
+          gh pr create --repo "${{ github.repository }}" --base main --head "$BRANCH" \
+            --title "chore(release): v${VERSION}" \
+            --body "Automated release PR. Merging publishes v${VERSION} to npm."
+          NUMBER=$(gh pr view "$BRANCH" --repo "${{ github.repository }}" --json number --jq '.number')
+          echo "number=$NUMBER" >> "$GITHUB_OUTPUT"
+          echo "branch=$BRANCH" >> "$GITHUB_OUTPUT"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+
+      # A push/PR made with GITHUB_TOKEN does not trigger other workflows
+      # (the recursive-run guard GitHub applies to the default token), so CI
+      # never runs on this branch on its own — nothing would ever post a
+      # status. workflow_dispatch is exempt from that guard, so this is a
+      # real, non-recursive way to get CI onto this exact commit without a
+      # bot PAT or bypass actor. Dispatching before doing anything that could
+      # merge the PR also means this repo's future required-status-checks
+      # stage sees exactly the same status this run waits on below.
+      - name: Run CI on the release branch and wait for it
+        if: steps.pr.outputs.branch != ''
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          BRANCH="${{ steps.pr.outputs.branch }}"
+          BRANCH_SHA=$(git rev-parse HEAD)
+          gh workflow run ci.yml --repo "${{ github.repository }}" --ref "$BRANCH"
+          RUN_ID=""
+          for _ in $(seq 1 60); do
+            sleep 5
+            RUN_ID=$(gh run list --repo "${{ github.repository }}" --workflow=ci.yml --branch="$BRANCH" \
+              --json databaseId,headSha,event \
+              --jq "[.[] | select(.headSha == \"$BRANCH_SHA\" and .event == \"workflow_dispatch\")][0].databaseId // empty")
+            [ -n "$RUN_ID" ] && break
+          done
+          if [ -z "$RUN_ID" ]; then
+            echo "::error::CI never started on $BRANCH within 5 minutes — leaving the release PR open for a human."
+            exit 1
+          fi
+          gh run watch "$RUN_ID" --repo "${{ github.repository }}" --exit-status
+
+      # Merges only once CI on this exact commit is known good, so this
+      # succeeds today and keeps succeeding once main-protection requires the
+      # same checks: GitHub itself will refuse a merge before they post,
+      # which this run already waited for above. The merge SHA comes from an
+      # explicit fetch rather than gh's own post-merge local branch cleanup
+      # (which only happens to leave main checked out) — that keeps a local
+      # git hiccup in branch deletion from being mistaken for a failed merge,
+      # so deleting the branch is a best-effort step of its own afterward.
+      - name: Merge the release PR
+        id: merge
+        if: steps.pr.outputs.branch != ''
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh pr merge "${{ steps.pr.outputs.number }}" --repo "${{ github.repository }}" --squash
+          git fetch origin main
+          echo "sha=$(git rev-parse origin/main)" >> "$GITHUB_OUTPUT"
+          echo "version=${{ steps.pr.outputs.version }}" >> "$GITHUB_OUTPUT"
+          git push origin --delete "${{ steps.pr.outputs.branch }}" || true
+
+      - name: Check out the release commit
+        if: steps.pending.outputs.version != '' || steps.merge.outputs.sha != ''
+        run: git checkout "${{ steps.pending.outputs.sha || steps.merge.outputs.sha }}"
+
+      # The same gates as CI, through the same entry point, so the publish
+      # path cannot quietly run a smaller set than the release branch's own
+      # CI run did.
+      - name: Run gates
+        if: steps.pending.outputs.version != '' || steps.merge.outputs.sha != ''
+        run: bun run check
+
+      - name: Build package
+        if: steps.pending.outputs.version != '' || steps.merge.outputs.sha != ''
+        run: bun run build
+
+      - name: Verify published exports resolve
+        if: steps.pending.outputs.version != '' || steps.merge.outputs.sha != ''
+        run: bun run test:pack
+
+      - name: Verify the built package under Node
+        if: steps.pending.outputs.version != '' || steps.merge.outputs.sha != ''
+        run: bun run test:node
+
+      # Keyed on the registry rather than a tag: nothing is tagged until the
+      # GitHub release step below creates it alongside a successful publish,
+      # so a run that dies before `npm publish` leaves nothing for this check
+      # to trip on and the next run retries cleanly.
+      - name: Check whether this version is already published
+        id: published
+        if: steps.pending.outputs.version != '' || steps.merge.outputs.sha != ''
+        run: |
+          VERSION="${{ steps.pending.outputs.version || steps.merge.outputs.version }}"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          if npm view "$(node -p "require('./package.json').name")@$VERSION" version >/dev/null 2>&1; then
+            echo "already_published=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "already_published=false" >> "$GITHUB_OUTPUT"
+          fi
 
       - name: Publish to NPM
+        if: steps.published.outputs.already_published == 'false'
         run: npm publish --provenance --access public
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
       # The release notes are cut here rather than by a workflow listening for
-      # the tag push above: a tag pushed with the default GITHUB_TOKEN does not
-      # trigger workflows, so that listener never ran once across the whole tag
-      # history while the docs pointed readers at it.
+      # a tag push: a tag pushed with the default GITHUB_TOKEN does not
+      # trigger workflows, so a listener like that never ran once across the
+      # whole tag history while the docs pointed readers at it. This step also
+      # creates the tag itself — there is no separate tag-push step, so a
+      # publish that fails never leaves a dangling tag behind — pointed at the
+      # release commit via `target_commitish` rather than the ambient
+      # `github.sha`, which in a `workflow_run`-triggered job is not this
+      # commit.
       - name: Publish the GitHub release
+        if: steps.published.outputs.already_published == 'false'
         uses: softprops/action-gh-release@3d0d9888cb7fd7b750713d6e236d1fcb99157228 # v3.0.2
         with:
-          tag_name: v${{ steps.bump.outputs.version }}
+          tag_name: v${{ steps.published.outputs.version }}
+          target_commitish: ${{ steps.pending.outputs.sha || steps.merge.outputs.sha }}
           generate_release_notes: true
           draft: false
           prerelease: false
