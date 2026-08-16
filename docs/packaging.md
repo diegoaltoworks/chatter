@@ -103,10 +103,21 @@ dependency to the registry worth stating explicitly:
 
 ```
 merge to main → CI (the gates, plus the build/runtime/tarball/image jobs)
-              → publish workflow re-runs the gates, bumps the version, tags,
-                `npm publish --provenance`
-              → the tag push publishes the GitHub release and its notes
+              → publish workflow re-runs the gates, verifies the tarball and
+                the Node load, bumps the version, tags,
+                `npm publish --provenance`, then cuts the GitHub release
 ```
+
+The publish workflow cuts the release itself rather than leaving it to a
+workflow listening for the tag push. A tag pushed with the default
+`GITHUB_TOKEN` does not trigger workflows, so a listener like that never runs —
+which is exactly what happened here for the whole tag history while the docs
+told readers to look at GitHub Releases for the notes.
+
+It also re-runs `test:pack` and `test:node` itself, rather than trusting the CI
+run that triggered it. `workflow_dispatch` is a real release path — it is the
+one a maintainer uses to ship a reviewed dependency bump — and it does not pass
+through CI at all.
 
 Nobody types a version number: the publish workflow derives the next version
 from the highest `v*` tag and commits the bump itself, which is why its own
@@ -127,14 +138,28 @@ Two guards close that path, because a bump can reach a release two ways:
 
 - The publish job declines to run when dependabot authored the commit that
   triggered it. That is the auto-merge case, and it costs nothing to check.
-- Before publishing anything, the job scans every commit since the last release
-  tag and fails if dependabot authored any of them. Without this, a bump merged
-  on Monday ships inside somebody else's Wednesday release — the first guard
-  looks at one commit, and the bump is not it.
+- Before publishing anything, the job runs `scripts/release-guard.ts` over
+  every commit since the last release tag. Without this, a bump merged on
+  Monday ships inside somebody else's Wednesday release — the first guard looks
+  at one commit, and the bump is not it.
 
-Both are skipped for `workflow_dispatch`. That is the point: a maintainer
-reviewing the bump and running **Publish to NPM** from the Actions tab *is* the
-approval, and the release it cuts moves the tag past the bump so ordinary
+The second guard distinguishes two kinds of bump, and the distinction is what
+keeps it from wedging the release train against itself:
+
+- A bump that edits only a manifest or a lockfile changes which versions this
+  package *declares*. No upstream code ships with it, the gates run against it
+  like any other commit, and it rides along in the next release.
+- A bump that edits a workflow, a Dockerfile or source changes what *runs* —
+  the github-actions and docker ecosystems both do this. That one stops the
+  automated path.
+
+The earlier version of this guard failed on any dependabot-authored commit at
+all, and only a successful publish moves the tag the scan starts from, so a
+single routine bump stopped every subsequent release until someone noticed.
+
+A block is skipped for `workflow_dispatch`, which is the point: a maintainer
+reviewing the change and running **Publish to NPM** from the Actions tab *is*
+the approval, and the release it cuts moves the tag past the commit so ordinary
 merges publish again.
 
 ### What "CI was green" is allowed to mean
@@ -155,6 +180,7 @@ the whole toolchain is pinned:
 
 Each of these is a line or two that nothing else would notice going missing, so
 `scripts/supply-chain.test.ts` audits every workflow in the repo, plus the
-Dockerfile, for all four properties — ignoring commented-out lines, so a guard
+Dockerfile, for all of these properties — and for the publish workflow running
+the artifact checks itself — ignoring commented-out lines, so a guard
 cannot pass the audit as a corpse. Adding a workflow, or pasting a step into an
 existing one, fails the gates rather than silently reopening the path.

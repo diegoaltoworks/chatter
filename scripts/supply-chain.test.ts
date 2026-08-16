@@ -6,6 +6,7 @@ import {
   dockerBunVersions,
   floatingBunVersions,
   missingDependabotGate,
+  missingReleaseVerification,
   parseActionUses,
   publishesToNpm,
   toolchainDrift,
@@ -224,12 +225,53 @@ describe("missingDependabotGate", () => {
     expect(missingDependabotGate("npm-publish.yml", GATED_PUBLISH)).toEqual([]);
   });
 
+  test("accepts the range scan delegated to the release guard script", () => {
+    const contents = [
+      "if: github.event.workflow_run.head_commit.author.name != 'dependabot[bot]'",
+      "- run: bun scripts/release-guard.ts",
+      "- run: npm publish --provenance",
+    ].join("\n");
+
+    expect(missingDependabotGate("npm-publish.yml", contents)).toEqual([]);
+  });
+
   test("does not accept a guard that survives only as a comment", () => {
     const commented = GATED_PUBLISH.split("\n")
       .map((line) => `# ${line}`)
       .join("\n");
 
     expect(missingDependabotGate("npm-publish.yml", `${commented}\nif: true`)).toHaveLength(2);
+  });
+});
+
+describe("missingReleaseVerification", () => {
+  test("flags a publish path that verifies neither the tarball nor Node", () => {
+    const violations = missingReleaseVerification("npm-publish.yml", GATED_PUBLISH);
+
+    expect(violations).toHaveLength(2);
+  });
+
+  test("flags the half that is missing", () => {
+    const [violation] = missingReleaseVerification(
+      "npm-publish.yml",
+      `${GATED_PUBLISH}\n- run: bun run test:pack`,
+    );
+
+    expect(violation?.reason).toContain("under Node");
+  });
+
+  test("accepts a publish path that runs both", () => {
+    const contents = [GATED_PUBLISH, "- run: bun run test:pack", "- run: bun run test:node"].join(
+      "\n",
+    );
+
+    expect(missingReleaseVerification("npm-publish.yml", contents)).toEqual([]);
+  });
+
+  test("does not accept a check that survives only as a comment", () => {
+    const contents = `${GATED_PUBLISH}\n# - run: bun run test:pack && bun run test:node`;
+
+    expect(missingReleaseVerification("npm-publish.yml", contents)).toHaveLength(2);
   });
 });
 
@@ -245,10 +287,10 @@ describe("auditWorkflow", () => {
     expect(auditWorkflow("ci.yml", contents).map((v) => v.line)).toEqual([1, 3, 4]);
   });
 
-  test("demands the dependabot gate of any workflow that publishes", () => {
+  test("demands the dependabot gate and the artifact checks of any publisher", () => {
     const contents = "      - run: npm publish --provenance --access public";
 
-    expect(auditWorkflow("release-anything.yml", contents)).toHaveLength(2);
+    expect(auditWorkflow("release-anything.yml", contents)).toHaveLength(4);
   });
 
   test("does not demand it of a workflow that does not publish", () => {
@@ -280,6 +322,7 @@ describe("this repo's CI configuration", () => {
 
     expect(publishers).toEqual(["npm-publish.yml"]);
     expect(missingDependabotGate("npm-publish.yml", read("npm-publish.yml"))).toEqual([]);
+    expect(missingReleaseVerification("npm-publish.yml", read("npm-publish.yml"))).toEqual([]);
   });
 
   test("the Dockerfile builds on the same bun the gates ran under", () => {

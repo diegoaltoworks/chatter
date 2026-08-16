@@ -3,7 +3,7 @@
  *
  * The path from an upstream dependency to npm is otherwise fully automated:
  * dependabot opens a PR, auto-merge lands it on `main`, CI goes green, and the
- * publish workflow cuts a release. Four properties keep that path from being a
+ * publish workflow cuts a release. Five properties keep that path from being a
  * zero-human path to the registry, and each one is a line or two in a config
  * file that nothing else would notice going missing:
  *
@@ -14,8 +14,11 @@
  *      toolchain that builds the tarball.
  *   3. Installs use `--frozen-lockfile`, so CI resolves the committed lockfile
  *      rather than whatever the registry offers that minute.
- *   4. Publishing refuses any release range containing a dependabot-authored
- *      commit, so a bump reaches npm only when a human dispatches the release.
+ *   4. Publishing refuses any release range in which dependabot changed
+ *      something that runs, so such a change reaches npm only when a human
+ *      dispatches the release.
+ *   5. The publish workflow verifies the artifact itself — the dispatch path,
+ *      which is how a reviewed bump ships, never passes through CI.
  *
  * These helpers turn config file contents into a list of violations. They are
  * deliberately line-based rather than a YAML parse: the properties are all
@@ -203,22 +206,28 @@ export function publishesToNpm(contents: string): boolean {
 }
 
 /**
- * A publishing workflow must refuse to release a range containing a
- * dependabot-authored commit. Two guards, because they fail differently:
+ * A publishing workflow must refuse to release a range containing an
+ * unreviewed dependabot-authored change. Two guards, because they fail
+ * differently:
  *
  * - The job condition declines the run when dependabot authored the *tip*,
  *   which is the auto-merge case and costs nothing to check.
  * - A step that scans every commit since the last release tag catches the
- *   bump riding along inside somebody else's later release — the tip guard
- *   sees only one commit, and the bump is not it.
+ *   change riding along inside somebody else's later release — the tip guard
+ *   sees only one commit, and the change is not it.
  *
  * Both are bypassed by `workflow_dispatch`, which is the point: dispatching is
- * a human putting their name on the dependency change.
+ * a human putting their name on the dependency change. The scan itself lives
+ * in scripts/release-guard.ts, which is what decides a manifest-only bump may
+ * ride along; an inline `git log … | grep` is still accepted here, since what
+ * this audit is protecting is that *something* reads the range.
  */
 export function missingDependabotGate(file: string, contents: string): SupplyChainViolation[] {
   const guardsTip = hasLiveMatch(contents, /head_commit\.author\.name\s*!=\s*'dependabot\[bot\]'/);
   const guardsRange =
-    hasLiveMatch(contents, /\bgit log\b/) && hasLiveMatch(contents, /grep[^\n]*dependabot\[bot\]/);
+    hasLiveMatch(contents, /\brelease-guard\.ts\b/) ||
+    (hasLiveMatch(contents, /\bgit log\b/) &&
+      hasLiveMatch(contents, /grep[^\n]*dependabot\[bot\]/));
 
   const missing = [
     ...(guardsTip ? [] : ["the job condition does not reject a dependabot-authored head commit"]),
@@ -228,13 +237,34 @@ export function missingDependabotGate(file: string, contents: string): SupplyCha
   return missing.map((reason) => ({ file, line: 1, reason }));
 }
 
+/** Artifact checks a publishing workflow must run itself, and why. */
+const RELEASE_VERIFICATION: ReadonlyArray<[script: string, reason: string]> = [
+  ["test:pack", "the packed tarball's exports are never resolved before publishing"],
+  ["test:node", "the built package is never loaded under Node before publishing"],
+];
+
+/**
+ * A publishing workflow must verify the artifact itself, not lean on CI having
+ * done it. `workflow_dispatch` is a real release path — it is the one used to
+ * ship a reviewed dependency bump — and it does not pass through CI at all, so
+ * anything only CI runs is absent from exactly the release nobody reviewed
+ * upstream.
+ */
+export function missingReleaseVerification(file: string, contents: string): SupplyChainViolation[] {
+  return RELEASE_VERIFICATION.filter(
+    ([script]) => !hasLiveMatch(contents, new RegExp(`\\b${script}\\b`)),
+  ).map(([, reason]) => ({ file, line: 1, reason }));
+}
+
 /** Every violation in one workflow file, in the order they appear. */
 export function auditWorkflow(file: string, contents: string): SupplyChainViolation[] {
   const violations = [
     ...unpinnedActions(parseActionUses(file, contents)),
     ...unfrozenInstalls(file, contents),
     ...floatingBunVersions(file, contents),
-    ...(publishesToNpm(contents) ? missingDependabotGate(file, contents) : []),
+    ...(publishesToNpm(contents)
+      ? [...missingDependabotGate(file, contents), ...missingReleaseVerification(file, contents)]
+      : []),
   ];
 
   return violations.sort((a, b) => a.line - b.line);
