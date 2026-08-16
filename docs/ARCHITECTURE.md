@@ -97,11 +97,16 @@ way" reference they point back to.
    [patterns/exemplars.md](./patterns/exemplars.md).
 
 10. **No commit, PR, code comment, or doc names the reference implementation
-    this project was informed by, or attributes work to an AI tool.**
-    **Aspirational** - enforced by review discipline, not a test: a lexical
-    grep-gate for the forbidden project name would have to embed that name
-    somewhere in this repo to check for it, which defeats the rule it exists
-    to enforce. There is no test to point to here, on purpose.
+    this project was informed by, or attributes work to an AI tool.** The
+    actual forbidden project name is **aspirational** - enforced by review
+    discipline, not a test: a lexical grep-gate for it would have to embed
+    that name somewhere in this repo to check for it, which defeats the rule
+    it exists to enforce. There is no test to point to here, on purpose. A
+    narrower, mechanically-checkable piece of the same rule *is* enforced,
+    though: a source-code comment naming "the reference implementation" (the
+    sanctioned neutral term prose is allowed to use, per process.md) as
+    provenance is a leak of development history a comment shouldn't carry.
+    Enforced: `scripts/comment-gate.test.ts`.
 
 11. **A comment does not hardcode this package's current released version, does
     not reference a tracker ticket id, and any `path:line` anchor it makes

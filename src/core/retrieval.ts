@@ -50,6 +50,12 @@ export function createOpenAIEmbedder(client: OpenAI): Embedder {
   };
 }
 
+/** Thrown by `createServer`/`createMCPServer` when neither `config.retriever` nor `config.database` is set. Single-sourced so both surfaces state the same requirement. */
+export const DATABASE_CONFIG_REQUIRED_MESSAGE =
+  "config.database is required unless config.retriever is set - Chatter's default " +
+  "knowledge store (VectorStore) needs a Turso/libsql connection. Set config.database, " +
+  "or supply config.retriever to use your own retrieval backend instead.";
+
 /** Wraps a failed dynamic import of the optional `@libsql/client` peer in an actionable message. Exported separately so the message content is unit-testable without simulating a real missing module. */
 export function wrapMissingLibsqlError(cause: unknown): Error {
   return new Error(
@@ -138,7 +144,7 @@ export class VectorStore implements Retriever {
 
   // On boot: ingest new chunks and embed only missing ones.
   async build() {
-    this.logger.info("🔄 Building knowledge base...");
+    this.logger.info("Building knowledge base...");
 
     // ensure tables exist (idempotent)
     await this.db.execute(`
@@ -150,7 +156,7 @@ export class VectorStore implements Retriever {
     await this.db.execute("CREATE INDEX IF NOT EXISTS idx_chunks_bucket ON chunks(bucket);");
 
     const docs = loadKnowledge(this.knowledgeDir);
-    this.logger.info(`📚 Loaded ${docs.length} knowledge documents`);
+    this.logger.info(`Loaded ${docs.length} knowledge documents`);
 
     if (docs.length === 0) {
       const existing = await this.db.execute("SELECT COUNT(*) as count FROM chunks");
@@ -167,7 +173,7 @@ export class VectorStore implements Retriever {
             "as stale. Check that knowledgeDir resolves to the right path.",
         );
       }
-      this.logger.info("✅ No knowledge documents and no existing chunks - nothing to build");
+      this.logger.info("No knowledge documents and no existing chunks - nothing to build");
       return;
     }
 
@@ -179,7 +185,7 @@ export class VectorStore implements Retriever {
       }
     }
 
-    this.logger.info(`📦 Created ${rows.length} chunks from knowledge documents`);
+    this.logger.info(`Created ${rows.length} chunks from knowledge documents`);
 
     // Cleanup: remove chunks that no longer exist in markdown files
     await this.cleanupStaleChunks(rows.map((r) => r.id));
@@ -221,11 +227,11 @@ export class VectorStore implements Retriever {
     }
 
     if (missing.length === 0) {
-      this.logger.info("✅ No new chunks to embed - knowledge base is up to date");
+      this.logger.info("No new chunks to embed - knowledge base is up to date");
       return;
     }
 
-    this.logger.info(`🔮 Embedding ${missing.length} new/updated chunks with ${EMB_MODEL}...`);
+    this.logger.info(`Embedding ${missing.length} new/updated chunks with ${EMB_MODEL}...`);
 
     // Embed missing in batches of N
     const textById = new Map(rows.map((r) => [r.id, r.text]));
@@ -245,7 +251,7 @@ export class VectorStore implements Retriever {
       );
     }
 
-    this.logger.info(`✅ Successfully embedded ${missing.length} new chunks`);
+    this.logger.info(`Successfully embedded ${missing.length} new chunks`);
   }
 
   // Remove chunks from database that no longer exist in markdown files
@@ -262,7 +268,7 @@ export class VectorStore implements Retriever {
       return;
     }
 
-    this.logger.info(`🧹 Cleaning up ${staleIds.length} stale chunks...`);
+    this.logger.info(`Cleaning up ${staleIds.length} stale chunks...`);
 
     // Delete stale chunks and their embeddings in batches. There is no FK
     // cascade between the two tables, so both deletes are needed - leaving
@@ -283,7 +289,7 @@ export class VectorStore implements Retriever {
       );
     }
 
-    this.logger.info(`✓ Cleaned up ${staleIds.length} stale chunks and their embeddings`);
+    this.logger.info(`Cleaned up ${staleIds.length} stale chunks and their embeddings`);
   }
 
   private static cosine(a: number[], b: number[]) {

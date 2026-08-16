@@ -36,7 +36,7 @@ If you're using a Chatter server, you can generate API keys using the CLI:
 
 ```bash
 # On the server side
-npx chatter create-apikey --name "my-website" --expires-in 365d
+npx chatter --name "my-website" --expires-in 365d
 ```
 
 This will output a JWT token to use as your `apiKey` in the client configuration.

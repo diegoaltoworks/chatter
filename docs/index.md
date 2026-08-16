@@ -133,7 +133,7 @@ Welcome to the Chatter documentation! This guide will help you set up and deploy
 
 ### Archive
 
-- **[Sprint Review](./sprint-review.md)** - A dated, point-in-time audit
+- **[Cross-Module Review](./sprint-review.md)** - A dated, point-in-time audit
   (v0.40) of cross-module paths and security invariants, not a standing
   guarantee about the current codebase.
 
@@ -159,7 +159,7 @@ npm install @diegoaltoworks/chatter
 # (See Server Setup for full configuration)
 
 # Create API key
-npx chatter create-apikey --name "my-app" --expires-in 365d
+npx chatter --name "my-app" --expires-in 365d
 
 # Integrate widgets
 # (See Client Setup for examples)
@@ -175,60 +175,6 @@ For a complete working example with source code, see the [Chatter Demo](https://
 - Deployment configuration
 - Knowledge base examples
 - System prompt examples
-
-## Key Concepts
-
-### What is Chatter?
-
-Chatter is an embeddable AI chatbot framework with:
-- **RAG** (Retrieval-Augmented Generation) for knowledge-based responses
-- **Built-in authentication** via API keys, Clerk, or custom JWT
-- **Customizable widgets** for any website
-- **TypeScript-first** with full type safety
-
-### How It Works
-
-```
-User Message -> Chatter Server -> OpenAI (Embeddings) -> Turso (Vector Search)
-                    ↓
-        Configured Model's Response <- Context from Knowledge Base
-                    ↓
-              Streaming Response -> User
-```
-
-### Two Chat Modes
-
-**Public Mode**:
-- API key authentication
-- Rate limited by IP
-- Access to public knowledge
-- Perfect for customer support
-
-**Private Mode**:
-- JWT authentication
-- Rate limited by user
-- Access to private knowledge
-- Perfect for internal tools
-
-## Common Use Cases
-
-### Customer Support Bot
-- Public chat mode
-- Knowledge base with FAQs, documentation
-- Embedded on website with ChatButton widget
-- See: [Requirements](./requirements.md) -> [Server Setup](./server.md) -> [Client Setup](./client.md)
-
-### Internal Knowledge Assistant
-- Private chat mode
-- Knowledge base with runbooks, procedures
-- Authenticated with Clerk or custom JWT
-- See: [Requirements](./requirements.md) -> [Server Setup](./server.md) -> [Deployment](./deployment.md)
-
-### Product Documentation Chat
-- Public chat mode
-- Knowledge base with product docs
-- Inline Chat widget on documentation site
-- See: [Server Setup](./server.md) -> [Client Setup](./client.md)
 
 ## Resources
 

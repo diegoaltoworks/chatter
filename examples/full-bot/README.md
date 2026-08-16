@@ -1,10 +1,9 @@
 # Full bot
 
 A complete, config-driven wiring of chatter's server with every optional
-seam this sprint added: the WhatsApp channel, a persona registry, reply
-gates (allowlist, DM/group rate limits), image requests, and a scheduler
-tick. No real credentials are included - every value comes from the
-environment.
+seam it supports: the WhatsApp channel, a persona registry, reply gates
+(allowlist, DM/group rate limits), image requests, and a scheduler tick.
+No real credentials are included - every value comes from the environment.
 
 > **ToS warning.** The WhatsApp channel is built on
 > [Baileys](https://github.com/WhiskeySockets/Baileys), an unofficial

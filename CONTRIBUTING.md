@@ -141,8 +141,11 @@ chatter/
   `scripts/comment-gate.test.ts`: a comment must not hardcode this
   package's current released version (the release workflow owns
   `package.json#version`; see [Release Process](#release-process)) or
-  reference a tracker ticket id, and a `path:line` anchor a comment makes
-  must point at a file and line that actually exist.
+  reference a tracker ticket id, a `path:line` anchor a comment makes must
+  point at a file and line that actually exist, and a source-code comment
+  must not name where lifted code came from (see
+  `docs/ARCHITECTURE.md`'s invariant 10) - that provenance belongs in the PR
+  description that lifted the code, not a comment that outlives it.
 
 ### Commits
 

@@ -17,7 +17,7 @@ import {
 } from "@assistant-ui/react";
 
 // Point these at your Chatter server + API key
-// (create a key with: bunx chatter create-apikey)
+// (create a key with: bunx chatter)
 const CHATTER_URL = import.meta.env.VITE_CHATTER_URL ?? "http://localhost:8181";
 const CHATTER_API_KEY = import.meta.env.VITE_CHATTER_API_KEY ?? "YOUR_CHATTER_API_KEY";
 

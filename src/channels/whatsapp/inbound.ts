@@ -6,12 +6,12 @@
  * interpretation.
  *
  * Message-shape parsing (text/caption extraction, contextInfo mentions and
- * quoted-reply resolution) is genericized from the reference implementation:
- * text AND contextInfo live in a DIFFERENT place per message shape — plain
- * text carries both on `extendedTextMessage`, but a photo/video/document
- * carries its caption on its own message type and its contextInfo there too.
- * Missing that meant mentions in photo captions were invisible and group
- * photo requests were silently ignored.
+ * quoted-reply resolution) accounts for a Baileys quirk: text AND contextInfo
+ * live in a DIFFERENT place per message shape - plain text carries both on
+ * `extendedTextMessage`, but a photo/video/document carries its caption on
+ * its own message type and its contextInfo there too. Missing that meant
+ * mentions in photo captions were invisible and group photo requests were
+ * silently ignored.
  *
  * `createWhatsAppInboundHandler` needs `ServerDependencies`
  * (`client`/`store`/`prompts`), which only exists once `createServer` builds

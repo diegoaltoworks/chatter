@@ -13,7 +13,7 @@ import type { Channel } from "./channels";
 import { createSenderRegistry } from "./channels";
 import { resolveLogger } from "./core/logger";
 import { DEFAULT_PROMPTS_DIR, PromptLoader } from "./core/prompts";
-import type { Retriever } from "./core/retrieval";
+import { DATABASE_CONFIG_REQUIRED_MESSAGE, type Retriever } from "./core/retrieval";
 import { loadServeStatic, type ServeStaticFn } from "./core/serve-static";
 import { resolveStatic } from "./core/widgets";
 import { cors } from "./middleware/cors";
@@ -89,11 +89,7 @@ export async function createServer(config: ChatterConfig): Promise<ChatterApp> {
     store = config.retriever;
   } else {
     if (!db) {
-      throw new Error(
-        "config.database is required unless config.retriever is set - Chatter's default " +
-          "knowledge store (VectorStore) needs a Turso/libsql connection. Set config.database, " +
-          "or supply config.retriever to use your own retrieval backend instead.",
-      );
+      throw new Error(DATABASE_CONFIG_REQUIRED_MESSAGE);
     }
     const { DEFAULT_KNOWLEDGE_DIR, VectorStore, createOpenAIEmbedder } = await import(
       "./core/retrieval"

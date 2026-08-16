@@ -63,7 +63,7 @@ A floating chat button that opens a modal chat window.
 **Options**:
 - `host` - Your Chatter server hostname (without https://)
 - `mode` - `'public'` or `'private'`
-- `apiKey` - API key, required in both modes (get with `npx chatter create-apikey`)
+- `apiKey` - API key, required in both modes (get with `npx chatter`)
 - `token` - Access token, required when `mode` is `'private'`
 - `position` - `'bottom-right'`, `'bottom-left'`, `'top-right'` or `'top-left'`
 - `label` - Button text or icon. Default: `'💬'`
@@ -333,7 +333,7 @@ Uses API key for authentication:
 new Chatter.Chat({
   host: 'bot.example.com',
   mode: 'public',
-  apiKey: 'eyJhbGciOiJIUzI1NiJ9...',  // Get with: npx chatter create-apikey
+  apiKey: 'eyJhbGciOiJIUzI1NiJ9...',  // Get with: npx chatter
   container: '#chat-container'
 });
 ```

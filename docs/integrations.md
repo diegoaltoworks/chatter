@@ -38,7 +38,7 @@ Notes:
   dropped; guardrails, persona, and retrieved context are assembled
   server-side.
 - The public endpoint requires a real JWT API key (create one with
-  `bunx chatter create-apikey`). Widget session keys and demo keys are not
+  `bunx chatter`). Widget session keys and demo keys are not
   valid here.
 - An optional `x-conversation-id` request header (or `conversation_id` body
   field) threads a stable thread id to a configured `answerFn`; the resolved

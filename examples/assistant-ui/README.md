@@ -22,7 +22,7 @@ component (shadcn setup) with the same adapter.
 2. Create an API key:
 
    ```bash
-   bunx chatter create-apikey
+   bunx chatter
    ```
 
 3. Install and run:
