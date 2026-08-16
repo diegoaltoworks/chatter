@@ -11,7 +11,7 @@ bun test
 # Run only unit tests (fast, no external dependencies)
 bun test src/**/*.test.ts
 
-# Run only integration tests (requires env vars)
+# Run only integration tests (no credentials needed — see below)
 bun test test/integration/**/*.test.ts
 
 # Watch mode (re-run on file changes)
@@ -26,9 +26,11 @@ bun test --coverage
 - **Unit tests** live beside the code they cover (`src/**/*.test.ts`) and need
   no credentials or network — external clients are faked and databases are
   in-memory.
-- **Integration tests** live in `test/integration/` and skip themselves unless
-  `OPENAI_API_KEY` and `TURSO_URL` are set, so `bun test` is green on a clean
-  checkout.
+- **Integration tests** live in `test/integration/` and run a real
+  `createServer(config)` against an in-memory libsql database
+  (`database.url: "file::memory:"`) with a faked `fetch` standing in for
+  OpenAI (see `test/integration/harness.ts`) — no credentials needed, and
+  nothing calls a paid API.
 - **Client tests** cover the widget in `src/client/`.
 
 - **Packaging tests** cover the published contract. The pure half — what the
@@ -293,20 +295,14 @@ Tests mobile chat widget:
 - ✅ Run in CI/CD without configuration
 
 ### Integration Tests
-Integration tests require environment variables and skip gracefully if missing:
-
-```bash
-# Required for integration tests
-export OPENAI_API_KEY="sk-..."
-export TURSO_URL="libsql://..."
-export TURSO_AUTH_TOKEN="..."  # Optional for local Turso
-```
+No environment variables or credentials needed:
 
 **Behavior:**
-- Tests skip with clear message if env vars missing
+- `createServer` runs for real against `database.url: "file::memory:"`
+- A faked `fetch` answers OpenAI chat-completion and embedding requests
+  locally (`test/integration/harness.ts`) — no network call leaves the process
 - Creates temporary directories for test isolation
 - Cleans up all resources after completion
-- Makes real API calls to OpenAI and Turso
 
 ## Testing Patterns
 
@@ -339,30 +335,32 @@ describe("YourModule", () => {
 ### Integration Test Pattern
 
 ```typescript
-import { describe, expect, it, beforeAll, afterAll } from "bun:test";
+import { afterAll, beforeAll, describe, expect, it } from "bun:test";
 import { createServer } from "../../src/server";
+import {
+  installFakeOpenAI,
+  integrationConfig,
+  setupIntegrationDirs,
+} from "./harness";
 
 describe("Feature Integration", () => {
-  // Skip if required env vars missing
-  if (!process.env.OPENAI_API_KEY || !process.env.TURSO_URL) {
-    it.skip("requires OPENAI_API_KEY and TURSO_URL to run", () => {});
-    return;
-  }
-
+  const dirs = setupIntegrationDirs("feature");
+  const fakeOpenAI = installFakeOpenAI({ reply: "canned reply" });
   let app;
 
   beforeAll(async () => {
-    app = await createServer(testConfig);
+    app = await createServer(integrationConfig(dirs));
   });
 
-  afterAll(async () => {
-    // Cleanup
+  afterAll(() => {
+    fakeOpenAI.restore();
+    dirs.cleanup();
   });
 
   it("should complete full flow", async () => {
     const req = new Request("http://localhost/api/endpoint");
     const res = await app.fetch(req);
-    
+
     expect(res.status).toBe(200);
   });
 });
@@ -392,10 +390,9 @@ Our tests follow these principles:
 | **Client Widgets** | 95% | ✅ Excellent |
 | **Overall** | ~98% | ✅ Excellent |
 
-**Modules not requiring unit tests:**
+**Modules not requiring dedicated unit tests:**
 - `core/llm.ts` - Thin wrapper around OpenAI SDK (tested via integration)
-- `core/retrieval.ts` - Complex database operations (tested via integration)
-- `routes/*.ts` - Route handlers (tested via integration)
+- `routes/*.ts` - Route handlers (tested via `src/routes/*.test.ts` and integration)
 
 ## Running Specific Tests
 
@@ -517,9 +514,9 @@ Rate limiting and quota tests validate:
 
 ## Known Limitations
 
-1. **LLM Tests** - Integration tests make real API calls (cost consideration)
-2. **Database Tests** - Uses real Turso instance (requires env vars)
-3. **Browser Tests** - Mobile widget tests use JSDOM (not real browser)
+1. **Browser Tests** - Mobile widget tests use JSDOM (not real browser)
+2. **Faked OpenAI** - Integration tests exercise the real request/response
+   plumbing but not the model itself; nothing asserts real completion quality
 
 ## Future Improvements
 

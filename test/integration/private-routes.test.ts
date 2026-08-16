@@ -1,30 +1,29 @@
 import { afterAll, beforeAll, describe, expect, it } from "bun:test";
-import { mkdtemp, rm } from "node:fs/promises";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
 import { exportSPKI, generateKeyPair, SignJWT } from "jose";
-import OpenAI from "openai";
-import { createServer } from "../../src";
+import { createServer } from "../../src/server";
 import type { ChatterConfig } from "../../src/types";
+import {
+  type FakeOpenAI,
+  type IntegrationDirs,
+  installFakeOpenAI,
+  integrationConfig,
+  setupIntegrationDirs,
+} from "./harness";
 
 describe("Private Routes Integration", () => {
-  // Skip tests if no OpenAI API key
-  if (!process.env.OPENAI_API_KEY) {
-    it.skip("requires OPENAI_API_KEY to run", () => {});
-    return;
-  }
-
-  let testDir: string;
+  let dirs: IntegrationDirs;
+  let fakeOpenAI: FakeOpenAI;
   let app: Awaited<ReturnType<typeof createServer>>;
   let validToken: string;
-  let publicKeyPem: string;
+  let jwtAuth: NonNullable<ChatterConfig["auth"]>;
 
   beforeAll(async () => {
-    // Generate RSA key pair for JWT testing
-    const { publicKey, privateKey } = await generateKeyPair("RS256");
-    publicKeyPem = await exportSPKI(publicKey);
+    dirs = setupIntegrationDirs("private-routes");
+    fakeOpenAI = installFakeOpenAI({ reply: "4" });
 
-    // Create valid JWT token
+    const { publicKey, privateKey } = await generateKeyPair("RS256");
+    const publicKeyPem = await exportSPKI(publicKey);
+
     validToken = await new SignJWT({ sub: "test-user-123" })
       .setProtectedHeader({ alg: "RS256" })
       .setIssuer("https://test-issuer.example.com")
@@ -33,42 +32,33 @@ describe("Private Routes Integration", () => {
       .setExpirationTime("1h")
       .sign(privateKey);
 
-    // Create temporary directory for test
-    testDir = await mkdtemp(join(tmpdir(), "chatter-private-test-"));
-
-    // Create test config with JWT authentication
-    const config: ChatterConfig = {
-      model: "gpt-4o-mini",
-      auth: {
-        jwt: {
-          publicKeyPem,
-          issuer: "https://test-issuer.example.com",
-          audience: "test-api",
-        },
-      },
-      rateLimit: {
-        privateApiPerMinute: 100,
+    jwtAuth = {
+      jwt: {
+        publicKeyPem,
+        issuer: "https://test-issuer.example.com",
+        audience: "test-api",
       },
     };
 
-    // Create OpenAI client
-    const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY ?? "" });
+    const config: ChatterConfig = integrationConfig(dirs, {
+      features: { enablePublicChat: false, enablePrivateChat: true, enableDemoRoutes: false },
+      auth: jwtAuth,
+      rateLimit: { private: 100 },
+    });
 
-    // Create server with test config
-    app = await createServer({ config, client, storePath: testDir });
+    app = await createServer(config);
   });
 
-  afterAll(async () => {
-    await rm(testDir, { recursive: true, force: true });
+  afterAll(() => {
+    fakeOpenAI.restore();
+    dirs.cleanup();
   });
 
   describe("POST /api/private/chat", () => {
     it("should reject request without JWT token", async () => {
       const req = new Request("http://localhost/api/private/chat", {
         method: "POST",
-        headers: {
-          "content-type": "application/json",
-        },
+        headers: { "content-type": "application/json" },
         body: JSON.stringify({ message: "test message" }),
       });
 
@@ -107,8 +97,7 @@ describe("Private Routes Integration", () => {
       expect(res.status).toBe(200);
 
       const json = await res.json();
-      expect(json.reply).toBeDefined();
-      expect(typeof json.reply).toBe("string");
+      expect(json.reply).toBe("4");
     });
 
     it("should accept valid JWT and respond to conversation history", async () => {
@@ -131,8 +120,7 @@ describe("Private Routes Integration", () => {
       expect(res.status).toBe(200);
 
       const json = await res.json();
-      expect(json.reply).toBeDefined();
-      expect(typeof json.reply).toBe("string");
+      expect(json.reply).toBe("4");
     });
 
     it("should support streaming with stream=1 query parameter", async () => {
@@ -148,7 +136,6 @@ describe("Private Routes Integration", () => {
       const res = await app.fetch(req);
       expect(res.status).toBe(200);
 
-      // Read stream
       const reader = res.body?.getReader();
       expect(reader).toBeDefined();
 
@@ -161,7 +148,6 @@ describe("Private Routes Integration", () => {
         chunks += decoder.decode(value, { stream: true });
       }
 
-      // Verify SSE format
       expect(chunks).toContain("data:");
       expect(chunks).toContain("event: end");
     });
@@ -180,7 +166,6 @@ describe("Private Routes Integration", () => {
       const res = await app.fetch(req);
       expect(res.status).toBe(200);
 
-      // Should return streaming response
       const reader = res.body?.getReader();
       expect(reader).toBeDefined();
     });
@@ -220,8 +205,6 @@ describe("Private Routes Integration", () => {
     });
 
     it("should use RAG context from vector store", async () => {
-      // This test verifies that the private endpoint queries the vector store
-      // We can't easily verify the exact context, but we can ensure it completes
       const req = new Request("http://localhost/api/private/chat", {
         method: "POST",
         headers: {
@@ -236,6 +219,17 @@ describe("Private Routes Integration", () => {
 
       const json = await res.json();
       expect(json.reply).toBeDefined();
+
+      // Find the embeddings call carrying THIS turn's question text - not
+      // just any embeddings call, which would also match server-boot chunk
+      // embedding and pass even if retrieval never ran for this request.
+      const embedded = fakeOpenAI.calls.find(
+        (c) =>
+          c.path === "/v1/embeddings" &&
+          Array.isArray(c.body?.input) &&
+          (c.body.input as string[]).includes("Tell me about your capabilities"),
+      );
+      expect(embedded).toBeDefined();
     });
 
     it("should handle malformed JSON gracefully", async () => {
@@ -254,8 +248,7 @@ describe("Private Routes Integration", () => {
   });
 
   describe("Rate Limiting", () => {
-    it("should apply rate limiting to private endpoints", async () => {
-      // Make requests up to the limit
+    it("allows requests within the configured limit", async () => {
       const requests = Array.from({ length: 5 }, () =>
         app.fetch(
           new Request("http://localhost/api/private/chat", {
@@ -271,61 +264,42 @@ describe("Private Routes Integration", () => {
 
       const responses = await Promise.all(requests);
 
-      // All should succeed (within rate limit)
+      // rateLimit.private is 100 for the shared `app` - well above 5, so
+      // every one of these must succeed; a flaky 429 here would mean the
+      // limiter is keying wrong, not that the limit was hit on purpose.
       for (const res of responses) {
-        expect([200, 429]).toContain(res.status);
+        expect(res.status).toBe(200);
       }
     });
-  });
 
-  describe("JWT Subject in Context", () => {
-    it("should attach JWT subject to request context for rate limiting", async () => {
-      // Create token with specific subject
-      const { publicKey, privateKey } = await generateKeyPair("RS256");
-      const pem = await exportSPKI(publicKey);
+    it("rejects requests once the configured limit is exceeded", async () => {
+      const lowLimitApp = await createServer(
+        integrationConfig(dirs, {
+          features: { enablePublicChat: false, enablePrivateChat: true, enableDemoRoutes: false },
+          auth: jwtAuth,
+          rateLimit: { private: 3 },
+        }),
+      );
 
-      const token = await new SignJWT({ sub: "rate-limit-user" })
-        .setProtectedHeader({ alg: "RS256" })
-        .setIssuer("https://test-issuer.example.com")
-        .setAudience("test-api")
-        .setIssuedAt()
-        .setExpirationTime("1h")
-        .sign(privateKey);
+      const request = () =>
+        lowLimitApp.fetch(
+          new Request("http://localhost/api/private/chat", {
+            method: "POST",
+            headers: {
+              "content-type": "application/json",
+              authorization: `Bearer ${validToken}`,
+            },
+            body: JSON.stringify({ message: "test" }),
+          }),
+        );
 
-      // Create new server with this key
-      const tempDir = await mkdtemp(join(tmpdir(), "chatter-jwt-test-"));
-      const config: ChatterConfig = {
-        model: "gpt-4o-mini",
-        auth: {
-          jwt: {
-            publicKeyPem: pem,
-            issuer: "https://test-issuer.example.com",
-            audience: "test-api",
-          },
-        },
-        rateLimit: {
-          privateApiPerMinute: 5,
-        },
-      };
+      const statuses: number[] = [];
+      for (let i = 0; i < 5; i++) {
+        statuses.push((await request()).status);
+      }
 
-      const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY ?? "" });
-      const testApp = await createServer({ config, client, storePath: tempDir });
-
-      // Make request with JWT
-      const req = new Request("http://localhost/api/private/chat", {
-        method: "POST",
-        headers: {
-          "content-type": "application/json",
-          authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({ message: "test" }),
-      });
-
-      const res = await testApp.fetch(req);
-      expect([200, 429]).toContain(res.status);
-
-      // Cleanup
-      await rm(tempDir, { recursive: true, force: true });
+      expect(statuses.slice(0, 3)).toEqual([200, 200, 200]);
+      expect(statuses.slice(3)).toEqual([429, 429]);
     });
   });
 });

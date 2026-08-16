@@ -6,7 +6,10 @@
  */
 
 import { describe, expect, test } from "bun:test";
-import type { Client as LibsqlClient } from "@libsql/client";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { createClient, type Client as LibsqlClient } from "@libsql/client";
 import type OpenAI from "openai";
 import type { ServerDependencies } from "../types";
 import { VectorStore } from "./retrieval";
@@ -107,5 +110,34 @@ describe("VectorStore connection", () => {
     };
 
     expect(deps.db).toBe(db);
+  });
+
+  test("build() keeps the connection alive for a subsequent query() against a real local database", async () => {
+    // Regression test: `build()` used to upsert chunks/embeddings through
+    // `this.db.transaction("write")`, which hands the driver's pooled
+    // connection to the transaction handle and lazily opens a *new* one for
+    // the client's next call. Against a real Turso database that reconnects
+    // to the same data, so nothing looked wrong — but against a local
+    // `:memory:` database (the pattern docs/tests use to avoid a real
+    // Turso dependency) a fresh connection is a fresh, empty database, so
+    // every read after `build()` 404s on its own tables. Only reproducible
+    // with the real @libsql/client local driver, not the faked one above.
+    const dir = mkdtempSync(join(tmpdir(), "chatter-retrieval-memory-"));
+    const knowledgeDir = join(dir, "knowledge");
+    mkdirSync(join(knowledgeDir, "base"), { recursive: true });
+    writeFileSync(join(knowledgeDir, "base", "info.md"), "# Info\nSupport hours are 9-5.");
+
+    try {
+      const db = createClient({ url: "file::memory:", authToken: "" });
+      const openai = createFakeOpenAI([1, 0]);
+      const store = new VectorStore(openai, { databaseClient: db, knowledgeDir });
+
+      await store.build();
+      const results = await store.query("support hours", 3, ["base"]);
+
+      expect(results).toEqual(["# Info\nSupport hours are 9-5."]);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
   });
 });
