@@ -83,9 +83,14 @@ jobs:
 
       - name: Build package
         run: bun run build
-      - name: Bump minor version
+
+      # The bump type is derived from every commit since the last release tag
+      # (not just the triggering one), so a chore/fix/docs merge ships a patch
+      # and only a feat merge ships a minor. See scripts/next-version.ts.
+      - name: Bump version
         id: bump
         run: |
+          set -o pipefail
           git fetch --tags --force
           LATEST_TAG=$(git tag --list 'v*' --sort=-v:refname | head -n1)
           if [ -n "$LATEST_TAG" ]; then
@@ -93,9 +98,11 @@ jobs:
           else
             BASE_VERSION=$(node -p "require('./package.json').version")
           fi
-          NEW_VERSION=$(node -e "const [major, minor] = process.argv[1].split('.').map(Number); console.log(major + '.' + (minor + 1) + '.0')" "$BASE_VERSION")
+          RANGE="${LATEST_TAG:+${LATEST_TAG}..}HEAD"
+          BUMP=$(git log "$RANGE" --format='%s' | bun scripts/next-version.ts bump)
+          NEW_VERSION=$(bun scripts/next-version.ts apply "$BASE_VERSION" "$BUMP")
           while git rev-parse --verify --quiet "refs/tags/v${NEW_VERSION}" >/dev/null; do
-            NEW_VERSION=$(node -e "const [major, minor] = process.argv[1].split('.').map(Number); console.log(major + '.' + (minor + 1) + '.0')" "$NEW_VERSION")
+            NEW_VERSION=$(bun scripts/next-version.ts apply "$NEW_VERSION" "$BUMP")
           done
           npm version "$NEW_VERSION" --no-git-tag-version >/dev/null
           echo "version=$NEW_VERSION" >> $GITHUB_OUTPUT
