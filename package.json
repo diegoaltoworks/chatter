@@ -38,6 +38,11 @@
       "import": "./dist/usage/index.mjs",
       "require": "./dist/usage/index.js"
     },
+    "./history": {
+      "types": "./dist/history/index.d.ts",
+      "import": "./dist/history/index.mjs",
+      "require": "./dist/history/index.js"
+    },
     "./personas": {
       "types": "./dist/personas/index.d.ts",
       "import": "./dist/personas/index.mjs",
@@ -78,7 +83,7 @@
   ],
   "scripts": {
     "dev": "bun --watch src/index.ts",
-    "build": "bun run build:clean && bun run build:types && bun run build:esm && bun run build:cjs && bun run build:server && bun run build:mcp && bun run build:usage && bun run build:personas && bun run build:channels && bun run build:whatsapp && bun run build:flows && bun run build:images && bun run build:scheduler && bun run build:bin && bun run build:client && bun run build:copy-client",
+    "build": "bun run build:clean && bun run build:types && bun run build:esm && bun run build:cjs && bun run build:server && bun run build:mcp && bun run build:usage && bun run build:history && bun run build:personas && bun run build:channels && bun run build:whatsapp && bun run build:flows && bun run build:images && bun run build:scheduler && bun run build:bin && bun run build:client && bun run build:copy-client",
     "build:clean": "rm -rf dist",
     "build:types": "tsc -p tsconfig.build.json --emitDeclarationOnly --outDir dist",
     "build:esm": "esbuild src/index.ts --bundle --format=esm --outfile=dist/index.mjs --external:@hono/node-server --external:hono --external:openai --external:@libsql/client --external:jose --external:@modelcontextprotocol/sdk --external:zod --platform=node --target=node24",
@@ -86,6 +91,7 @@
     "build:server": "esbuild src/server.ts --bundle --format=esm --outfile=dist/server.mjs --external:@hono/node-server --external:hono --external:openai --external:@libsql/client --external:jose --platform=node --target=node24 && esbuild src/server.ts --bundle --format=cjs --outfile=dist/server.js --external:@hono/node-server --external:hono --external:openai --external:@libsql/client --external:jose --platform=node --target=node24",
     "build:mcp": "esbuild src/mcp-server.ts --bundle --format=esm --outfile=dist/mcp-server.mjs --external:@modelcontextprotocol/sdk --external:openai --external:@libsql/client --external:zod --platform=node --target=node24 && esbuild src/mcp-server.ts --bundle --format=cjs --outfile=dist/mcp-server.js --external:@modelcontextprotocol/sdk --external:openai --external:@libsql/client --external:zod --platform=node --target=node24",
     "build:usage": "esbuild src/usage/index.ts --bundle --format=esm --outfile=dist/usage/index.mjs --external:@libsql/client --platform=node --target=node24 && esbuild src/usage/index.ts --bundle --format=cjs --outfile=dist/usage/index.js --external:@libsql/client --platform=node --target=node24",
+    "build:history": "esbuild src/history/index.ts --bundle --format=esm --outfile=dist/history/index.mjs --external:@libsql/client --platform=node --target=node24 && esbuild src/history/index.ts --bundle --format=cjs --outfile=dist/history/index.js --external:@libsql/client --platform=node --target=node24",
     "build:personas": "esbuild src/personas/index.ts --bundle --format=esm --outfile=dist/personas/index.mjs --platform=node --target=node24 && esbuild src/personas/index.ts --bundle --format=cjs --outfile=dist/personas/index.js --platform=node --target=node24",
     "build:channels": "esbuild src/channels/index.ts --bundle --format=esm --outfile=dist/channels/index.mjs --external:hono --external:openai --external:@libsql/client --platform=node --target=node24 && esbuild src/channels/index.ts --bundle --format=cjs --outfile=dist/channels/index.js --external:hono --external:openai --external:@libsql/client --platform=node --target=node24",
     "build:whatsapp": "esbuild src/channels/whatsapp/index.ts --bundle --format=esm --outfile=dist/channels/whatsapp/index.mjs --external:@libsql/client --external:@whiskeysockets/baileys --platform=node --target=node24 && esbuild src/channels/whatsapp/index.ts --bundle --format=cjs --outfile=dist/channels/whatsapp/index.js --external:@libsql/client --external:@whiskeysockets/baileys --platform=node --target=node24",

@@ -7,6 +7,7 @@ import type OpenAI from "openai";
 import type { AnswerFnInput } from "../../core/answer";
 import type { PromptLoader } from "../../core/prompts";
 import type { VectorStore } from "../../core/retrieval";
+import type { HistoryMessage, HistoryStore } from "../../history/types";
 import { createPersonaResolver } from "../../personas/resolver";
 import type { SessionIdentityRegistry } from "../gates";
 import type { WhatsAppMessageEvent } from "./channel";
@@ -979,5 +980,124 @@ describe("createWhatsAppInboundHandler", () => {
     });
 
     await expect(handler(waEvent(sock))).resolves.toBeUndefined();
+  });
+
+  function fakeHistoryStore(): HistoryStore & { data: Map<string, HistoryMessage[]> } {
+    const data = new Map<string, HistoryMessage[]>();
+    return {
+      data,
+      async append(conversationId, message) {
+        const turns = data.get(conversationId) ?? [];
+        turns.push(message);
+        data.set(conversationId, turns);
+      },
+      async load(conversationId, limit) {
+        return (data.get(conversationId) ?? []).slice(-limit);
+      },
+    };
+  }
+
+  describe("conversation history", () => {
+    test("with no history configured, only the latest message reaches answerFn", async () => {
+      const { handler, sock, answerCalls } = createHarness();
+
+      await handler(waEvent(sock));
+
+      expect((answerCalls[0] as AnswerFnInput).messages).toEqual([
+        { role: "user", content: "hello there" },
+      ]);
+    });
+
+    test("prior turns are loaded ahead of the new message when history is configured", async () => {
+      const store = fakeHistoryStore();
+      await store.append("447700900123@s.whatsapp.net", { role: "user", content: "earlier" });
+      await store.append("447700900123@s.whatsapp.net", {
+        role: "assistant",
+        content: "earlier reply",
+      });
+      const { handler, sock, answerCalls } = createHarness({ history: { store } });
+
+      await handler(waEvent(sock));
+
+      expect((answerCalls[0] as AnswerFnInput).messages).toEqual([
+        { role: "user", content: "earlier" },
+        { role: "assistant", content: "earlier reply" },
+        { role: "user", content: "hello there" },
+      ]);
+    });
+
+    test("the user turn then the assistant turn are appended, in order", async () => {
+      const store = fakeHistoryStore();
+      const { handler, sock } = createHarness({ history: { store } });
+
+      await handler(waEvent(sock));
+
+      expect(store.data.get("447700900123@s.whatsapp.net")).toEqual([
+        { role: "user", content: "hello there" },
+        { role: "assistant", content: "a reply" },
+      ]);
+    });
+
+    // The user's turn is recorded before the brain even runs, so a failure
+    // downstream never erases it from history.
+    test("a throwing answerFn still leaves the user's turn recorded", async () => {
+      const store = fakeHistoryStore();
+      const { handler, sock } = createHarness({
+        history: { store },
+        answerFn: async () => {
+          throw new Error("brain unavailable");
+        },
+      });
+
+      await handler(waEvent(sock));
+
+      expect(store.data.get("447700900123@s.whatsapp.net")).toEqual([
+        { role: "user", content: "hello there" },
+      ]);
+    });
+
+    // The assistant's turn is recorded as soon as it exists, before delivery
+    // is attempted, so a failed send never erases an answer that was given.
+    test("a throwing sendMessage still leaves both turns recorded", async () => {
+      const store = fakeHistoryStore();
+      const { handler, sock } = createHarness({ history: { store } });
+      sock.sendMessage = mock(async () => {
+        throw new Error("socket closed");
+      });
+
+      await handler(waEvent(sock));
+
+      expect(store.data.get("447700900123@s.whatsapp.net")).toEqual([
+        { role: "user", content: "hello there" },
+        { role: "assistant", content: "a reply" },
+      ]);
+    });
+
+    test("an empty answer still records the user's turn but not an assistant one", async () => {
+      const store = fakeHistoryStore();
+      const { handler, sock } = createHarness({ history: { store }, answerFn: async () => "" });
+
+      await handler(waEvent(sock));
+
+      expect(store.data.get("447700900123@s.whatsapp.net")).toEqual([
+        { role: "user", content: "hello there" },
+      ]);
+    });
+
+    test("limit bounds how many prior turns are loaded", async () => {
+      const store = fakeHistoryStore();
+      for (let i = 0; i < 5; i++) {
+        await store.append("447700900123@s.whatsapp.net", { role: "user", content: `turn ${i}` });
+      }
+      const { handler, sock, answerCalls } = createHarness({ history: { store, limit: 2 } });
+
+      await handler(waEvent(sock));
+
+      expect((answerCalls[0] as AnswerFnInput).messages).toEqual([
+        { role: "user", content: "turn 3" },
+        { role: "user", content: "turn 4" },
+        { role: "user", content: "hello there" },
+      ]);
+    });
   });
 });

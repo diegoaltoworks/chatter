@@ -64,12 +64,17 @@ Welcome to the Chatter documentation! This guide will help you set up and deploy
    - Cache-before-spend ordering, optional Cloudinary upload
    - Optional caption helper with pool + LLM compose fallback
 
-10. **[Scheduler](./scheduler.md)** - Exactly-once outbound scheduling
+10. **[Conversation History](./history.md)** - Structural, host-replaceable multi-turn context
+    - `HistoryStore`: append/load(conversationId, limit)
+    - Multi-instance-safe Turso store with bounded per-conversation pruning
+    - Opt-in WhatsApp wiring; single-turn elsewhere until adopted
+
+11. **[Scheduler](./scheduler.md)** - Exactly-once outbound scheduling
     - Content-free: candidate entries are always caller-supplied
     - Multi-instance-safe claim via Turso, with a fire-time grace window
     - Pluggable compose step and voice-attempted/text-guaranteed delivery
 
-11. **[Deployment](./deployment.md)** - Deploy to production
+12. **[Deployment](./deployment.md)** - Deploy to production
     - Platform compatibility
     - Docker deployment
     - Google Cloud Run
@@ -78,13 +83,13 @@ Welcome to the Chatter documentation! This guide will help you set up and deploy
     - VPS setup
     - Security best practices
 
-12. **[Packaging](./packaging.md)** - What the published package exposes
+13. **[Packaging](./packaging.md)** - What the published package exposes
     - The subpath contract and what each one gives you
     - Adding a subpath without breaking consumers
     - The packed-tarball check that verifies it before release
     - The release chain, its human gate, and how the toolchain is pinned
 
-13. **[FAQs](./faqs.md)** - Common questions and troubleshooting
+14. **[FAQs](./faqs.md)** - Common questions and troubleshooting
     - General questions
     - Platform compatibility
     - Knowledge base and RAG
