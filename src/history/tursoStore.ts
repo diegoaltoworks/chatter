@@ -60,6 +60,19 @@ const VALID_ROLES = new Set<HistoryMessage["role"]>(["user", "assistant"]);
 
 const DEFAULT_MAX_PER_CONVERSATION = 200;
 
+export interface TursoHistoryStoreOptions {
+  /**
+   * Retention window: rows older than this are pruned whenever the
+   * conversation they belong to is accessed (`append` or `load`) — there is
+   * no background sweep. Unset: rows never expire on their own (only the
+   * `maxPerConversation` count cap and explicit `clear` remove them). Must be
+   * a positive integer, validated at construction like `maxPerConversation`.
+   */
+  ttlMs?: number;
+  /** Injectable clock for tests. @default Date.now */
+  now?: () => number;
+}
+
 /**
  * Creates a history store keyed by an arbitrary conversation id (a WhatsApp
  * chat jid, a phone call sid, a web session id) on `tableName`.
@@ -76,6 +89,7 @@ export function createTursoHistoryStore(
   client: Client,
   tableName = "chat_history",
   maxPerConversation = DEFAULT_MAX_PER_CONVERSATION,
+  options?: TursoHistoryStoreOptions,
 ): HistoryStore {
   if (!VALID_TABLE_NAME.test(tableName)) {
     throw new Error(`Invalid history store table name: ${tableName}`);
@@ -83,13 +97,27 @@ export function createTursoHistoryStore(
   if (!Number.isInteger(maxPerConversation) || maxPerConversation < 1) {
     throw new Error(`Invalid history store maxPerConversation: ${maxPerConversation}`);
   }
+  if (options?.ttlMs !== undefined && (!Number.isInteger(options.ttlMs) || options.ttlMs < 1)) {
+    throw new Error(`Invalid history store ttlMs: ${options.ttlMs}`);
+  }
+  const ttlMs = options?.ttlMs;
+  const now = options?.now ?? Date.now;
+
+  async function pruneExpired(conversationId: string) {
+    if (ttlMs === undefined) return;
+    await client.execute({
+      sql: `DELETE FROM ${tableName} WHERE conversation_id = ? AND created_at < ?`,
+      args: [conversationId, now() - ttlMs],
+    });
+  }
 
   return {
     async append(conversationId, message: HistoryMessage) {
       await ensureHistorySchema(client, tableName);
+      await pruneExpired(conversationId);
       await client.execute({
         sql: `INSERT INTO ${tableName} (conversation_id, role, content, created_at) VALUES (?, ?, ?, ?)`,
-        args: [conversationId, message.role, message.content, Date.now()],
+        args: [conversationId, message.role, message.content, now()],
       });
       await client.execute({
         sql: `DELETE FROM ${tableName} WHERE conversation_id = ? AND id NOT IN (
@@ -107,6 +135,7 @@ export function createTursoHistoryStore(
       if (boundedLimit === 0) return [];
 
       await ensureHistorySchema(client, tableName);
+      await pruneExpired(conversationId);
       const result = await client.execute({
         sql: `SELECT role, content FROM ${tableName} WHERE conversation_id = ? ORDER BY id DESC LIMIT ?`,
         args: [conversationId, boundedLimit],
@@ -124,6 +153,14 @@ export function createTursoHistoryStore(
           .filter((row) => VALID_ROLES.has(row.role))
           .reverse()
       );
+    },
+
+    async clear(conversationId) {
+      await ensureHistorySchema(client, tableName);
+      await client.execute({
+        sql: `DELETE FROM ${tableName} WHERE conversation_id = ?`,
+        args: [conversationId],
+      });
     },
   };
 }

@@ -1069,6 +1069,9 @@ describe("createWhatsAppInboundHandler", () => {
       async load(conversationId, limit) {
         return (data.get(conversationId) ?? []).slice(-limit);
       },
+      async clear(conversationId) {
+        data.delete(conversationId);
+      },
     };
   }
 

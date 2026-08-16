@@ -57,7 +57,7 @@ Honest limits of the bot model, none of which chatter can work around:
 | `model` | server default | Model override for this channel. |
 | `channelHint` | `"Channel: Telegram."` | Extra system-prompt section describing the delivery channel. |
 | `personaResolver` | none | Per-sender prompt layer; receives the `tg:<id>` sender key. |
-| `history` | off | `{ store, limit? }` — any [`HistoryStore`](./history.md). Single-turn until set. |
+| `history` | off | `{ store, limit?, historyEnabledFor? }` — any [`HistoryStore`](./history.md). Single-turn until set; `historyEnabledFor` opts specific senders out — see "Privacy controls" in [history.md](./history.md). |
 | `muteRegex` / `unmuteRegex` | none | Group mute switch. Inert unless set — this package ships no bot personality. |
 | `muteReply` / `unmuteReply` | none | Acknowledgements. Unset = silent. |
 | `dmRateLimit` / `groupRateLimit` | 20/h, 30/h | Sliding-window reply budgets, per chat. |

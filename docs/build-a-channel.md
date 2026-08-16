@@ -239,10 +239,12 @@ so an intercepted feature never has to re-resolve identity itself.
 
 ## Conversation history
 
-Pass `history: { store, limit? }` (any `HistoryStore` — see
-[history.md](./history.md)) to load prior turns ahead of the new message and
-append both turns after. Off by default, so a new channel starts single-turn
-exactly like WhatsApp did before it opted in:
+Pass `history: { store, limit?, historyEnabledFor? }` (any `HistoryStore` —
+see [history.md](./history.md)) to load prior turns ahead of the new message
+and append both turns after. Off by default, so a new channel starts
+single-turn exactly like WhatsApp did before it opted in. `historyEnabledFor`
+excludes specific senders from memory entirely — see "Privacy controls" in
+[history.md](./history.md).
 
 ```ts
 import { createTursoHistoryStore } from "@diegoaltoworks/chatter/history";

@@ -107,6 +107,99 @@ describe("createTursoHistoryStore", () => {
     expect(await store.load("conv-1", -1)).toEqual([]);
   });
 
+  test("clear empties a conversation, leaving others untouched", async () => {
+    const store = createTursoHistoryStore(memoryClient());
+    await store.append("conv-1", { role: "user", content: "hi" });
+    await store.append("conv-2", { role: "user", content: "hey" });
+
+    await store.clear("conv-1");
+
+    expect(await store.load("conv-1", 10)).toEqual([]);
+    expect(await store.load("conv-2", 10)).toEqual([{ role: "user", content: "hey" }]);
+  });
+
+  test("clear on an unknown conversation is a no-op", async () => {
+    const store = createTursoHistoryStore(memoryClient());
+    await expect(store.clear("never-existed")).resolves.toBeUndefined();
+  });
+
+  test("rejects a non-positive or non-integer ttlMs", () => {
+    const client = memoryClient();
+
+    for (const value of [0, -1, 1.5]) {
+      expect(() => createTursoHistoryStore(client, "chat_history", 200, { ttlMs: value })).toThrow(
+        "Invalid history store ttlMs",
+      );
+    }
+  });
+
+  test("a configured ttl prunes rows older than it directly on the database, on the next append", async () => {
+    let now = 1_000_000;
+    const client = memoryClient();
+    const store = createTursoHistoryStore(client, "chat_history", 200, {
+      ttlMs: 60_000,
+      now: () => now,
+    });
+
+    await store.append("conv-1", { role: "user", content: "old" });
+    now += 61_000; // past the ttl
+    await store.append("conv-1", { role: "user", content: "new" });
+
+    // Asserted against the raw table, not `load` (which prunes on its own
+    // and would pass even if `append`'s prune call were deleted).
+    const rows = await client.execute("SELECT content FROM chat_history ORDER BY id");
+    expect(rows.rows.map((r) => r.content)).toEqual(["new"]);
+  });
+
+  test("ttl pruning also runs on load, not only append", async () => {
+    let now = 1_000_000;
+    const store = createTursoHistoryStore(memoryClient(), "chat_history", 200, {
+      ttlMs: 60_000,
+      now: () => now,
+    });
+
+    await store.append("conv-1", { role: "user", content: "old" });
+    now += 61_000; // past the ttl, no further append to trigger the prune
+
+    expect(await store.load("conv-1", 10)).toEqual([]);
+  });
+
+  test("rows within the ttl survive pruning", async () => {
+    let now = 1_000_000;
+    const store = createTursoHistoryStore(memoryClient(), "chat_history", 200, {
+      ttlMs: 60_000,
+      now: () => now,
+    });
+
+    await store.append("conv-1", { role: "user", content: "recent" });
+    now += 30_000; // within the ttl
+
+    expect(await store.load("conv-1", 10)).toEqual([{ role: "user", content: "recent" }]);
+  });
+
+  test("ttl pruning is scoped to the conversation being accessed, not every stale row in the table", async () => {
+    let now = 1_000_000;
+    const client = memoryClient();
+    const store = createTursoHistoryStore(client, "chat_history", 200, {
+      ttlMs: 60_000,
+      now: () => now,
+    });
+
+    await store.append("conv-1", { role: "user", content: "stale in conv-1" });
+    await store.append("conv-2", { role: "user", content: "stale in conv-2" });
+    now += 61_000; // both rows are now past the ttl
+
+    // Touching only conv-1 must not prune conv-2's equally stale row. Checked
+    // directly on the table: reading conv-2 back through the store would
+    // trigger its own prune-on-access and mask the bug this test is for.
+    await store.load("conv-1", 10);
+
+    const rows = await client.execute("SELECT conversation_id, content FROM chat_history");
+    expect(
+      rows.rows.map((r) => ({ conversation_id: r.conversation_id, content: r.content })),
+    ).toEqual([{ conversation_id: "conv-2", content: "stale in conv-2" }]);
+  });
+
   test("load drops rows whose role is outside the user/assistant contract", async () => {
     const client = memoryClient();
     const store = createTursoHistoryStore(client, "chat_history");

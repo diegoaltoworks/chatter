@@ -111,8 +111,9 @@ describe("API surface", () => {
       bucketsFor: async () => ["support"],
       channelHint: "Replies are delivered over Telegram.",
       history: {
-        store: { append: async () => {}, load: async () => [] },
+        store: { append: async () => {}, load: async () => [], clear: async () => {} },
         limit: 10,
+        historyEnabledFor: () => true,
       },
     };
     const channel: Channel = createTelegramChannel(config);
@@ -328,12 +329,16 @@ describe("API surface", () => {
     expect(asPipelineMessages).toEqual(turns);
 
     const appended: Array<{ conversationId: string; message: HistoryMessage }> = [];
+    const cleared: string[] = [];
     const store: HistoryStore = {
       async append(conversationId, message) {
         appended.push({ conversationId, message });
       },
       async load() {
         return turns;
+      },
+      async clear(conversationId) {
+        cleared.push(conversationId);
       },
     };
 
@@ -342,6 +347,11 @@ describe("API surface", () => {
     expect(appended).toEqual([
       { conversationId: "conv-1", message: { role: "user", content: "again" } },
     ]);
+
+    // The reset primitive a host wires into a "forget me" detector — see
+    // docs/history.md's privacy section.
+    await store.clear("conv-1");
+    expect(cleared).toEqual(["conv-1"]);
   });
 
   test("createInboundPipeline (a new channel's foundation) answers a ChannelMessage through an InboundReplySender", async () => {
