@@ -123,15 +123,15 @@ Set requests per minute limits:
 Public/demo rate limits and the demo-key referer check key on the caller's IP,
 read from `X-Forwarded-For`. That header is client-suppliable, so it's only
 trustworthy when a reverse proxy in front of Chatter (nginx, Cloudflare, a
-cloud load balancer) overwrites it with the real socket address. Set
-`trustProxy: false` when Chatter is reachable directly — every caller then
-shares one bucket per limiter, which is coarse but not bypassable by rotating
-a fake header:
+cloud load balancer) overwrites it with the real socket address. `trustProxy`
+therefore defaults to `false`: every caller shares one bucket per limiter,
+which is coarse but not bypassable by rotating a fake header. Set it `true`
+only once such a proxy is guaranteed to be in front:
 
 ```typescript
 {
   rateLimit: {
-    trustProxy: false // Default: true (assumes a trusted proxy sets XFF)
+    trustProxy: true // Default: false — opt in once a trusted proxy sets XFF
   }
 }
 ```
@@ -507,7 +507,7 @@ knowledge/
 2. Chunks are embedded using OpenAI
 3. Embeddings are stored in Turso vector database
 4. On query, relevant chunks are retrieved via cosine similarity
-5. Context is passed to GPT-4 for response generation
+5. Context is passed to the configured model (`config.openai.model`) for response generation
 
 **Knowledge updates:**
 - The system tracks file hashes
@@ -685,7 +685,7 @@ bun run start
 │   (Hono)    │
 └──────┬──────┘
        │
-       ├──────► OpenAI (GPT-4 + Embeddings)
+       ├──────► OpenAI (Completions + Embeddings)
        │
        └──────► Turso (Vector DB)
 ```
@@ -696,7 +696,7 @@ bun run start
 2. Server authenticates request (API key or JWT)
 3. Server embeds the query using OpenAI
 4. Relevant knowledge chunks are retrieved from Turso
-5. System prompt + context + user message → GPT-4
+5. System prompt + context + user message → the configured model
 6. Response is streamed back to the client
 7. Client displays the message in real-time
 

@@ -109,6 +109,15 @@ Bun.serve({ port: 8181, fetch: app.fetch });
 
 **Version**: 24 or higher (`engines.node`).
 
+That floor isn't arbitrary: `jose` (the JWT/JWK dependency behind API keys and
+JWT auth) ships ESM-only, with no CJS build of its own. Chatter's own CJS
+entry points (`require("@diegoaltoworks/chatter")`, the `create-apikey` CLI)
+externalise `jose` and `require()` it directly, which only works on a Node
+whose `require(esm)` support is unflagged by default — true since Node 22.12
+(see the version check in `scripts/verify-node.mjs`). `engines.node:
+">=24.0.0"` sits comfortably above that line; pinned to an older Node, the
+CJS entry points fail to load `jose`.
+
 Node needs one extra package — [`@hono/node-server`](https://github.com/honojs/node-server),
 an optional peer dependency — for both serving the app and serving static
 files:

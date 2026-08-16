@@ -91,6 +91,19 @@ export function decideChannelAction(msg: ChannelMessage, config: ChannelGateConf
  * Sliding-window rate limiter (pure, injectable clock): true = allowed and
  * counted. One instance guards one budget — callers wanting separate DM and
  * group budgets create two (see {@link underReplyRateLimit}).
+ *
+ * Keyed by chatId, which — unlike an IP — a caller can't rotate at will, but
+ * a long-lived deployment still accumulates one entry per chat it has ever
+ * seen, including chats that never come back. A global sweep (same shape as
+ * `windowBucket.ts`'s) runs at most once per window, on a call for any key,
+ * and drops every key whose entries have all fallen out of the window —
+ * bounding the map to chats active within roughly the last two windows
+ * instead of growing for the life of the process. `allow.size()` reports
+ * the current key count, for tests asserting eviction actually happened.
+ *
+ * @internal `size` is an observability hook for this module's own tests, not
+ * part of the public contract — callers should treat the return value as a
+ * plain `(key: string) => boolean`.
  */
 export function createSlidingWindowRateLimiter(
   maxPerWindow: number,
@@ -98,18 +111,34 @@ export function createSlidingWindowRateLimiter(
   now: () => number = Date.now,
 ) {
   const log = new Map<string, number[]>();
-  return function allow(key: string): boolean {
-    const cutoff = now() - windowMs;
+  let lastSweep = now();
+
+  function sweep(current: number) {
+    if (current - lastSweep < windowMs) return;
+    lastSweep = current;
+    const cutoff = current - windowMs;
+    for (const [key, entries] of log) {
+      if (!entries.some((t) => t > cutoff)) log.delete(key);
+    }
+  }
+
+  function allow(key: string): boolean {
+    const current = now();
+    sweep(current);
+    const cutoff = current - windowMs;
     const entries = (log.get(key) ?? []).filter((t) => t > cutoff);
     if (entries.length >= maxPerWindow) {
       if (entries.length > 0) log.set(key, entries);
       else log.delete(key);
       return false;
     }
-    entries.push(now());
+    entries.push(current);
     log.set(key, entries);
     return true;
-  };
+  }
+
+  allow.size = () => log.size;
+  return allow;
 }
 
 /**

@@ -26,6 +26,12 @@
 - ⚡ **High Performance**: Built on Hono with streaming support
 - 🛡️ **Security First**: Rate limiting, CORS, referrer checking, and input guardrails
 - 💸 **Usage Metering**: Per-caller and global daily caps for paid features, multi-instance safe, via `@diegoaltoworks/chatter/usage` ([guide](./docs/usage.md))
+- 💬 **Channels**: Built-in WhatsApp transport plus a Channel SPI for plugging in any other one — allowlist/mute gates, reply rate-limiting, and a shared inbound pipeline every channel reuses ([WhatsApp guide](./docs/channels.md), [build your own](./docs/build-a-channel.md))
+- 🧩 **Flows**: Multi-turn, schema-driven slot-filling for structured conversations, with hybrid keyword + LLM intent matching ([guide](./docs/flows.md))
+- 🖼️ **Images**: On-demand generation and editing with cache-before-spend ordering and optional Cloudinary upload ([guide](./docs/images.md))
+- 🎭 **Personas**: Windowed, per-contact prompt layers and named greetings from a JSON registry ([guide](./docs/personas.md))
+- 🗂️ **Conversation History**: Structural, multi-turn context store, multi-instance safe and host-replaceable ([guide](./docs/history.md))
+- ⏰ **Scheduler**: Exactly-once outbound scheduling with a fire-time grace window, multi-instance safe ([guide](./docs/scheduler.md))
 - 📦 **Framework Agnostic**: Works with any JavaScript framework or vanilla JS
 - 🎯 **TypeScript**: Fully typed for excellent developer experience
 
@@ -84,13 +90,23 @@ is runtime-neutral. Development and the quality gates run on Bun.
 
 ## Documentation
 
-Complete guides for setup, deployment, and integration:
+Complete guides for setup, deployment, and integration — see
+[docs/index.md](./docs/index.md) for the full, ordered walkthrough:
 
 - **[Requirements](./docs/requirements.md)** - OpenAI, Turso, Clerk setup and pricing
 - **[Server Setup](./docs/server.md)** - Configuration, knowledge base, prompts, API keys
 - **[Client Integration](./docs/client.md)** - Widgets, React components, theming
+- **[UI Integrations](./docs/integrations.md)** - OpenAI-compatible API, headless mode, bring-your-own-brain
 - **[Usage Metering](./docs/usage.md)** - Daily spend caps for paid features
+- **[Personas](./docs/personas.md)** - Dynamic prompt layers and named greetings
+- **[WhatsApp Channel](./docs/channels.md)** - Link a WhatsApp number as a transport
+- **[Building a Channel](./docs/build-a-channel.md)** - Plug in a new transport
+- **[Flows](./docs/flows.md)** - Multi-turn, schema-driven slot-filling flows
+- **[Images](./docs/images.md)** - Generate and cache images on demand
+- **[Conversation History](./docs/history.md)** - Structural, host-replaceable multi-turn context
+- **[Scheduler](./docs/scheduler.md)** - Exactly-once outbound scheduling
 - **[Deployment](./docs/deployment.md)** - Google Cloud Run, Fly.io, Railway, VPS
+- **[Packaging](./docs/packaging.md)** - The subpath contract and the release chain
 - **[Testing](./docs/testing.md)** - Comprehensive testing guide
 - **[Sprint Review](./docs/sprint-review.md)** - Cross-module & security-invariant audit
 - **[FAQs](./docs/faqs.md)** - Troubleshooting and common questions

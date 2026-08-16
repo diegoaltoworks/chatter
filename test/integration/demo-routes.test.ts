@@ -25,6 +25,9 @@ describe("Demo Routes Integration", () => {
 
     const config: ChatterConfig = integrationConfig(dirs, {
       features: { enablePublicChat: false, enablePrivateChat: false, enableDemoRoutes: true },
+      // These tests isolate rate-limit state per test with a distinct
+      // X-Forwarded-For, which only partitions requests when trustProxy is on.
+      rateLimit: { trustProxy: true },
     });
 
     app = await createServer(config);

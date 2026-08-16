@@ -172,8 +172,8 @@ describe("POST /api/demo/chat", () => {
 });
 
 describe("demo rate limiting trustProxy", () => {
-  test("keys by X-Forwarded-For by default (trustProxy defaults true)", async () => {
-    const app = demoRoutes(createFakeDeps());
+  test("keys by X-Forwarded-For when trustProxy is explicitly enabled", async () => {
+    const app = demoRoutes(createFakeDeps({ rateLimit: { trustProxy: true } }));
 
     for (let i = 0; i < 10; i++) {
       await app.fetch(sessionRequest({ "x-forwarded-for": "203.0.113.1" }));
@@ -186,8 +186,8 @@ describe("demo rate limiting trustProxy", () => {
     expect(other.status).toBe(200);
   });
 
-  test("collapses all callers onto one bucket when trustProxy is false", async () => {
-    const app = demoRoutes(createFakeDeps({ rateLimit: { trustProxy: false } }));
+  test("collapses all callers onto one shared bucket by default (trustProxy defaults false)", async () => {
+    const app = demoRoutes(createFakeDeps());
 
     for (let i = 0; i < 10; i++) {
       await app.fetch(sessionRequest({ "x-forwarded-for": `203.0.113.${i + 10}` }));
