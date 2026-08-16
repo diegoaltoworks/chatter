@@ -34,6 +34,46 @@ import { createJWTMiddleware, jwtSubject } from "../middleware/jwt";
 import { createRateLimiter } from "../middleware/ratelimit";
 import type { ServerDependencies } from "../types";
 
+/** The verified API key's id, attached by `requireApiKey` for the public route */
+interface ContextWithApiKeySub extends Context {
+  apiKeySub?: string;
+}
+
+function apiKeySubject(c: Context): string | undefined {
+  const sub = (c as ContextWithApiKeySub).apiKeySub;
+  return sub && sub.trim().length > 0 ? sub : undefined;
+}
+
+/**
+ * `ServerDependencies.apiKeyManager` accepts any caller-supplied
+ * implementation (`payload` is typed `unknown` there), so its `sub` is
+ * narrowed defensively rather than trusted as `ApiKeyPayload`.
+ */
+function payloadSub(payload: unknown): string | undefined {
+  const sub = (payload as { sub?: unknown } | undefined)?.sub;
+  return typeof sub === "string" ? sub : undefined;
+}
+
+// Token-safe and header-safe: rejects CRLF/unicode that would throw setting
+// the response header, and bounds length against a client trying to smuggle
+// an oversized value into it. Invalid input is treated the same as absent —
+// a fresh id is generated — rather than failing the request over a field
+// that's otherwise opaque to the client.
+const CONVERSATION_ID_PATTERN = /^[A-Za-z0-9_.:-]{1,200}$/;
+
+function sanitizeConversationId(value: string | undefined): string | undefined {
+  const trimmed = value?.trim();
+  return trimmed && CONVERSATION_ID_PATTERN.test(trimmed) ? trimmed : undefined;
+}
+
+/** Client-suppliable conversation id: `x-conversation-id` header, else a `conversation_id` body field. */
+function clientConversationId(c: Context, body: unknown): string | undefined {
+  const header = sanitizeConversationId(c.req.header("x-conversation-id"));
+  if (header) return header;
+  const fromBody = (body as { conversation_id?: unknown })?.conversation_id;
+  return sanitizeConversationId(typeof fromBody === "string" ? fromBody : undefined);
+}
+
 function errorJson(c: Context, status: 400 | 401, message: string) {
   return c.json(
     { error: { message, type: status === 401 ? "authentication_error" : "invalid_request_error" } },
@@ -68,7 +108,10 @@ export function openaiRoutes(deps: ServerDependencies) {
     }
     try {
       const result = await apiKeyManager.verify(key);
-      if (result.valid) return await next();
+      if (result.valid) {
+        (c as ContextWithApiKeySub).apiKeySub = payloadSub(result.payload);
+        return await next();
+      }
     } catch {
       // fall through to the 401 below
     }
@@ -96,7 +139,9 @@ export function openaiRoutes(deps: ServerDependencies) {
         : undefined;
 
     // Only the private route carries a per-user identity; the public one is
-    // API-key gated, so it stays anonymous and is clamped accordingly.
+    // API-key gated, so it stays anonymous and is clamped accordingly. This
+    // is the retrieval-scope identity — do not widen it with the API key
+    // subject below, or the public route could reach private buckets.
     const buckets = await resolveBuckets({
       mode,
       sender: jwtSubject(c),
@@ -109,6 +154,17 @@ export function openaiRoutes(deps: ServerDependencies) {
     } catch {
       return errorJson(c, 400, "Conversation must contain at least one user message");
     }
+
+    // Identity handed to the brain hook only — never used for retrieval
+    // scope. The private route's JWT subject and the public route's API key
+    // id are both "who is asking", just not "what may they read".
+    const sender = jwtSubject(c) ?? apiKeySubject(c);
+
+    // A brain hook can key threads/history off this; generated when the
+    // client sends neither and echoed back via response header so the
+    // client can correlate later turns.
+    const conversationId = clientConversationId(c, body) ?? crypto.randomUUID();
+    c.header("x-conversation-id", conversationId);
 
     const id = `chatcmpl-${crypto.randomUUID()}`;
     const created = Math.floor(Date.now() / 1000);
@@ -133,6 +189,8 @@ export function openaiRoutes(deps: ServerDependencies) {
           system,
           messages,
           mode,
+          sender,
+          conversationId,
           temperature,
           model: serverModel,
         })) {
@@ -149,6 +207,8 @@ export function openaiRoutes(deps: ServerDependencies) {
       system,
       messages,
       mode,
+      sender,
+      conversationId,
       temperature,
       model: serverModel,
     });

@@ -293,6 +293,177 @@ describe("answerFn brain hook", () => {
     expect(chunks.map((c) => c.choices[0].delta.content ?? "").join("")).toBe("one shot answer");
     expect(chunks[chunks.length - 1].choices[0].finish_reason).toBe("stop");
   });
+
+  test("sender and a client-supplied conversation id reach the brain on the streaming path too", async () => {
+    const { deps } = createFakeDeps();
+    const seen: { sender?: string; conversationId?: string }[] = [];
+    deps.config.answerFn = async ({ sender, conversationId }) => {
+      seen.push({ sender, conversationId });
+      return "streamed answer";
+    };
+
+    const app = openaiRoutes(deps);
+    const res = await app.fetch(
+      completionsRequest(
+        { stream: true, messages: [{ role: "user", content: "hi" }] },
+        { ...AUTH, "x-conversation-id": "conv-streamed" },
+      ),
+    );
+
+    expect(res.status).toBe(200);
+    expect(res.headers.get("x-conversation-id")).toBe("conv-streamed");
+    expect(seen).toEqual([{ sender: undefined, conversationId: "conv-streamed" }]);
+  });
+
+  test("the API key's id reaches the brain as sender - never used for retrieval scope", async () => {
+    const bucketsForCalls: unknown[] = [];
+    const { deps, retrievedBuckets } = createFakeDeps(
+      {
+        apiKeyManager: {
+          verify: async (token: string) =>
+            token === "valid-key"
+              ? {
+                  valid: true,
+                  payload: { sub: "key-abc", name: "k", type: "api_key", iat: 0, exp: 0 },
+                }
+              : { valid: false },
+        } as unknown as ServerDependencies["apiKeyManager"],
+      },
+      {
+        // Tries to widen scope with the API key id; the invariant is that it
+        // never gets the chance to, because the route never hands it one.
+        bucketsFor: (ctx) => {
+          bucketsForCalls.push(ctx);
+          return ctx.sender ? ["base", "public", "private"] : undefined;
+        },
+      },
+    );
+    const seen: (string | undefined)[] = [];
+    deps.config.answerFn = async ({ sender }) => {
+      seen.push(sender);
+      return "ok";
+    };
+
+    const app = openaiRoutes(deps);
+    await app.fetch(completionsRequest({ messages: [{ role: "user", content: "hi" }] }, AUTH));
+
+    // The brain hook learns who called...
+    expect(seen).toEqual(["key-abc"]);
+    // ...but bucketsFor - the retrieval-scope gate - never sees a sender, so
+    // it cannot widen past the anonymous defaults no matter what it tries.
+    expect(bucketsForCalls).toEqual([{ mode: "public" }]);
+    expect(retrievedBuckets).toEqual([["base", "public"]]);
+  });
+
+  test("the private route's JWT subject reaches the brain as sender", async () => {
+    const { publicKey, privateKey } = await generateKeyPair("RS256");
+    const publicKeyPem = await exportSPKI(publicKey);
+    const token = await new SignJWT({ sub: "staff-1" })
+      .setProtectedHeader({ alg: "RS256" })
+      .setIssuedAt()
+      .setExpirationTime("5m")
+      .sign(privateKey);
+
+    const { deps } = createFakeDeps(undefined, { auth: { jwt: { publicKeyPem } } });
+    const seen: (string | undefined)[] = [];
+    deps.config.answerFn = async ({ sender }) => {
+      seen.push(sender);
+      return "ok";
+    };
+
+    const app = openaiRoutes(deps);
+    await app.fetch(
+      new Request("http://localhost/api/private/v1/chat/completions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ messages: [{ role: "user", content: "hi" }] }),
+      }),
+    );
+
+    expect(seen).toEqual(["staff-1"]);
+  });
+
+  test("generates a conversation id when the client sends none, and echoes it in the response header", async () => {
+    const { deps } = createFakeDeps();
+    const seen: (string | undefined)[] = [];
+    deps.config.answerFn = async ({ conversationId }) => {
+      seen.push(conversationId);
+      return "ok";
+    };
+
+    const app = openaiRoutes(deps);
+    const res = await app.fetch(
+      completionsRequest({ messages: [{ role: "user", content: "hi" }] }, AUTH),
+    );
+
+    const headerConvId = res.headers.get("x-conversation-id");
+    expect(headerConvId).toBeTruthy();
+    expect(seen).toEqual([headerConvId ?? undefined]);
+  });
+
+  test("honors a client-supplied x-conversation-id header over generating one", async () => {
+    const { deps } = createFakeDeps();
+    const seen: (string | undefined)[] = [];
+    deps.config.answerFn = async ({ conversationId }) => {
+      seen.push(conversationId);
+      return "ok";
+    };
+
+    const app = openaiRoutes(deps);
+    const res = await app.fetch(
+      completionsRequest(
+        { messages: [{ role: "user", content: "hi" }] },
+        { ...AUTH, "x-conversation-id": "conv-from-header" },
+      ),
+    );
+
+    expect(seen).toEqual(["conv-from-header"]);
+    expect(res.headers.get("x-conversation-id")).toBe("conv-from-header");
+  });
+
+  test("honors a client-supplied conversation_id body field", async () => {
+    const { deps } = createFakeDeps();
+    const seen: (string | undefined)[] = [];
+    deps.config.answerFn = async ({ conversationId }) => {
+      seen.push(conversationId);
+      return "ok";
+    };
+
+    const app = openaiRoutes(deps);
+    await app.fetch(
+      completionsRequest(
+        { messages: [{ role: "user", content: "hi" }], conversation_id: "conv-from-body" },
+        AUTH,
+      ),
+    );
+
+    expect(seen).toEqual(["conv-from-body"]);
+  });
+
+  test("falls back to a generated id when the client's conversation_id is malformed or oversized", async () => {
+    const { deps } = createFakeDeps();
+    const seen: (string | undefined)[] = [];
+    deps.config.answerFn = async ({ conversationId }) => {
+      seen.push(conversationId);
+      return "ok";
+    };
+    const app = openaiRoutes(deps);
+
+    for (const badId of ["a\nb", "héllo-🎉", "x".repeat(100_000), "   "]) {
+      const res = await app.fetch(
+        completionsRequest(
+          { messages: [{ role: "user", content: "hi" }], conversation_id: badId },
+          AUTH,
+        ),
+      );
+      expect(res.status).toBe(200);
+      const headerConvId = res.headers.get("x-conversation-id");
+      expect(headerConvId).toBeTruthy();
+      expect(headerConvId).not.toBe(badId);
+    }
+    expect(seen).toHaveLength(4);
+    expect(seen.every((id) => typeof id === "string" && id.length <= 200)).toBe(true);
+  });
 });
 
 describe("feature flags", () => {

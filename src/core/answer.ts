@@ -38,6 +38,8 @@ export interface AnswerFnInput {
   mode: PipelineMode;
   /** Channel-specific sender identity, when the surface knows one */
   sender?: string;
+  /** Stable conversation/thread identifier, when the surface has or generates one */
+  conversationId?: string;
 }
 
 /**
@@ -61,6 +63,7 @@ export interface AnswerOptions {
   messages: PipelineMessage[];
   mode: PipelineMode;
   sender?: string;
+  conversationId?: string;
   temperature?: number;
   model?: string;
 }
@@ -73,9 +76,9 @@ export interface AnswerOptions {
  */
 async function runAnswerFn(
   answerFn: AnswerFn,
-  { system, messages, mode, sender }: AnswerFnInput,
+  { system, messages, mode, sender, conversationId }: AnswerFnInput,
 ): Promise<{ content: string; usage: AnswerUsage }> {
-  const result = await answerFn({ system, messages, mode, sender });
+  const result = await answerFn({ system, messages, mode, sender, conversationId });
   const raw = typeof result === "string" ? result : result?.content;
   const usage = typeof result === "string" ? undefined : result?.usage;
   return {
@@ -94,11 +97,12 @@ export async function answerOnce({
   messages,
   mode,
   sender,
+  conversationId,
   temperature,
   model,
 }: AnswerOptions): Promise<{ content: string; usage: AnswerUsage }> {
   if (answerFn) {
-    return runAnswerFn(answerFn, { system, messages, mode, sender });
+    return runAnswerFn(answerFn, { system, messages, mode, sender, conversationId });
   }
   return completeOnce({ client, system, messages, temperature, model });
 }
@@ -119,11 +123,18 @@ export async function* answerStream({
   messages,
   mode,
   sender,
+  conversationId,
   temperature,
   model,
 }: AnswerOptions): AsyncGenerator<string> {
   if (answerFn) {
-    const { content } = await runAnswerFn(answerFn, { system, messages, mode, sender });
+    const { content } = await runAnswerFn(answerFn, {
+      system,
+      messages,
+      mode,
+      sender,
+      conversationId,
+    });
     if (content) yield content;
     return;
   }
