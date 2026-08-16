@@ -25,6 +25,8 @@
  * registered.
  */
 
+import { exponentialBackoffMs } from "../backoff";
+
 /** Baileys' "restart required" — emitted immediately after a QR scan registers the device. */
 export const RESTART_REQUIRED_STATUS = 515;
 
@@ -52,9 +54,10 @@ const REGISTERED_CONFIRM_POLL_MS = 500;
  */
 export function pairingReconnectDelayMs(statusCode: number | undefined, attempt: number): number {
   if (statusCode === RESTART_REQUIRED_STATUS) return RESTART_REQUIRED_DELAY_MS;
-  return Math.min(
-    PAIRING_RECONNECT_DELAY_MS * 2 ** Math.max(0, attempt - 1),
+  return exponentialBackoffMs(
+    PAIRING_RECONNECT_DELAY_MS,
     PAIRING_RECONNECT_MAX_DELAY_MS,
+    attempt - 1,
   );
 }
 

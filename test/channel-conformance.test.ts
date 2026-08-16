@@ -24,21 +24,17 @@ import type { TelegramApi, TelegramMessage, TelegramUpdate } from "../src/channe
 import { createWhatsAppChannel, createWhatsAppInboundHandler } from "../src/channels/whatsapp";
 import type { WhatsAppMessageEvent } from "../src/channels/whatsapp/channel";
 import type { WhatsAppInboundConfig } from "../src/channels/whatsapp/inbound";
-import type { AnswerFnInput, TransformReply } from "../src/core/answer";
+import type { AnswerFnInput } from "../src/core/answer";
 import type { Logger } from "../src/core/logger";
-import type { RerankContext, RewriteQuery } from "../src/core/pipeline";
 import type { PromptLoader } from "../src/core/prompts";
 import type { VectorStore } from "../src/core/retrieval";
 import type { HistoryMessage, HistoryStore } from "../src/history";
-import type { ChatterConfig, ServerDependencies } from "../src/types";
+import type { BrainHooks, ChatterConfig, ServerDependencies } from "../src/types";
 
 // --- shared scenario shape ---
 
-interface Scenario {
+interface Scenario extends Pick<BrainHooks, "transformReply" | "rewriteQuery" | "rerankContext"> {
   channelHint?: string;
-  transformReply?: TransformReply;
-  rewriteQuery?: RewriteQuery;
-  rerankContext?: RerankContext;
   allowedChats?: string[];
   history?: {
     store: HistoryStore;

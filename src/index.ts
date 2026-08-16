@@ -104,6 +104,7 @@ export type {
   BotBranding,
   BotChatConfig,
   BotIdentity,
+  BrainHooks,
   ChatterConfig,
   CustomRoutes,
   EmbeddingChunk,

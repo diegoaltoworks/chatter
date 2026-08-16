@@ -87,15 +87,9 @@ wrapper (`getUpdates`/`sendMessage`, however you fetch it) and build the
 `Channel`:
 
 ```ts
-import type {
-  AnswerFn,
-  BucketsFor,
-  RerankContext,
-  RewriteQuery,
-  TransformReply,
-} from "@diegoaltoworks/chatter";
+import type { BrainHooks } from "@diegoaltoworks/chatter";
 import type { Channel, ChannelMessage } from "@diegoaltoworks/chatter/channels";
-import { createInboundPipeline } from "@diegoaltoworks/chatter/channels";
+import { createInboundPipeline, resolveBrainHooks } from "@diegoaltoworks/chatter/channels";
 
 interface TelegramUpdate {
   message?: {
@@ -107,16 +101,9 @@ interface TelegramUpdate {
   };
 }
 
-export function createTelegramChannel(config: {
-  botToken: string;
-  allowedChats?: string[];
-  answerFn?: AnswerFn;
-  bucketsFor?: BucketsFor;
-  rewriteQuery?: RewriteQuery;
-  rerankContext?: RerankContext;
-  transformReply?: TransformReply;
-  channelHint?: string;
-}): Channel {
+export function createTelegramChannel(
+  config: BrainHooks & { botToken: string; allowedChats?: string[]; channelHint?: string },
+): Channel {
   return {
     name: "telegram",
     async start(deps) {
@@ -130,11 +117,9 @@ export function createTelegramChannel(config: {
         { client: deps.client, store: deps.store, prompts: deps.prompts },
         {
           channel: "telegram",
-          answerFn: config.answerFn ?? deps.config.answerFn,
-          bucketsFor: config.bucketsFor ?? deps.config.bucketsFor,
-          rewriteQuery: config.rewriteQuery ?? deps.config.rewriteQuery,
-          rerankContext: config.rerankContext ?? deps.config.rerankContext,
-          transformReply: config.transformReply ?? deps.config.transformReply,
+          // config's own hook wins; falls back to the server-level one on
+          // deps.config for whichever field this channel didn't set.
+          ...resolveBrainHooks(config, deps.config),
           channelHint: config.channelHint ?? "Channel: Telegram.",
           allowedChats: config.allowedChats,
           muteRegex: /^\/mute$/i,

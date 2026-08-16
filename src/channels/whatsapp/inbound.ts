@@ -48,22 +48,19 @@
 
 import type { WAMessage, WASocket } from "@whiskeysockets/baileys";
 import type OpenAI from "openai";
-import type { AnswerFn, TransformReply } from "../../core/answer";
-import type { BucketsFor } from "../../core/buckets";
 import { createConsoleLogger, type Logger } from "../../core/logger";
-import type { RerankContext, RewriteQuery } from "../../core/pipeline";
 import type { PromptLoader } from "../../core/prompts";
 import type { VectorStore } from "../../core/retrieval";
 import type { HistoryCompactionOptions } from "../../history/compaction";
 import type { HistoryStore } from "../../history/types";
-import type { ChatterConfig } from "../../types";
+import type { BrainHooks } from "../../types";
 import {
   type ChannelMessage,
   isBlockedByAllowlist,
   isEffectivelyFromSelf,
   type SessionIdentityRegistry,
 } from "../gates";
-import { createInboundPipeline, type InboundReplySender } from "../pipeline";
+import { createInboundPipeline, type InboundReplySender, resolveBrainHooks } from "../pipeline";
 import type { WhatsAppMessageEvent } from "./channel";
 import type { WhatsAppImageHandler } from "./images";
 
@@ -301,30 +298,19 @@ export function resolveWaMessage(
 
 // --- inbound handler ---
 
-export interface WhatsAppInboundConfig {
+export interface WhatsAppInboundConfig extends BrainHooks {
   client: OpenAI;
   store: VectorStore;
   prompts: PromptLoader;
-  answerFn?: AnswerFn;
-  bucketsFor?: BucketsFor;
-  /** Rewrites the retrieval query before it reaches the vector store — see `ChatterConfig.rewriteQuery`. */
-  rewriteQuery?: RewriteQuery;
-  /** Post-processes retrieved chunks before they're folded into the prompt — see `ChatterConfig.rerankContext`. */
-  rerankContext?: RerankContext;
-  /** Modifies or vetoes the produced reply before delivery — see `ChatterConfig.transformReply`. */
-  transformReply?: TransformReply;
   /**
-   * Fallback source for `answerFn`/`bucketsFor`/`rewriteQuery`/`rerankContext`/
-   * `transformReply` above, each consulted only when this config's own field
-   * is unset. Pass `deps.config` from the `customRoutes` callback (see the
-   * module docstring) so this handler automatically honours a server-level
-   * hook, the same `config.X ?? deps.config.X` precedence `./telegram` and
-   * `./matrix` apply internally. Unset: only this config's own fields count.
+   * Fallback source for the brain hooks above, each consulted only when this
+   * config's own field is unset. Pass `deps.config` from the `customRoutes`
+   * callback (see the module docstring) so this handler automatically
+   * honours a server-level hook, the same precedence `./telegram` and
+   * `./matrix` apply internally via `resolveBrainHooks`. Unset: only this
+   * config's own fields count.
    */
-  serverConfig?: Pick<
-    ChatterConfig,
-    "answerFn" | "bucketsFor" | "rewriteQuery" | "rerankContext" | "transformReply"
-  >;
+  serverConfig?: BrainHooks;
   model?: string;
   /**
    * Own identities per session — share ONE registry across every session
@@ -418,11 +404,7 @@ export function createWhatsAppInboundHandler(
     { client: config.client, store: config.store, prompts: config.prompts },
     {
       channel: "whatsapp",
-      answerFn: config.answerFn ?? config.serverConfig?.answerFn,
-      bucketsFor: config.bucketsFor ?? config.serverConfig?.bucketsFor,
-      rewriteQuery: config.rewriteQuery ?? config.serverConfig?.rewriteQuery,
-      rerankContext: config.rerankContext ?? config.serverConfig?.rerankContext,
-      transformReply: config.transformReply ?? config.serverConfig?.transformReply,
+      ...resolveBrainHooks(config, config.serverConfig),
       model: config.model,
       channelHint: config.channelHint ?? "Channel: WhatsApp.",
       personaResolver: personaResolver

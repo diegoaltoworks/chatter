@@ -23,6 +23,7 @@ import { join } from "node:path";
 import type { ChatCompletion } from "openai/resources/chat/completions";
 import type {
   AnswerFn,
+  BrainHooks,
   BucketsFor,
   Channel,
   Logger,
@@ -38,6 +39,7 @@ import {
   createInboundPipeline,
   createSenderRegistry,
   type InboundReplySender,
+  resolveBrainHooks,
 } from "../src/channels";
 import type { MatrixChannelConfig } from "../src/channels/matrix";
 import {
@@ -279,6 +281,26 @@ describe("API surface", () => {
       conversationId: "conv-1",
     });
     expect(result).toBe("answer");
+  });
+
+  // Locks docs/build-a-channel.md's "From sketch to shipped channel" example,
+  // which builds a config from BrainHooks and resolves it against the
+  // server's own via resolveBrainHooks instead of five hand-rolled `??`s.
+  test("a channel config built from BrainHooks resolves against the server's via resolveBrainHooks", () => {
+    const config: BrainHooks & { channelHint?: string } = {
+      answerFn: async () => "from config",
+      channelHint: "Custom hint.",
+    };
+    const serverConfig: BrainHooks = {
+      answerFn: async () => "from server",
+      bucketsFor: async () => ["support"],
+    };
+
+    const resolved = resolveBrainHooks(config, serverConfig);
+
+    expect(resolved.answerFn).toBe(config.answerFn);
+    expect(resolved.bucketsFor).toBe(serverConfig.bucketsFor);
+    expect(resolved.rewriteQuery).toBeUndefined();
   });
 
   test("the sender registry sends by channel name without importing the transport", async () => {

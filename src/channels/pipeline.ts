@@ -15,29 +15,41 @@
  */
 
 import type OpenAI from "openai";
-import type { AnswerFn, TransformReply } from "../core/answer";
 import { answerOnce, applyTransformReply } from "../core/answer";
-import type { BucketsFor } from "../core/buckets";
 import { resolveBuckets } from "../core/buckets";
 import type { Logger } from "../core/logger";
-import {
-  type PipelineMessage,
-  type PipelineMode,
-  prepareChat,
-  type RerankContext,
-  type RewriteQuery,
-} from "../core/pipeline";
+import { type PipelineMessage, type PipelineMode, prepareChat } from "../core/pipeline";
 import type { PromptLoader } from "../core/prompts";
 import type { VectorStore } from "../core/retrieval";
 import type { HistoryCompactionOptions } from "../history/compaction";
 import { createHistoryCompactor } from "../history/compaction";
 import type { HistoryStore } from "../history/types";
+import type { BrainHooks } from "../types";
 import {
   type ChannelMessage,
   createSlidingWindowRateLimiter,
   decideChannelAction,
   underReplyRateLimit,
 } from "./gates";
+
+/**
+ * Resolves the brain hooks (`answerFn`, `bucketsFor`, `rewriteQuery`,
+ * `rerankContext`, `transformReply`) for one channel: each field from
+ * `config` wins when set, falling back to the matching field on `fallback`
+ * (typically `deps.config`, the server-level `ChatterConfig`). Every channel
+ * that layers its own hooks over the server's uses this instead of
+ * hand-rolling the same five `??` lines: see `../telegram`, `../matrix` and
+ * `../whatsapp/inbound`.
+ */
+export function resolveBrainHooks(config: BrainHooks, fallback?: BrainHooks): BrainHooks {
+  return {
+    answerFn: config.answerFn ?? fallback?.answerFn,
+    bucketsFor: config.bucketsFor ?? fallback?.bucketsFor,
+    rewriteQuery: config.rewriteQuery ?? fallback?.rewriteQuery,
+    rerankContext: config.rerankContext ?? fallback?.rerankContext,
+    transformReply: config.transformReply ?? fallback?.transformReply,
+  };
+}
 
 /** Where a pipeline turn's output goes. Distinct from `ChannelSender` (`./senders`) — a transport implementing this may thread/quote the chat answer without doing the same for a plain gate acknowledgement. */
 export interface InboundReplySender {
@@ -53,20 +65,12 @@ export interface InboundPipelineDeps {
   prompts: PromptLoader;
 }
 
-export interface InboundPipelineConfig {
+export interface InboundPipelineConfig extends BrainHooks {
   /**
    * This channel's identity for `transformReply` — e.g. "whatsapp",
    * "telegram". @default "channel"
    */
   channel?: string;
-  answerFn?: AnswerFn;
-  bucketsFor?: BucketsFor;
-  /** Rewrites the retrieval query before it reaches the vector store — see `ChatterConfig.rewriteQuery`. */
-  rewriteQuery?: RewriteQuery;
-  /** Post-processes retrieved chunks before they're folded into the prompt — see `ChatterConfig.rerankContext`. */
-  rerankContext?: RerankContext;
-  /** Modifies or vetoes the produced reply before delivery — see `ChatterConfig.transformReply`. */
-  transformReply?: TransformReply;
   model?: string;
   /** Extra system-prompt section describing the delivery channel; passed through to `prepareChat`. */
   channelHint?: string;

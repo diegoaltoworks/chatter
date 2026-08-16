@@ -21,22 +21,19 @@
  */
 
 import { timingSafeEqual } from "node:crypto";
-import type { AnswerFn, TransformReply } from "../../core/answer";
-import type { BucketsFor } from "../../core/buckets";
 import { createConsoleLogger, type Logger } from "../../core/logger";
-import type { RerankContext, RewriteQuery } from "../../core/pipeline";
 import type { HistoryCompactionOptions } from "../../history/compaction";
 import type { HistoryStore } from "../../history/types";
 import { chatBodyLimit } from "../../middleware/bodyLimit";
-import type { CustomRoutes } from "../../types";
-import { createInboundPipeline } from "../pipeline";
+import type { BrainHooks, CustomRoutes } from "../../types";
+import { createInboundPipeline, resolveBrainHooks } from "../pipeline";
 import { createTelegramApi, type TelegramApi, type TelegramUpdate } from "./api";
 import { createTelegramSender, createTelegramUpdateHandler } from "./handler";
 
 /** Header Telegram echoes back on every webhook POST, carrying whatever `secretToken` was passed to `setWebhook`. */
 const SECRET_TOKEN_HEADER = "x-telegram-bot-api-secret-token";
 
-export interface TelegramWebhookConfig {
+export interface TelegramWebhookConfig extends BrainHooks {
   /** From @BotFather. A credential — pass it from the environment, never commit it. */
   botToken: string;
   /**
@@ -53,11 +50,6 @@ export interface TelegramWebhookConfig {
   name?: string;
   /** Group chats eligible for a reply. Empty (default) = every group. Has no effect on DMs, which always reply. */
   allowedChats?: string[];
-  answerFn?: AnswerFn;
-  bucketsFor?: BucketsFor;
-  rewriteQuery?: RewriteQuery;
-  rerankContext?: RerankContext;
-  transformReply?: TransformReply;
   model?: string;
   /** Extra system-prompt section describing the delivery channel; passed through to `prepareChat`. @default "Channel: Telegram." */
   channelHint?: string;
@@ -154,11 +146,7 @@ export function createTelegramWebhookRoute(config: TelegramWebhookConfig): Custo
       { client: deps.client, store: deps.store, prompts: deps.prompts },
       {
         channel: channelName,
-        answerFn: config.answerFn ?? deps.config.answerFn,
-        bucketsFor: config.bucketsFor ?? deps.config.bucketsFor,
-        rewriteQuery: config.rewriteQuery ?? deps.config.rewriteQuery,
-        rerankContext: config.rerankContext ?? deps.config.rerankContext,
-        transformReply: config.transformReply ?? deps.config.transformReply,
+        ...resolveBrainHooks(config, deps.config),
         model: config.model,
         channelHint: config.channelHint ?? "Channel: Telegram.",
         personaResolver: config.personaResolver,

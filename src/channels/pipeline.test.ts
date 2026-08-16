@@ -8,7 +8,48 @@ import {
   createInboundPipeline,
   type InboundPipelineConfig,
   type InboundReplySender,
+  resolveBrainHooks,
 } from "./pipeline";
+
+describe("resolveBrainHooks", () => {
+  test("a field set on config wins over the same field on fallback", () => {
+    const configAnswerFn = async () => "from config";
+    const fallbackAnswerFn = async () => "from fallback";
+    const resolved = resolveBrainHooks(
+      { answerFn: configAnswerFn },
+      { answerFn: fallbackAnswerFn },
+    );
+    expect(resolved.answerFn).toBe(configAnswerFn);
+  });
+
+  test("a field unset on config falls back to the matching field on fallback", () => {
+    const fallbackBucketsFor = async () => ["base"];
+    const resolved = resolveBrainHooks({}, { bucketsFor: fallbackBucketsFor });
+    expect(resolved.bucketsFor).toBe(fallbackBucketsFor);
+  });
+
+  test("a field unset on both, or with no fallback given, resolves to undefined", () => {
+    expect(resolveBrainHooks({}, {})).toEqual({
+      answerFn: undefined,
+      bucketsFor: undefined,
+      rewriteQuery: undefined,
+      rerankContext: undefined,
+      transformReply: undefined,
+    });
+    expect(resolveBrainHooks({}).answerFn).toBeUndefined();
+  });
+
+  test("resolves each of the five hooks independently", () => {
+    const rewriteQuery = async () => "rewritten";
+    const rerankContext = async () => ["chunk"];
+    const transformReply = () => "transformed";
+    const resolved = resolveBrainHooks({ rewriteQuery }, { rerankContext, transformReply });
+    expect(resolved.rewriteQuery).toBe(rewriteQuery);
+    expect(resolved.rerankContext).toBe(rerankContext);
+    expect(resolved.transformReply).toBe(transformReply);
+    expect(resolved.answerFn).toBeUndefined();
+  });
+});
 
 function msg(overrides: Partial<ChannelMessage> = {}): ChannelMessage {
   return {

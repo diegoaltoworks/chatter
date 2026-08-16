@@ -21,14 +21,10 @@
  * which is the same policy `decideChannelAction` applies anyway.
  */
 
-import type { AnswerFn, TransformReply } from "../../core/answer";
-import type { BucketsFor } from "../../core/buckets";
-import { createConsoleLogger, type Logger } from "../../core/logger";
-import type { RerankContext, RewriteQuery } from "../../core/pipeline";
-import type { HistoryCompactionOptions } from "../../history/compaction";
-import type { HistoryStore } from "../../history/types";
+import { createConsoleLogger } from "../../core/logger";
 import type { Channel } from "../index";
-import { createInboundPipeline } from "../pipeline";
+import { createInboundPipeline, resolveBrainHooks } from "../pipeline";
+import { defaultSleep, type PollingChannelConfig } from "../polling";
 import { createTelegramApi, type TelegramApi } from "./api";
 import { createTelegramSender, createTelegramUpdateHandler } from "./handler";
 import { runLongPoll } from "./poll";
@@ -37,22 +33,11 @@ import type { TelegramBotIdentity } from "./updates";
 /** Long-poll hold time. Telegram holds the request open this long when no update arrives, so a poll is one request per 30s idle — not a busy loop. */
 const DEFAULT_POLL_TIMEOUT_SECONDS = 30;
 
-export interface TelegramChannelConfig {
+export interface TelegramChannelConfig extends PollingChannelConfig {
   /** From @BotFather. A credential — pass it from the environment, never commit it. */
   botToken: string;
   /** Channel and sender-registry name. Override to run more than one bot in one process. @default "telegram" */
   name?: string;
-  /** Group chats eligible for a reply. Empty (default) = every group. Has no effect on DMs, which always reply. */
-  allowedChats?: string[];
-  answerFn?: AnswerFn;
-  bucketsFor?: BucketsFor;
-  /** Rewrites the retrieval query before it reaches the vector store — see `ChatterConfig.rewriteQuery`. Falls back to the server's own. */
-  rewriteQuery?: RewriteQuery;
-  /** Post-processes retrieved chunks before they're folded into the prompt — see `ChatterConfig.rerankContext`. Falls back to the server's own. */
-  rerankContext?: RerankContext;
-  /** Modifies or vetoes the produced reply before delivery — see `ChatterConfig.transformReply`. Falls back to the server's own. */
-  transformReply?: TransformReply;
-  model?: string;
   /** Extra system-prompt section describing the delivery channel; passed through to `prepareChat`. @default "Channel: Telegram." */
   channelHint?: string;
   /** A throw/rejection is treated as "no persona" for that turn. `sender` is the namespaced `tg:<id>` key. */
@@ -60,55 +45,16 @@ export interface TelegramChannelConfig {
     sender: string;
     text: string;
   }) => string | undefined | Promise<string | undefined>;
-  /** Off by default — the channel stays single-turn until a store is configured. */
-  history?: {
-    store: HistoryStore;
-    /** Most recent turns to load per reply. @default 20 */
-    limit?: number;
-    /**
-     * Excludes a sender from history entirely — see
-     * `InboundPipelineConfig.history.historyEnabledFor` in `./channels`.
-     * @default every sender is enabled
-     */
-    historyEnabledFor?: (sender: string) => boolean | Promise<boolean>;
-    /**
-     * Summarize-then-truncate compaction — see
-     * `InboundPipelineConfig.history.compaction` in `./channels`.
-     * @default off
-     */
-    compaction?: HistoryCompactionOptions;
-  };
-  muteRegex?: RegExp;
-  unmuteRegex?: RegExp;
-  /** Neutral, overridable acknowledgements — this module ships no bot personality; unset = silent mute/unmute. */
-  muteReply?: string;
-  unmuteReply?: string;
-  dmRateLimit?: { max: number; windowMs: number };
-  groupRateLimit?: { max: number; windowMs: number };
   /** @default 30 */
   pollTimeoutSeconds?: number;
   /** Resume point for `getUpdates`. Omitted = whatever Telegram still has queued (see docs/telegram.md). */
   initialOffset?: number;
   /** Called with each acknowledged offset, for a host that wants to persist it across restarts. */
   onOffset?: (offset: number) => void;
-  /** Overridable for tests and for hosts routing through a proxy; defaults to `globalThis.fetch`. */
-  fetch?: typeof fetch;
   /** Self-hosted Bot API server origin. */
   apiBaseUrl?: string;
   /** Overridable for tests, which fake the Bot API instead of calling it; defaults to a `fetch` client over {@link TelegramChannelConfig.botToken}. */
   api?: TelegramApi;
-  /** Overridable for tests; defaults to a `setTimeout`-based sleep. */
-  sleep?: (ms: number) => Promise<void>;
-  now?: () => number;
-  /** Logger for poll/gate diagnostics. Falls back to the host's `deps.logger`, then a console logger. */
-  logger?: Logger;
-}
-
-function defaultSleep(ms: number): Promise<void> {
-  return new Promise((resolve) => {
-    const timer = setTimeout(resolve, ms);
-    if (typeof timer === "object" && "unref" in timer) timer.unref();
-  });
 }
 
 export function createTelegramChannel(config: TelegramChannelConfig): Channel {
@@ -156,11 +102,7 @@ export function createTelegramChannel(config: TelegramChannelConfig): Channel {
         { client: deps.client, store: deps.store, prompts: deps.prompts },
         {
           channel: channelName,
-          answerFn: config.answerFn ?? deps.config.answerFn,
-          bucketsFor: config.bucketsFor ?? deps.config.bucketsFor,
-          rewriteQuery: config.rewriteQuery ?? deps.config.rewriteQuery,
-          rerankContext: config.rerankContext ?? deps.config.rerankContext,
-          transformReply: config.transformReply ?? deps.config.transformReply,
+          ...resolveBrainHooks(config, deps.config),
           model: config.model,
           channelHint: config.channelHint ?? "Channel: Telegram.",
           personaResolver: config.personaResolver,
