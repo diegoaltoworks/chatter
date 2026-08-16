@@ -202,23 +202,31 @@ describe("runMatrixSyncLoop", () => {
     expect(logger.warnings).toEqual([]);
   });
 
-  test("a stop right after a batch lands still skips handling it", async () => {
+  test("a stop right after a batch lands skips handling it and leaves its token unacknowledged", async () => {
     const handled: string[] = [];
+    const emittedSince: string[] = [];
     let stopped = false;
+    let round = 0;
 
-    await runMatrixSyncLoop({
+    const finalSince = await runMatrixSyncLoop({
       sync: async () => {
-        stopped = true;
-        return batch("s1");
+        // The first batch is handled normally; the stop lands while the
+        // second is in flight, so that one must not be acknowledged.
+        if (round++ === 1) stopped = true;
+        return batch(`s${round}`);
       },
       handleSync: async (response) => {
         handled.push(response.next_batch);
       },
       isStopped: () => stopped,
       sleep: async () => undefined,
+      onSince: (since) => emittedSince.push(since),
       logger: silentLogger(),
     });
 
-    expect(handled).toEqual([]);
+    expect(handled).toEqual(["s1"]);
+    expect(emittedSince).toEqual(["s1"]);
+    // Resuming from s1 re-fetches the unhandled batch rather than skipping it.
+    expect(finalSince).toBe("s1");
   });
 });

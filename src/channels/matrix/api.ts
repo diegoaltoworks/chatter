@@ -41,8 +41,21 @@ export interface MatrixJoinedRoom {
   timeline: MatrixRoomTimeline;
 }
 
+/**
+ * A state event as it arrives in an invite's `invite_state`: the homeserver
+ * strips it down to type/state_key/sender/content for a room the bot has not
+ * joined, so there is no `event_id` or `origin_server_ts` here the way there
+ * is on a timeline event.
+ */
+export interface MatrixStrippedStateEvent {
+  type: string;
+  state_key?: string;
+  sender?: string;
+  content?: Record<string, unknown>;
+}
+
 export interface MatrixInvitedRoom {
-  invite_state?: { events: Array<{ type: string; sender?: string; content?: unknown }> };
+  invite_state?: { events: MatrixStrippedStateEvent[] };
 }
 
 export interface MatrixAccountDataEvent {
@@ -99,12 +112,20 @@ export type MatrixMediaKind = "image" | "file" | "video" | "audio";
 export interface MatrixMediaPayload {
   /** @default "image" */
   kind?: MatrixMediaKind;
-  /** An `mxc://` content URI (sent as-is) or an https URL (fetched, then uploaded). */
+  /** An `mxc://` content URI (sent as-is) or an https URL (fetched under {@link MatrixApiConfig.maxMediaBytes}, then uploaded). Any other scheme is rejected. */
   url: string;
   caption?: string;
   /** @default derived from the URL's last path segment, or the media kind */
   filename?: string;
 }
+
+/**
+ * Default ceiling on a fetched media source. `sendMedia` is reachable from a
+ * scheduler, a flow or an `answerFn` tool call, so its URL is not necessarily
+ * one an operator chose: an unbounded fetch would let whatever produced that
+ * URL decide how much memory this process allocates.
+ */
+export const DEFAULT_MAX_MEDIA_BYTES = 25 * 1024 * 1024;
 
 const MEDIA_MSGTYPE: Record<MatrixMediaKind, string> = {
   image: "m.image",
@@ -120,6 +141,8 @@ export interface MatrixApiConfig {
   accessToken: string;
   /** Overridable for tests and for hosts routing through a proxy; defaults to `globalThis.fetch`. */
   fetch?: typeof fetch;
+  /** Cap on the bytes `sendMedia` will pull from a remote https URL before uploading. @default 25 MiB */
+  maxMediaBytes?: number;
 }
 
 export interface MatrixApi {
@@ -141,6 +164,8 @@ export interface MatrixApi {
   }): Promise<MatrixSyncResponse>;
   /** A user's global account data of `type` (e.g. `m.direct`), or `undefined` if it was never set (`M_NOT_FOUND`). */
   getAccountData<T>(userId: string, type: string): Promise<T | undefined>;
+  /** Replaces a user's global account data of `type`. Whole-document semantics: the homeserver stores exactly what is sent, so merge before calling. */
+  setAccountData(userId: string, type: string, content: Record<string, unknown>): Promise<void>;
   /** Sends an `m.room.message` (or any event type, via `eventType`) and returns its event id. */
   sendEvent(
     roomId: string,
@@ -191,6 +216,74 @@ function toMediaRequest(payload: unknown): {
   return { kind, url: media.url, caption: media.caption, filename: media.filename };
 }
 
+/**
+ * Rejects anything but `https:` for a URL this process is about to fetch on
+ * the homeserver's behalf. `http:` would carry the bytes (and the redirect
+ * chain) in the clear, and `file:`/`data:`/`blob:` would turn a media send
+ * into a read of whatever the host process can reach locally. The URL is
+ * still an outbound request from this process, so point it at content you
+ * control.
+ */
+function assertHttpsMediaUrl(url: string): void {
+  let parsed: URL;
+  try {
+    parsed = new URL(url);
+  } catch {
+    throw new TypeError(
+      `Matrix sendMedia url must be an mxc:// URI or an https URL - could not parse "${url}"`,
+    );
+  }
+  if (parsed.protocol !== "https:") {
+    throw new TypeError(
+      `Matrix sendMedia url must be an mxc:// URI or an https URL - got "${parsed.protocol}"`,
+    );
+  }
+}
+
+/**
+ * Reads a response body, refusing to buffer more than `maxBytes`. A declared
+ * `content-length` over the cap is rejected before a single byte is read; a
+ * missing or lying one is caught by the running total, so a chunked response
+ * cannot stream past the cap either.
+ */
+async function readCappedBytes(response: Response, maxBytes: number): Promise<Uint8Array> {
+  const declared = Number(response.headers.get("content-length"));
+  if (Number.isFinite(declared) && declared > maxBytes) {
+    throw new Error(`media source declares ${declared} bytes, over the ${maxBytes} byte cap`);
+  }
+
+  const reader = response.body?.getReader();
+  if (!reader) {
+    const bytes = new Uint8Array(await response.arrayBuffer());
+    if (bytes.byteLength > maxBytes) {
+      throw new Error(`media source is ${bytes.byteLength} bytes, over the ${maxBytes} byte cap`);
+    }
+    return bytes;
+  }
+
+  const chunks: Uint8Array[] = [];
+  let total = 0;
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    if (!value) continue;
+    total += value.byteLength;
+    if (total > maxBytes) {
+      await reader.cancel();
+      throw new Error(`media source exceeds the ${maxBytes} byte cap`);
+    }
+    chunks.push(value);
+  }
+
+  const bytes = new Uint8Array(total);
+  let offset = 0;
+  for (const chunk of chunks) {
+    bytes.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+  return bytes;
+}
+
 export function createMatrixApi(config: MatrixApiConfig): MatrixApi {
   const token = config.accessToken;
   if (!token.trim()) throw new Error("Matrix accessToken is required (e.g. MATRIX_ACCESS_TOKEN)");
@@ -198,6 +291,7 @@ export function createMatrixApi(config: MatrixApiConfig): MatrixApi {
   if (!homeserverUrl)
     throw new Error("Matrix homeserverUrl is required (e.g. https://matrix.example.org)");
   const doFetch = config.fetch ?? globalThis.fetch;
+  const maxMediaBytes = config.maxMediaBytes ?? DEFAULT_MAX_MEDIA_BYTES;
 
   async function call<T>(
     method: string,
@@ -316,13 +410,17 @@ export function createMatrixApi(config: MatrixApiConfig): MatrixApi {
     const media = toMediaRequest(payload);
     let contentUri = media.url;
     if (!contentUri.startsWith("mxc://")) {
+      // Outside the try: a bad scheme is a caller mistake, and a TypeError is
+      // what the sender registry turns into a `false` rather than a thrown
+      // MatrixApiError about the network.
+      assertHttpsMediaUrl(media.url);
       let bytes: Uint8Array;
       let contentType = "application/octet-stream";
       try {
         const fetched = await doFetch(media.url);
         if (!fetched.ok) throw new Error(`fetching media source returned HTTP ${fetched.status}`);
         contentType = fetched.headers.get("content-type") ?? contentType;
-        bytes = new Uint8Array(await fetched.arrayBuffer());
+        bytes = await readCappedBytes(fetched, maxMediaBytes);
       } catch (error) {
         throw new MatrixApiError(`could not fetch media source for upload: ${errorText(error)}`);
       }
@@ -376,6 +474,13 @@ export function createMatrixApi(config: MatrixApiConfig): MatrixApi {
         if (error instanceof MatrixApiError && error.errcode === "M_NOT_FOUND") return undefined;
         throw error;
       }
+    },
+    async setAccountData(userId, type, content) {
+      await call(
+        "PUT",
+        `/_matrix/client/v3/user/${encodeURIComponent(userId)}/account_data/${encodeURIComponent(type)}`,
+        { body: content },
+      );
     },
   };
 }

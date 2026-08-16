@@ -303,7 +303,8 @@ channel answers it:
 | One update whose handling throws | `poll.ts` - offset advances first, so a poison message can't repeat forever |
 | Credentials in error text | `api.ts` - `redactToken` before anything is logged |
 | A transport message-size limit | `api.ts` - `splitTelegramText` at 4096 chars, threading the first chunk only |
-| Shutdown while a request is in flight | `channel.ts` - an `AbortController` cuts the long poll in `stop()` |
+| Shutdown while a request is in flight | `channel.ts` - an `AbortController` cuts the long poll in `stop()`, and the acknowledged offset does not advance past a batch the loop will no longer handle (`./matrix` does both for `/sync` too) |
+| Joining a room on someone else's say-so | `handler.ts` - an invite is an unauthenticated request from any user, so `./matrix` gates auto-join by the same `allowedChats` that gates replies |
 | Sender identity that isn't a phone number | `updates.ts` - a namespaced `tg:<id>` key, never a bare numeral |
 | A non-allowlisted group nobody can see | `handler.ts` - `isBlockedByAllowlist`, logged once per chat |
 | A second way to receive updates, without duplicating the logic above | `handler.ts` - the same update handler feeds both `channel.ts`'s long poll and `webhook.ts`'s `customRoutes` mount |

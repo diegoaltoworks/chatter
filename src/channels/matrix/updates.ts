@@ -13,7 +13,7 @@
  */
 
 import type { ChannelMessage } from "../gates";
-import type { MatrixAccountDataEvent, MatrixEvent } from "./api";
+import type { MatrixAccountDataEvent, MatrixEvent, MatrixInvitedRoom } from "./api";
 
 /** The bot's own identity, as `whoami` reports it. */
 export interface MatrixIdentity {
@@ -29,13 +29,20 @@ interface MatrixInReplyTo {
   event_id?: string;
 }
 
+interface MatrixRelatesTo {
+  /** `m.replace` for an edit, `m.annotation` for a reaction, `m.thread` for a threaded message. Absent on a plain reply. */
+  rel_type?: string;
+  event_id?: string;
+  "m.in_reply_to"?: MatrixInReplyTo;
+}
+
 interface MatrixMessageContent {
   msgtype?: string;
   body?: string;
   format?: string;
   formatted_body?: string;
   "m.mentions"?: MatrixMentions;
-  "m.relates_to"?: { "m.in_reply_to"?: MatrixInReplyTo };
+  "m.relates_to"?: MatrixRelatesTo;
 }
 
 /** The message text, or "" for an event this channel doesn't render as text (a redaction, a non-text msgtype with no body). */
@@ -112,31 +119,83 @@ export function recordSentEventId(sentEventIds: Set<string>, eventId: string): v
 }
 
 /**
- * Room ids the homeserver's `m.direct` account data lists as direct
- * messages, across every peer — the canonical way a Matrix client (and so a
- * bot) tells a DM from a group: there is no per-room "this is a DM" flag.
- * A room absent from this set is treated as a group and needs addressing,
- * the safer default when a client never populated `m.direct` for it.
+ * The `m.direct` account-data document: peer user id -> the rooms that are
+ * direct messages with that peer. Matrix has no per-room "this is a DM"
+ * flag, so this mapping is the only thing that tells one from a group.
  */
-export function directRoomIds(accountDataEvents: MatrixAccountDataEvent[]): Set<string> {
-  const direct = accountDataEvents.find((event) => event.type === "m.direct");
-  const mapping = (direct?.content ?? {}) as Record<string, unknown>;
-  const rooms = new Set<string>();
-  for (const value of Object.values(mapping)) {
-    if (Array.isArray(value)) {
-      for (const roomId of value) {
-        if (typeof roomId === "string") rooms.add(roomId);
-      }
-    }
+export type MatrixDirectMapping = Record<string, string[]>;
+
+/** Raw `m.direct` content (whatever the homeserver stored) narrowed to peer -> room ids, dropping any entry that isn't a non-empty array of strings. */
+export function toDirectMapping(content: Record<string, unknown> | undefined): MatrixDirectMapping {
+  const mapping: MatrixDirectMapping = {};
+  for (const [peer, value] of Object.entries(content ?? {})) {
+    if (!Array.isArray(value)) continue;
+    const rooms = value.filter((roomId): roomId is string => typeof roomId === "string");
+    if (rooms.length > 0) mapping[peer] = rooms;
   }
-  return rooms;
+  return mapping;
+}
+
+/** Every room id in a mapping, across every peer. A room absent from it is treated as a group and needs addressing, the safer default. */
+export function directMappingRooms(mapping: MatrixDirectMapping): Set<string> {
+  return new Set(Object.values(mapping).flat());
+}
+
+/** The `m.direct` mapping carried by a sync batch's account data, or `undefined` when this batch says nothing about it (an unrelated account-data change must not be read as "no DMs"). */
+export function directMappingFromEvents(
+  accountDataEvents: MatrixAccountDataEvent[],
+): MatrixDirectMapping | undefined {
+  const direct = accountDataEvents.find((event) => event.type === "m.direct");
+  return direct ? toDirectMapping(direct.content) : undefined;
+}
+
+/** Room ids the homeserver's `m.direct` account data lists as direct messages, across every peer. */
+export function directRoomIds(accountDataEvents: MatrixAccountDataEvent[]): Set<string> {
+  return directMappingRooms(directMappingFromEvents(accountDataEvents) ?? {});
+}
+
+/**
+ * `mapping` with `roomId` recorded against `peer`, or `undefined` when it is
+ * already there, which the caller uses to skip a pointless account-data
+ * write. Never mutates the input: `m.direct` is a whole-document PUT, so the
+ * merged copy is what gets sent.
+ */
+export function withDirectRoom(
+  mapping: MatrixDirectMapping,
+  peer: string,
+  roomId: string,
+): MatrixDirectMapping | undefined {
+  const existing = mapping[peer] ?? [];
+  if (existing.includes(roomId)) return undefined;
+  return { ...mapping, [peer]: [...existing, roomId] };
+}
+
+/**
+ * The inviting user id when this invite is for a direct-message room, else
+ * `undefined`.
+ *
+ * A client opening a DM sets `is_direct: true` on the `m.room.member` invite
+ * it sends the bot, and records the room in ITS OWN `m.direct`, never in the
+ * bot's. The invite is therefore the only moment the bot is told a room is a
+ * DM; `./handler` seeds its DM set from this and writes the room into the
+ * bot's own `m.direct` so a later restart still knows.
+ */
+export function directInviteFrom(room: MatrixInvitedRoom, me: MatrixIdentity): string | undefined {
+  for (const event of room.invite_state?.events ?? []) {
+    if (event.type !== "m.room.member" || event.state_key !== me.userId) continue;
+    const content = event.content ?? {};
+    if (content.membership !== "invite") continue;
+    if (content.is_direct === true) return event.sender;
+  }
+  return undefined;
 }
 
 /**
  * The {@link ChannelMessage} for a timeline event, or `undefined` when
  * there is nothing for a chat pipeline to look at: not an `m.room.message`
  * (a reaction, a membership change, an encrypted event this channel can't
- * decrypt), or one with no `msgtype` at all (a redacted message).
+ * decrypt), one with no `msgtype` at all (a redacted message), or an edit of
+ * a message that was already delivered (see below).
  */
 export function toChannelMessage(
   roomId: string,
@@ -148,6 +207,13 @@ export function toChannelMessage(
   if (event.type !== "m.room.message") return undefined;
   const content = event.content as MatrixMessageContent;
   if (!content.msgtype) return undefined;
+  // An edit is a whole new event relating to the original with
+  // `rel_type: "m.replace"`, and its `body` is the `* new text` fallback
+  // clients render for anything that can't display edits. Treating it as a
+  // fresh message means answering the same question twice, the second time
+  // with an asterisk glued to the front, so edits are ignored: the bot
+  // answers what it was asked, once.
+  if (content["m.relates_to"]?.rel_type === "m.replace") return undefined;
 
   return {
     chatId: roomId,

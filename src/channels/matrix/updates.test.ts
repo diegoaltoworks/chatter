@@ -1,7 +1,10 @@
 import { describe, expect, test } from "bun:test";
 import { decideChannelAction } from "../gates";
-import type { MatrixAccountDataEvent, MatrixEvent } from "./api";
+import type { MatrixAccountDataEvent, MatrixEvent, MatrixInvitedRoom } from "./api";
 import {
+  directInviteFrom,
+  directMappingFromEvents,
+  directMappingRooms,
   directRoomIds,
   isReplyToBot,
   MAX_TRACKED_SENT_EVENTS,
@@ -10,6 +13,8 @@ import {
   messageText,
   recordSentEventId,
   toChannelMessage,
+  toDirectMapping,
+  withDirectRoom,
 } from "./updates";
 
 const ME = { userId: "@bot:example.org" };
@@ -149,6 +154,120 @@ describe("directRoomIds", () => {
   });
 });
 
+describe("m.direct mapping", () => {
+  test("toDirectMapping keeps peer -> rooms and drops anything else the account data holds", () => {
+    expect(
+      toDirectMapping({
+        "@alice:example.org": ["!a:example.org"],
+        "@bob:example.org": [],
+        "@carol:example.org": "not-an-array",
+        "@dave:example.org": ["!d:example.org", 7],
+      }),
+    ).toEqual({
+      "@alice:example.org": ["!a:example.org"],
+      "@dave:example.org": ["!d:example.org"],
+    });
+  });
+
+  test("directMappingFromEvents is undefined for a batch that says nothing about m.direct", () => {
+    const events: MatrixAccountDataEvent[] = [{ type: "m.push_rules", content: {} }];
+    expect(directMappingFromEvents(events)).toBeUndefined();
+  });
+
+  test("directMappingFromEvents reads the m.direct document out of the batch", () => {
+    const events: MatrixAccountDataEvent[] = [
+      { type: "m.push_rules", content: {} },
+      { type: "m.direct", content: { "@alice:example.org": ["!a:example.org"] } },
+    ];
+    expect(directMappingFromEvents(events)).toEqual({ "@alice:example.org": ["!a:example.org"] });
+    expect(directMappingRooms(directMappingFromEvents(events) as Record<string, string[]>)).toEqual(
+      new Set(["!a:example.org"]),
+    );
+  });
+
+  test("withDirectRoom appends without mutating the original", () => {
+    const mapping = { "@alice:example.org": ["!a:example.org"] };
+    expect(withDirectRoom(mapping, "@alice:example.org", "!b:example.org")).toEqual({
+      "@alice:example.org": ["!a:example.org", "!b:example.org"],
+    });
+    expect(withDirectRoom(mapping, "@bob:example.org", "!c:example.org")).toEqual({
+      "@alice:example.org": ["!a:example.org"],
+      "@bob:example.org": ["!c:example.org"],
+    });
+    expect(mapping).toEqual({ "@alice:example.org": ["!a:example.org"] });
+  });
+
+  test("withDirectRoom is undefined when the room is already recorded, so nothing is written", () => {
+    expect(
+      withDirectRoom(
+        { "@alice:example.org": ["!a:example.org"] },
+        "@alice:example.org",
+        "!a:example.org",
+      ),
+    ).toBeUndefined();
+  });
+});
+
+describe("directInviteFrom", () => {
+  /** An invite as `/sync` delivers it: stripped state events, no event ids, no timestamps. */
+  function invite(botMemberContent: Record<string, unknown>): MatrixInvitedRoom {
+    return {
+      invite_state: {
+        events: [
+          {
+            type: "m.room.create",
+            state_key: "",
+            sender: "@alice:example.org",
+            content: { creator: "@alice:example.org", room_version: "10" },
+          },
+          {
+            type: "m.room.member",
+            state_key: "@alice:example.org",
+            sender: "@alice:example.org",
+            content: { membership: "join", displayname: "Alice" },
+          },
+          {
+            type: "m.room.member",
+            state_key: "@bot:example.org",
+            sender: "@alice:example.org",
+            content: botMemberContent,
+          },
+        ],
+      },
+    };
+  }
+
+  test("returns the inviter for an is_direct invite addressed to the bot", () => {
+    expect(directInviteFrom(invite({ membership: "invite", is_direct: true }), ME)).toBe(
+      "@alice:example.org",
+    );
+  });
+
+  test("undefined for an ordinary room invite", () => {
+    expect(directInviteFrom(invite({ membership: "invite" }), ME)).toBeUndefined();
+  });
+
+  test("undefined when the is_direct member event is for somebody else", () => {
+    const room: MatrixInvitedRoom = {
+      invite_state: {
+        events: [
+          {
+            type: "m.room.member",
+            state_key: "@other:example.org",
+            sender: "@alice:example.org",
+            content: { membership: "invite", is_direct: true },
+          },
+        ],
+      },
+    };
+    expect(directInviteFrom(room, ME)).toBeUndefined();
+  });
+
+  test("undefined for an invite with no state at all", () => {
+    expect(directInviteFrom({}, ME)).toBeUndefined();
+  });
+});
+
 describe("toChannelMessage", () => {
   test("maps a group message into the channel shape", () => {
     const msg = toChannelMessage(
@@ -226,6 +345,44 @@ describe("toChannelMessage", () => {
         new Set(),
       ),
     ).toBeUndefined();
+  });
+
+  test("an edit (m.replace) maps to nothing, so the original answer is not repeated", () => {
+    expect(
+      toChannelMessage(
+        "!room:example.org",
+        event({
+          event_id: "$edit",
+          content: {
+            msgtype: "m.text",
+            body: "* @Bot what time is it",
+            "m.mentions": { user_ids: ["@bot:example.org"] },
+            "m.new_content": { msgtype: "m.text", body: "@Bot what time is it" },
+            "m.relates_to": { rel_type: "m.replace", event_id: "$1" },
+          },
+        }),
+        ME,
+        new Set(),
+        new Set(),
+      ),
+    ).toBeUndefined();
+  });
+
+  test("a plain reply (no rel_type) is still a message", () => {
+    const msg = toChannelMessage(
+      "!room:example.org",
+      event({
+        content: {
+          msgtype: "m.text",
+          body: "and again?",
+          "m.relates_to": { "m.in_reply_to": { event_id: "$mine" } },
+        },
+      }),
+      ME,
+      new Set(),
+      new Set(["$mine"]),
+    );
+    expect(msg?.isReplyToBot).toBe(true);
   });
 
   test("a redacted message (no msgtype) maps to nothing", () => {
