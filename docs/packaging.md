@@ -154,6 +154,22 @@ merge to main -> CI (the gates, plus the build/runtime/tarball/image jobs)
                 release (which creates the tag)
 ```
 
+The commit actually released is read from the merged PR's own `mergeCommit`,
+not from the tip of `origin/main` after the merge - a human push landing on
+`main` in the gap between the squash-merge and a later `git fetch` would
+otherwise move that tip past the release commit, and the rest of the run
+would check out and publish the wrong tree under the version it just bumped
+to.
+
+Publishing itself uses npm's OIDC trusted publishing rather than a long-lived
+`NPM_TOKEN`: the job already carries `id-token: write`, so `npm publish`
+exchanges that identity for a short-lived credential directly with the
+registry (a recent npm client is installed first, since the exchange needs
+one). This depends on the package's trusted-publisher settings on npmjs.com
+naming this exact repository and `npm-publish.yml` as an authorized
+publisher - done once, out of band, not something this workflow can verify
+about itself.
+
 The publish workflow never pushes to `main` directly - the release PR's merge
 is the only thing that lands a release commit there. That was built so this
 stays compatible with a `required_status_checks` rule on `main-protection`,

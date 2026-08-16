@@ -15,6 +15,13 @@ describe("expectedDocFiles", () => {
   test("empty directory yields no expected files", () => {
     expect(expectedDocFiles([])).toEqual([]);
   });
+
+  test("a recursive listing's subdirectory entries are not mistaken for files", () => {
+    expect(expectedDocFiles(["a.md", "decisions", "decisions/0001-x.md"])).toEqual([
+      "a.md",
+      "decisions/0001-x.md",
+    ]);
+  });
 });
 
 describe("missingDocLinks", () => {
@@ -81,7 +88,10 @@ describe("sectionBody", () => {
 describe("this repo's documentation ToCs", () => {
   const root = join(import.meta.dir, "..");
   const docsDir = join(root, "docs");
-  const docFiles = expectedDocFiles(readdirSync(docsDir));
+  // Recursive: docs/decisions/ and docs/patterns/ hold real guides too, and a
+  // file that only readdirSync's the top level would never see them go
+  // unlinked.
+  const docFiles = expectedDocFiles(readdirSync(docsDir, { recursive: true }) as string[]);
   const readme = readFileSync(join(root, "README.md"), "utf8");
   const docsIndex = readFileSync(join(docsDir, "index.md"), "utf8");
 

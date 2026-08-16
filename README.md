@@ -113,6 +113,14 @@ Complete guides for setup, deployment, and integration - see
 - **[Testing](./docs/testing.md)** - Comprehensive testing guide
 - **[Sprint Review](./docs/sprint-review.md)** - Cross-module & security-invariant audit
 - **[FAQs](./docs/faqs.md)** - Troubleshooting and common questions
+- **Architecture Decisions** - The ADRs behind the shape of the codebase:
+  [0001, brain and sockets split](./docs/decisions/0001-brain-and-sockets-split.md),
+  [0002, no LangChain in core](./docs/decisions/0002-no-langchain-in-core.md),
+  [0003, slot-filling is brain territory](./docs/decisions/0003-slot-filling-is-brain-territory.md)
+- **Patterns** - Worked "how do I add X" guides:
+  [adding a capability](./docs/patterns/adding-a-capability.md),
+  [adding a store](./docs/patterns/adding-a-store.md),
+  [exemplars](./docs/patterns/exemplars.md)
 
 ## Demo
 

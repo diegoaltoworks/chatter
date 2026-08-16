@@ -66,6 +66,57 @@ describe("completionCallViolations", () => {
       completionCallViolations("routes/chat.ts", "doStuff(); // never call completeOnce(x) here"),
     ).toEqual([]);
   });
+
+  test("a call reached through a renamed import is still caught", () => {
+    const contents = [
+      'import { completeOnce as callLLM } from "../core/llm";',
+      "callLLM(args);",
+    ].join("\n");
+
+    const [violation] = completionCallViolations("routes/chat.ts", contents);
+    expect(violation?.line).toBe(2);
+    expect(violation?.reason).toContain("completeOnce");
+    expect(violation?.reason).toContain("callLLM");
+  });
+
+  test("the renamed import line itself is not a call site", () => {
+    const contents = 'import { completeStream as run } from "../core/llm";';
+    expect(completionCallViolations("routes/chat.ts", contents)).toEqual([]);
+  });
+
+  test("a comment merely mentioning an alias-like rename does not register an alias", () => {
+    const contents = ["// never write `completeOnce as run` here", "server.run(1);"].join("\n");
+    expect(completionCallViolations("routes/chat.ts", contents)).toEqual([]);
+  });
+
+  test("a member call on an unrelated object sharing an alias's name is not a violation", () => {
+    const contents = ['import { completeOnce as run } from "../core/llm";', "server.run(1);"].join(
+      "\n",
+    );
+    expect(completionCallViolations("routes/chat.ts", contents)).toEqual([]);
+  });
+
+  test("a multi-line import block still yields its alias", () => {
+    const contents = [
+      "import {",
+      "  completeOnce as run,",
+      '} from "../core/llm";',
+      "run(args);",
+    ].join("\n");
+
+    const [violation] = completionCallViolations("routes/chat.ts", contents);
+    expect(violation?.line).toBe(4);
+  });
+
+  test("a // inside a string literal does not swallow real code later on the line", () => {
+    const contents = 'const url = "https://example.com"; completeOnce(args);';
+    expect(completionCallViolations("routes/chat.ts", contents)).toHaveLength(1);
+  });
+
+  test("a genuine trailing comment after a string literal is still ignored", () => {
+    const contents = 'const url = "https://example.com"; // completeOnce(args) mentioned here only';
+    expect(completionCallViolations("routes/chat.ts", contents)).toEqual([]);
+  });
 });
 
 /** Build artefacts and dependency trees this repo's own code never wrote. */

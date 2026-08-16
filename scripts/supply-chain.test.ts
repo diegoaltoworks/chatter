@@ -273,6 +273,28 @@ describe("missingReleaseVerification", () => {
 
     expect(missingReleaseVerification("npm-publish.yml", contents)).toHaveLength(2);
   });
+
+  test("does not accept a bare mention of the script name that never runs it", () => {
+    const contents = `${GATED_PUBLISH}\n- run: echo "remember to keep test:pack and test:node green"`;
+
+    expect(missingReleaseVerification("npm-publish.yml", contents)).toHaveLength(2);
+  });
+
+  test("does not accept a longer script the target is only a prefix of", () => {
+    const contents = `${GATED_PUBLISH}\n- run: bun run test:pack:extra\n- run: bun run test:node`;
+
+    const violations = missingReleaseVerification("npm-publish.yml", contents);
+    expect(violations).toHaveLength(1);
+    expect(violations[0]?.reason).toContain("tarball");
+  });
+
+  test("accepts the script run via npm instead of bun", () => {
+    const contents = [GATED_PUBLISH, "- run: npm run test:pack", "- run: npm run test:node"].join(
+      "\n",
+    );
+
+    expect(missingReleaseVerification("npm-publish.yml", contents)).toEqual([]);
+  });
 });
 
 describe("auditWorkflow", () => {
@@ -323,6 +345,12 @@ describe("this repo's CI configuration", () => {
     expect(publishers).toEqual(["npm-publish.yml"]);
     expect(missingDependabotGate("npm-publish.yml", read("npm-publish.yml"))).toEqual([]);
     expect(missingReleaseVerification("npm-publish.yml", read("npm-publish.yml"))).toEqual([]);
+  });
+
+  test("the Dockerfile's installs use --frozen-lockfile", () => {
+    expect(unfrozenInstalls("Dockerfile", readFileSync(join(root, "Dockerfile"), "utf8"))).toEqual(
+      [],
+    );
   });
 
   test("the Dockerfile builds on the same bun the gates ran under", () => {

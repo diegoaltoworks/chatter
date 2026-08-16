@@ -17,7 +17,12 @@ way" reference they point back to.
    `answerOnce`/`answerStream`; nothing outside `src/core/answer.ts` calls
    `completeOnce`/`completeStream` directly.** A surface that skips the seam
    silently strands a consumer's `answerFn` - the call still succeeds, it
-   just never reaches the brain hook. See
+   just never reaches the brain hook. This is about chat surfaces
+   specifically: `src/flows/intent.ts` and `src/flows/params.ts` call the
+   OpenAI client directly for flow classification and slot extraction, which
+   never becomes a reply sent to the user, so they are not chat surfaces and
+   are outside this invariant's scope (documented inline at each call site).
+   See
    [decisions/0002-no-langchain-in-core.md](./decisions/0002-no-langchain-in-core.md).
    Enforced: `scripts/architecture-invariants.test.ts`.
 
@@ -49,9 +54,10 @@ way" reference they point back to.
    release without a human dispatching it. Enforced:
    `scripts/supply-chain.test.ts`, `scripts/release-guard.test.ts`.
 
-6. **Every `docs/*.md` file is linked from both README.md's Documentation
-   section and docs/index.md's Quick Navigation section.** A guide nobody can
-   find from either entry point might as well not exist. Enforced:
+6. **Every markdown file under `docs/`, including `decisions/` and
+   `patterns/`, is linked from both README.md's Documentation section and
+   docs/index.md's Quick Navigation section.** A guide nobody can find from
+   either entry point might as well not exist. Enforced:
    `scripts/docs-toc.test.ts`.
 
 7. **An async `customRoutes` mount completes before the server is considered

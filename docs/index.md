@@ -7,9 +7,15 @@ Welcome to the Chatter documentation! This guide will help you set up and deploy
 ### Getting Started
 
 1. **[Architecture](./ARCHITECTURE.md)** - The invariants this codebase depends on, and the test that enforces each one
-   - Also see [docs/patterns/](./patterns/) for worked "how do I add X" guides
-     and [docs/decisions/](./decisions/) for the ADRs behind the shape of the
-     codebase
+   - Also see [docs/patterns/](./patterns/) for worked "how do I add X" guides:
+     [adding a capability](./patterns/adding-a-capability.md),
+     [adding a store](./patterns/adding-a-store.md),
+     [exemplars](./patterns/exemplars.md)
+   - And [docs/decisions/](./decisions/) for the ADRs behind the shape of the
+     codebase:
+     [0001, brain and sockets split](./decisions/0001-brain-and-sockets-split.md),
+     [0002, no LangChain in core](./decisions/0002-no-langchain-in-core.md),
+     [0003, slot-filling is brain territory](./decisions/0003-slot-filling-is-brain-territory.md)
 
 2. **[Requirements](./requirements.md)** - What you need before starting
    - OpenAI API setup

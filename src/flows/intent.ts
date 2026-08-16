@@ -1,5 +1,5 @@
 /**
- * LLM-powered intent detection — classifies a message into a flow id, or the
+ * LLM-powered intent detection - classifies a message into a flow id, or the
  * `chatbot` fallback, using the caller's OpenAI client (never a raw fetch, so
  * the same client tests already fake for chat completions covers this too).
  */
@@ -47,6 +47,12 @@ Rules:
 - If uncertain, always return "chatbot" with low confidence`;
 
   try {
+    // Calls the OpenAI client directly rather than going through
+    // core/answer.ts: this classifies which flow the message matches, it
+    // never becomes a reply sent to the user, so it is not a "chat surface"
+    // and is exempt from the answerFn seam (see docs/ARCHITECTURE.md,
+    // invariant 1). extractParameters in params.ts carries the same
+    // exemption for the same reason.
     const response = await client.chat.completions.create({
       model,
       temperature: 0.1,

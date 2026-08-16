@@ -244,6 +244,22 @@ const RELEASE_VERIFICATION: ReadonlyArray<[script: string, reason: string]> = [
 ];
 
 /**
+ * Does a live line actually run `bun run <script>` (or `npm run <script>`),
+ * rather than merely mentioning the script's name? A bare-name check would
+ * pass on a comment-free mention that never executes anything - an echo, a
+ * step name, a description - which asserts the wrong property: what matters
+ * is that the publish job runs the script, not that its name appears
+ * somewhere in the file. The lookahead after the script name rejects a
+ * longer script it is only a prefix of (`test:pack:extra` must not satisfy a
+ * check for `test:pack` - a trailing `\b` alone matches there too, since `:`
+ * is already a non-word character).
+ */
+function invokesScript(contents: string, script: string): boolean {
+  const escaped = script.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  return hasLiveMatch(contents, new RegExp(`\\b(?:bun|npm)\\s+run\\s+${escaped}(?![:\\w])`));
+}
+
+/**
  * A publishing workflow must verify the artifact itself, not lean on CI having
  * done it. `workflow_dispatch` is a real release path — it is the one used to
  * ship a reviewed dependency bump — and it does not pass through CI at all, so
@@ -251,9 +267,9 @@ const RELEASE_VERIFICATION: ReadonlyArray<[script: string, reason: string]> = [
  * upstream.
  */
 export function missingReleaseVerification(file: string, contents: string): SupplyChainViolation[] {
-  return RELEASE_VERIFICATION.filter(
-    ([script]) => !hasLiveMatch(contents, new RegExp(`\\b${script}\\b`)),
-  ).map(([, reason]) => ({ file, line: 1, reason }));
+  return RELEASE_VERIFICATION.filter(([script]) => !invokesScript(contents, script)).map(
+    ([, reason]) => ({ file, line: 1, reason }),
+  );
 }
 
 /** Every violation in one workflow file, in the order they appear. */
