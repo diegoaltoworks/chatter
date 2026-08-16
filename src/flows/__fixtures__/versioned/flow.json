@@ -1,0 +1,12 @@
+{
+  "id": "versioned",
+  "name": "Versioned",
+  "description": "Declares an explicit contractVersion",
+  "triggerKeywords": ["versioned"],
+  "schema": {
+    "type": "object",
+    "properties": { "x": { "type": "string" } },
+    "required": ["x"]
+  },
+  "contractVersion": 1
+}

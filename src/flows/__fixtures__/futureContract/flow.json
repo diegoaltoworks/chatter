@@ -1,0 +1,12 @@
+{
+  "id": "futureContract",
+  "name": "Future Contract",
+  "description": "Declares a contractVersion newer than this loader understands",
+  "triggerKeywords": ["future"],
+  "schema": {
+    "type": "object",
+    "properties": { "x": { "type": "string" } },
+    "required": ["x"]
+  },
+  "contractVersion": 99
+}

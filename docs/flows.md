@@ -26,6 +26,32 @@ body, no TwiML). Rendering the result for voice, SMS, WhatsApp or a web widget
 is the calling plugin's job, not the engine's. This is what makes the engine
 channel-agnostic: it never assumes how its answer will be delivered.
 
+### Handler-shape divergence with Talker
+
+`@diegoaltoworks/talker` (phone/SMS) keeps its own loader and its own
+`FlowHandler`/`FlowHandlerContext`/`FlowPrefill` types rather than reusing
+this module's, for two reasons:
+
+1. **Zero-parameter flows.** This loader requires `schema.properties` to be
+   non-empty (a flow with no extractable params can never complete, so an
+   empty schema here is almost always a mistake). Talker needs to allow it —
+   a keyword-triggered flow like "hand off to a human" runs with no params at
+   all — so its loader relaxes that one check instead of adopting this one.
+2. **Rendering.** This engine's `FlowHandler` returns
+   `{ success, message, result? }` — a single presentation-free string,
+   deliberately (see above). Talker needs distinct spoken vs. SMS vs.
+   WhatsApp renderings of one outcome, so its handlers return
+   `{ success, say, sms?, whatsapp?, result? }` instead, and its
+   `FlowHandlerContext`/`FlowPrefill` carry `phoneNumber` where this module's
+   carry `sessionKey`.
+
+Talker never routes its flows through this engine's `process()` — it invokes
+handlers directly — and adapts only the read-only fields
+(`definition`/`instructionsPath`/`prefill`) back to this module's types,
+through a narrow structural adapter, where it does need to satisfy this
+module's shape (e.g. handing a loaded flow to code that expects this
+package's `LoadedFlow`).
+
 ## A flow directory
 
 Each flow is a directory of four files:
@@ -33,9 +59,9 @@ Each flow is a directory of four files:
 ```
 flows/
   bookAppointment/
-    flow.json        # id, name, description, triggerKeywords, schema
+    flow.json        # id, name, description, triggerKeywords, schema, contractVersion?
     instructions.md   # prompt fed to parameter extraction
-    handler.ts        # export const execute: FlowHandler
+    handler.ts        # export const execute: FlowHandler (.js/.mjs also probed)
     prefill.ts         # optional: export const prefillFromContext: FlowPrefill
 ```
 
@@ -54,9 +80,22 @@ flows/
       "service": { "type": "string", "description": "Service requested" }
     },
     "required": ["date", "service"]
-  }
+  },
+  "contractVersion": 1
 }
 ```
+
+`flow.json` is validated on load; a malformed field fails with an actionable
+error naming the offending field. `contractVersion` is optional —
+omitted, it defaults to `1`, so every flow written before this field existed
+still loads unchanged — but when present it's checked against
+`CURRENT_FLOW_CONTRACT_VERSION` (exported alongside the other flow types) so a
+directory written for a newer contract than this loader understands fails
+loudly instead of being silently misinterpreted.
+
+`handler.ts` is the default, but the loader also probes `handler.js` and
+`handler.mjs` in that order, so a flow with no build step can ship a plain JS
+handler.
 
 `handler.ts` runs once every required param is collected, and returns the
 structured result — never presentation:
@@ -89,7 +128,8 @@ export const prefillFromContext: FlowPrefill = (sessionKey, context) => {
 
 `id` must match the directory name. `triggerKeywords` and `schema.properties`
 must both be non-empty — a flow with neither can never be reached or ever
-complete. A directory that fails to load is skipped (logged, not fatal) so one
+complete. A directory that fails to load (a validation failure, a missing
+file, an unrecognized `contractVersion`) is skipped (logged, not fatal) so one
 malformed flow does not take the rest down with it. Directories named `lib`,
 `tests` or `registry` are always skipped (reserved for a flows directory's own
 shared code/fixtures) — don't name a flow one of those three.

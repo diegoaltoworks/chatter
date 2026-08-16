@@ -20,6 +20,14 @@ export interface FlowSchema {
   required: string[];
 }
 
+/**
+ * Highest `contractVersion` this loader understands. A flow.json omitting
+ * `contractVersion` is treated as version 1 (every flow written before this
+ * field existed); a flow.json naming a version above this one fails to load
+ * with an actionable error rather than being silently misinterpreted.
+ */
+export const CURRENT_FLOW_CONTRACT_VERSION = 1;
+
 /** Parsed `flow.json`. */
 export interface FlowDefinition {
   id: string;
@@ -27,6 +35,8 @@ export interface FlowDefinition {
   description: string;
   triggerKeywords: string[];
   schema: FlowSchema;
+  /** Defaults to 1 when omitted. See {@link CURRENT_FLOW_CONTRACT_VERSION}. */
+  contractVersion?: number;
 }
 
 /** What a handler is given alongside the collected params. */
