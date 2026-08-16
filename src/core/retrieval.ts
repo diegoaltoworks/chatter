@@ -152,6 +152,25 @@ export class VectorStore implements Retriever {
     const docs = loadKnowledge(this.knowledgeDir);
     this.logger.info(`📚 Loaded ${docs.length} knowledge documents`);
 
+    if (docs.length === 0) {
+      const existing = await this.db.execute("SELECT COUNT(*) as count FROM chunks");
+      const existingCount = Number(existing.rows[0]?.count ?? 0);
+      // Zero documents on a first build (nothing ingested yet) is a normal,
+      // empty knowledge base. Zero documents when chunks already exist means
+      // knowledgeDir resolved to the wrong place (bad cwd, an emptied
+      // folder) - proceeding would read every existing chunk as stale and
+      // delete the whole knowledge base with no error anywhere.
+      if (existingCount > 0) {
+        throw new Error(
+          `Refusing to build: loaded 0 knowledge documents from "${this.knowledgeDir}", ` +
+            `but ${existingCount} chunks already exist. Proceeding would delete all of them ` +
+            "as stale. Check that knowledgeDir resolves to the right path.",
+        );
+      }
+      this.logger.info("✅ No knowledge documents and no existing chunks - nothing to build");
+      return;
+    }
+
     const rows: { id: string; bucket: Bucket; source: string; text: string }[] = [];
     for (const d of docs) {
       for (const part of chunk(d.text)) {
@@ -245,16 +264,23 @@ export class VectorStore implements Retriever {
 
     this.logger.info(`🧹 Cleaning up ${staleIds.length} stale chunks...`);
 
-    // Delete stale chunks in batches (embeddings cascade delete automatically)
+    // Delete stale chunks and their embeddings in batches. There is no FK
+    // cascade between the two tables, so both deletes are needed - leaving
+    // the embeddings delete out orphans rows that outlive their chunk. The
+    // pair runs as one batch() so a chunk is never deleted without its
+    // embedding (or vice versa) if the connection drops mid-cleanup.
     const BATCH_SIZE = 500;
     for (let i = 0; i < staleIds.length; i += BATCH_SIZE) {
       const batch = staleIds.slice(i, i + BATCH_SIZE);
       const placeholders = batch.map(() => "?").join(",");
 
-      await this.db.execute({
-        sql: `DELETE FROM chunks WHERE id IN (${placeholders})`,
-        args: batch,
-      });
+      await this.db.batch(
+        [
+          { sql: `DELETE FROM chunks WHERE id IN (${placeholders})`, args: batch },
+          { sql: `DELETE FROM embeddings WHERE id IN (${placeholders})`, args: batch },
+        ],
+        "write",
+      );
     }
 
     this.logger.info(`✓ Cleaned up ${staleIds.length} stale chunks and their embeddings`);
