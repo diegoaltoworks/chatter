@@ -338,7 +338,7 @@ chat surface: the widget and demo routes (`channel: "widget-public"` /
 `"widget-private"` / `"widget-demo"`), the OpenAI-compatible endpoints
 (`channel: "openai-compat-public"` / `"openai-compat-private"`), the MCP chat
 tools (`channel: "mcp-public"` / `"mcp-private"`), and each channel under its
-own name (`"whatsapp"`, `"telegram"`, or a Telegram bot's configured `name`).
+own name (`"whatsapp"`, `"telegram"`, `"matrix"`, or a channel's configured `name`).
 `sender`/`conversationId` carry the same identifiers `answerFn` sees, where
 the surface has them — the demo and MCP surfaces are anonymous, so neither
 populates `sender`.

@@ -68,6 +68,11 @@
       "import": "./dist/channels/telegram/index.mjs",
       "require": "./dist/channels/telegram/index.js"
     },
+    "./matrix": {
+      "types": "./dist/channels/matrix/index.d.ts",
+      "import": "./dist/channels/matrix/index.mjs",
+      "require": "./dist/channels/matrix/index.js"
+    },
     "./images": {
       "types": "./dist/images/index.d.ts",
       "import": "./dist/images/index.mjs",
@@ -88,7 +93,7 @@
   ],
   "scripts": {
     "dev": "bun --watch src/index.ts",
-    "build": "bun run build:clean && bun run build:types && bun run build:esm && bun run build:cjs && bun run build:server && bun run build:mcp && bun run build:usage && bun run build:history && bun run build:personas && bun run build:channels && bun run build:whatsapp && bun run build:telegram && bun run build:flows && bun run build:images && bun run build:scheduler && bun run build:bin && bun run build:client && bun run build:copy-client",
+    "build": "bun run build:clean && bun run build:types && bun run build:esm && bun run build:cjs && bun run build:server && bun run build:mcp && bun run build:usage && bun run build:history && bun run build:personas && bun run build:channels && bun run build:whatsapp && bun run build:telegram && bun run build:matrix && bun run build:flows && bun run build:images && bun run build:scheduler && bun run build:bin && bun run build:client && bun run build:copy-client",
     "build:clean": "rm -rf dist",
     "build:types": "tsc -p tsconfig.build.json --emitDeclarationOnly --outDir dist",
     "build:esm": "esbuild src/index.ts --bundle --format=esm --outfile=dist/index.mjs --external:@hono/node-server --external:hono --external:openai --external:@libsql/client --external:jose --external:@modelcontextprotocol/sdk --external:zod --platform=node --target=node24",
@@ -101,6 +106,7 @@
     "build:channels": "esbuild src/channels/index.ts --bundle --format=esm --outfile=dist/channels/index.mjs --external:hono --external:openai --external:@libsql/client --platform=node --target=node24 && esbuild src/channels/index.ts --bundle --format=cjs --outfile=dist/channels/index.js --external:hono --external:openai --external:@libsql/client --platform=node --target=node24",
     "build:whatsapp": "esbuild src/channels/whatsapp/index.ts --bundle --format=esm --outfile=dist/channels/whatsapp/index.mjs --external:@libsql/client --external:@whiskeysockets/baileys --platform=node --target=node24 && esbuild src/channels/whatsapp/index.ts --bundle --format=cjs --outfile=dist/channels/whatsapp/index.js --external:@libsql/client --external:@whiskeysockets/baileys --platform=node --target=node24",
     "build:telegram": "esbuild src/channels/telegram/index.ts --bundle --format=esm --outfile=dist/channels/telegram/index.mjs --external:@libsql/client --external:openai --platform=node --target=node24 && esbuild src/channels/telegram/index.ts --bundle --format=cjs --outfile=dist/channels/telegram/index.js --external:@libsql/client --external:openai --platform=node --target=node24",
+    "build:matrix": "esbuild src/channels/matrix/index.ts --bundle --format=esm --outfile=dist/channels/matrix/index.mjs --external:@libsql/client --external:openai --platform=node --target=node24 && esbuild src/channels/matrix/index.ts --bundle --format=cjs --outfile=dist/channels/matrix/index.js --external:@libsql/client --external:openai --platform=node --target=node24",
     "build:flows": "esbuild src/flows/index.ts --bundle --format=esm --outfile=dist/flows/index.mjs --external:@libsql/client --external:openai --platform=node --target=node24 && esbuild src/flows/index.ts --bundle --format=cjs --outfile=dist/flows/index.js --external:@libsql/client --external:openai --platform=node --target=node24",
     "build:images": "esbuild src/images/index.ts --bundle --format=esm --outfile=dist/images/index.mjs --external:@libsql/client --external:openai --platform=node --target=node24 && esbuild src/images/index.ts --bundle --format=cjs --outfile=dist/images/index.js --external:@libsql/client --external:openai --platform=node --target=node24",
     "build:scheduler": "esbuild src/scheduler/index.ts --bundle --format=esm --outfile=dist/scheduler/index.mjs --external:@libsql/client --external:openai --platform=node --target=node24 && esbuild src/scheduler/index.ts --bundle --format=cjs --outfile=dist/scheduler/index.js --external:@libsql/client --external:openai --platform=node --target=node24",

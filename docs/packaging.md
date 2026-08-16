@@ -22,6 +22,7 @@ in a dependency you did not ask for.
 | `./channels` | Channel SPI, reply gates, sender registry, the shared inbound pipeline |
 | `./whatsapp` | The built-in WhatsApp channel |
 | `./telegram` | The built-in Telegram Bot API channel (no peer dependency) |
+| `./matrix` | The built-in Matrix client-server API channel (no peer dependency; unencrypted rooms only) |
 | `./usage` | Daily usage limiter and its Turso store |
 | `./history` | Conversation history store contract and its Turso implementation |
 | `./personas` | Persona resolver, greeter, time context |
