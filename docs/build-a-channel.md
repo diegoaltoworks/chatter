@@ -2,10 +2,16 @@
 
 A **channel** plugs a transport (WhatsApp, Telegram, SMS, ...) into a chatter
 server through the `Channel` SPI (see [Server Setup](./server.md#channels)).
-The built-in [WhatsApp channel](./channels.md) is one implementation; this
-doc is the other half — everything a channel needs from `./channels` to
-answer a message, worked through a second, independent example
-(**Telegram**) so nothing here is WhatsApp-specific by accident.
+The built-in [WhatsApp](./channels.md) and [Telegram](./telegram.md) channels
+are two implementations; this doc is the other half — everything a channel
+needs from `./channels` to answer a message, worked through Telegram so
+nothing here is WhatsApp-specific by accident.
+
+The Telegram walkthrough below is deliberately a *sketch*: it is the shortest
+thing that works, not the shipped channel. The real one lives in
+`src/channels/telegram/` (about 200 lines over four files) and adds what a
+sketch skips — long-poll backoff, message splitting, allowlist logging,
+token redaction. Read this for the SPI, read that for the precedent.
 
 ```ts
 import { createInboundPipeline } from "@diegoaltoworks/chatter/channels";
@@ -266,6 +272,27 @@ WhatsApp channel can (several linked numbers sharing one deployment), reuse
 identity's own traffic is never mistaken for a stranger's by another. A
 single-bot-token channel like the Telegram example above has no such case —
 `fromBot` is a plain equality check against the one bot id it knows about.
+
+## From sketch to shipped channel
+
+`./telegram` is the same shape as the code above, with the parts a real
+deployment needs. If you are building a third transport, these are the
+questions the sketch does not answer for you — each with where the shipped
+channel answers it:
+
+| Concern | Where `./telegram` handles it |
+| --- | --- |
+| A remote API that is down, or rate-limiting | `poll.ts` — exponential backoff, plus Telegram's own `retry_after` |
+| One update whose handling throws | `poll.ts` — offset advances first, so a poison message can't repeat forever |
+| Credentials in error text | `api.ts` — `redactToken` before anything is logged |
+| A transport message-size limit | `api.ts` — `splitTelegramText` at 4096 chars, threading the first chunk only |
+| Shutdown while a request is in flight | `channel.ts` — an `AbortController` cuts the long poll in `stop()` |
+| Sender identity that isn't a phone number | `updates.ts` — a namespaced `tg:<id>` key, never a bare numeral |
+| A non-allowlisted group nobody can see | `channel.ts` — `isBlockedByAllowlist`, logged once per chat |
+
+Its tests (`src/channels/telegram/*.test.ts`) drive the full inbound path
+against a fake Bot API — no network, no token — which is also the pattern to
+copy for your own.
 
 ## What you get for free
 

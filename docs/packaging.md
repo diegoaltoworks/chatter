@@ -21,6 +21,7 @@ in a dependency you did not ask for.
 | `./mcp` | MCP server factory |
 | `./channels` | Channel SPI, reply gates, sender registry, the shared inbound pipeline |
 | `./whatsapp` | The built-in WhatsApp channel |
+| `./telegram` | The built-in Telegram Bot API channel (no peer dependency) |
 | `./usage` | Daily usage limiter and its Turso store |
 | `./history` | Conversation history store contract and its Turso implementation |
 | `./personas` | Persona resolver, greeter, time context |
