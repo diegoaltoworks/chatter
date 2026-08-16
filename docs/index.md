@@ -64,33 +64,38 @@ Welcome to the Chatter documentation! This guide will help you set up and deploy
    - Long-poll loop with backoff, offsets and restart semantics
    - Same group/DM gating policy as the WhatsApp channel
 
-10. **[Flows](./flows.md)** - Multi-turn, schema-driven slot-filling flows
+10. **[Matrix Channel](./matrix.md)** - Run a bot on the client-server API
+   - No dependency at all: JSON over HTTPS via `fetch`
+   - Sync loop with backoff, `since`-token persistence and restart semantics
+   - E2EE unsupported — unencrypted rooms only
+
+11. **[Flows](./flows.md)** - Multi-turn, schema-driven slot-filling flows
     - Directory-loaded flow contract (flow.json/handler.ts/instructions.md)
     - Hybrid keyword + LLM intent matching
     - Multi-instance-safe session state via a Turso-backed store
 
-11. **[Images](./images.md)** - Generate and cache images on demand
+12. **[Images](./images.md)** - Generate and cache images on demand
     - OpenAI edit/generate with caller-composed prompts
     - Cache-before-spend ordering, optional Cloudinary upload
     - Optional caption helper with pool + LLM compose fallback
 
-12. **[Conversation History](./history.md)** - Structural, host-replaceable multi-turn context
+13. **[Conversation History](./history.md)** - Structural, host-replaceable multi-turn context
     - `HistoryStore`: append/load(conversationId, limit)/clear(conversationId)
     - Multi-instance-safe Turso store with bounded per-conversation pruning
     - Privacy controls: retention TTL, `clear` reset, per-sender opt-out
     - Opt-in WhatsApp wiring; single-turn elsewhere until adopted
 
-13. **[Scheduler](./scheduler.md)** - Exactly-once outbound scheduling
+14. **[Scheduler](./scheduler.md)** - Exactly-once outbound scheduling
     - Content-free: candidate entries are always caller-supplied
     - Multi-instance-safe claim via Turso, with a fire-time grace window
     - Pluggable compose step and voice-attempted/text-guaranteed delivery
 
-14. **[Building a Channel](./build-a-channel.md)** - Plug in a new transport
+15. **[Building a Channel](./build-a-channel.md)** - Plug in a new transport
     - What a transport owns vs. what `createInboundPipeline` gives you free
     - A worked example (Telegram) and the shipped channel it became
     - The `intercept` hook, history, and allowlist observability
 
-15. **[Deployment](./deployment.md)** - Deploy to production
+16. **[Deployment](./deployment.md)** - Deploy to production
     - Platform compatibility
     - Docker deployment
     - Google Cloud Run
@@ -99,22 +104,22 @@ Welcome to the Chatter documentation! This guide will help you set up and deploy
     - VPS setup
     - Security best practices
 
-16. **[Packaging](./packaging.md)** - What the published package exposes
+17. **[Packaging](./packaging.md)** - What the published package exposes
     - The subpath contract and what each one gives you
     - Adding a subpath without breaking consumers
     - The packed-tarball check that verifies it before release
     - The release chain, its human gate, and how the toolchain is pinned
 
-17. **[Testing](./testing.md)** - Run and extend the test suite
+18. **[Testing](./testing.md)** - Run and extend the test suite
     - Unit vs. integration tests, and what each needs
     - Faking OpenAI/Turso for tests that must never call a paid API
     - Coverage and watch mode
 
-18. **[Sprint Review](./sprint-review.md)** - Cross-module & security-invariant audit
+19. **[Sprint Review](./sprint-review.md)** - Cross-module & security-invariant audit
     - Confirms cross-module paths are exercised end to end, not just per-module
     - A point-in-time snapshot, not a standing guarantee
 
-19. **[FAQs](./faqs.md)** - Common questions and troubleshooting
+20. **[FAQs](./faqs.md)** - Common questions and troubleshooting
     - General questions
     - Platform compatibility
     - Knowledge base and RAG

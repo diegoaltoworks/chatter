@@ -26,7 +26,7 @@
 - ⚡ **High Performance**: Built on Hono with streaming support
 - 🛡️ **Security First**: Rate limiting, CORS, referrer checking, and input guardrails
 - 💸 **Usage Metering**: Per-caller and global daily caps for paid features, multi-instance safe, via `@diegoaltoworks/chatter/usage` ([guide](./docs/usage.md))
-- 💬 **Channels**: Built-in WhatsApp and Telegram transports plus a Channel SPI for plugging in any other one — allowlist/mute gates, reply rate-limiting, and a shared inbound pipeline every channel reuses ([WhatsApp](./docs/channels.md), [Telegram](./docs/telegram.md), [build your own](./docs/build-a-channel.md))
+- 💬 **Channels**: Built-in WhatsApp, Telegram and Matrix transports plus a Channel SPI for plugging in any other one — allowlist/mute gates, reply rate-limiting, and a shared inbound pipeline every channel reuses ([WhatsApp](./docs/channels.md), [Telegram](./docs/telegram.md), [Matrix](./docs/matrix.md), [build your own](./docs/build-a-channel.md))
 - 🧩 **Flows**: Multi-turn, schema-driven slot-filling for structured conversations, with hybrid keyword + LLM intent matching ([guide](./docs/flows.md))
 - 🖼️ **Images**: On-demand generation and editing with cache-before-spend ordering and optional Cloudinary upload ([guide](./docs/images.md))
 - 🎭 **Personas**: Windowed, per-contact prompt layers and named greetings from a JSON registry ([guide](./docs/personas.md))
@@ -103,6 +103,7 @@ Complete guides for setup, deployment, and integration — see
 - **[WhatsApp Channel](./docs/channels.md)** - Link a WhatsApp number as a transport
 - **[Building a Channel](./docs/build-a-channel.md)** - Plug in a new transport
 - **[Telegram Channel](./docs/telegram.md)** - Run a bot on the official Bot API, no extra dependency
+- **[Matrix Channel](./docs/matrix.md)** - Run a bot on the client-server API, no extra dependency (unencrypted rooms only)
 - **[Flows](./docs/flows.md)** - Multi-turn, schema-driven slot-filling flows
 - **[Images](./docs/images.md)** - Generate and cache images on demand
 - **[Conversation History](./docs/history.md)** - Structural, host-replaceable multi-turn context

@@ -1,11 +1,12 @@
 # Building a Channel
 
-A **channel** plugs a transport (WhatsApp, Telegram, SMS, ...) into a chatter
-server through the `Channel` SPI (see [Server Setup](./server.md#channels)).
-The built-in [WhatsApp](./channels.md) and [Telegram](./telegram.md) channels
-are two implementations; this doc is the other half — everything a channel
-needs from `./channels` to answer a message, worked through Telegram so
-nothing here is WhatsApp-specific by accident.
+A **channel** plugs a transport (WhatsApp, Telegram, Matrix, SMS, ...) into a
+chatter server through the `Channel` SPI (see
+[Server Setup](./server.md#channels)). The built-in
+[WhatsApp](./channels.md), [Telegram](./telegram.md) and [Matrix](./matrix.md)
+channels are three implementations; this doc is the other half — everything a
+channel needs from `./channels` to answer a message, worked through Telegram
+so nothing here is WhatsApp-specific by accident.
 
 The Telegram walkthrough below is deliberately a *sketch*: it is the shortest
 thing that works, not the shipped channel. The real one lives in

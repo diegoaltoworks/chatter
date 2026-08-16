@@ -471,12 +471,14 @@ transports that want it without pulling in the rest of the core package:
 import { createSenderRegistry, decideChannelAction } from '@diegoaltoworks/chatter/channels';
 ```
 
-Two built-in transports dogfood this same SPI: WhatsApp behind `./whatsapp`
+Three built-in transports dogfood this same SPI: WhatsApp behind `./whatsapp`
 (see [WhatsApp Channel](./channels.md) for setup, pairing, and its ToS
-warning) and Telegram behind `./telegram` (see
+warning), Telegram behind `./telegram` (see
 [Telegram Channel](./telegram.md) — official Bot API, no extra dependency,
-configured from a bot token alone). [Building a Channel](./build-a-channel.md)
-is the guide for adding a third.
+configured from a bot token alone), and Matrix behind `./matrix` (see
+[Matrix Channel](./matrix.md) — client-server API, no extra dependency,
+unencrypted rooms only). [Building a Channel](./build-a-channel.md) is the
+guide for adding another.
 
 ### Authentication
 
