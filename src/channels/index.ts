@@ -45,5 +45,13 @@ export interface Channel {
 }
 
 export * from "./gates";
+export {
+  createInboundPipeline,
+  type InboundPipelineConfig,
+  type InboundPipelineDeps,
+  type InboundPipelineOutcome,
+  type InboundReplySender,
+  type InboundTurn,
+} from "./pipeline";
 export type { ChannelSender, ChannelSenderRegistry } from "./senders";
 export { createSenderRegistry } from "./senders";

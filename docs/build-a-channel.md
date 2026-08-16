@@ -1,0 +1,270 @@
+# Building a Channel
+
+A **channel** plugs a transport (WhatsApp, Telegram, SMS, ...) into a chatter
+server through the `Channel` SPI (see [Server Setup](./server.md#channels)).
+The built-in [WhatsApp channel](./channels.md) is one implementation; this
+doc is the other half — everything a channel needs from `./channels` to
+answer a message, worked through a second, independent example
+(**Telegram**) so nothing here is WhatsApp-specific by accident.
+
+```ts
+import { createInboundPipeline } from "@diegoaltoworks/chatter/channels";
+```
+
+## What a transport owns vs. what `./channels` gives you
+
+A transport is responsible for exactly three things:
+
+1. **Turning its own wire format into a `ChannelMessage`.** Every channel
+   resolves the same shape — chat id, sender id, text, whether it's a DM,
+   whether the bot was addressed, whether the bot sent it itself:
+
+   ```ts
+   interface ChannelMessage {
+     chatId: string;
+     senderId: string;
+     text: string;
+     isDirectMessage: boolean;
+     mentionsBot: boolean;
+     isReplyToBot: boolean;
+     fromBot: boolean;
+   }
+   ```
+
+2. **Delivering a reply through an `InboundReplySender`** — two methods, one
+   for the eventual chat answer and one for a mute/unmute acknowledgement.
+   Splitting them lets a transport that supports reply-threading (Telegram's
+   `reply_to_message_id`, WhatsApp's `quoted`) use it only for the answer,
+   while a gate ack stays a plain message:
+
+   ```ts
+   interface InboundReplySender {
+     sendAnswer(chatId: string, text: string): Promise<void>;
+     sendGateReply(chatId: string, text: string): Promise<void>;
+   }
+   ```
+
+3. **Anything transport-specific that has to run before the normal chat
+   turn** — an image request, a slash command, a payment callback — via the
+   pipeline's optional `intercept` hook (below).
+
+Everything else — the allowlist/mute/mention gate, DM/group rate limits,
+persona resolution, retrieval bucket scoping, loading and appending
+conversation history, and the `prepareChat`/`answerOnce` call itself — is
+`createInboundPipeline`. It is the exact code the WhatsApp channel runs
+after it has built a `ChannelMessage`, extracted once so a second channel
+never re-derives it.
+
+Each `handle(msg, turn)` call resolves to an `InboundPipelineOutcome` —
+`{ action: "reply", content }` when an answer was actually delivered, or
+`{ action: "ignore" | "mute" | "unmute" | "rate-limited" | "intercepted" }`
+otherwise (an empty answer from `answerFn` reports `"ignore"`, not
+`"reply"`, since nothing was sent). Nothing in the Telegram example below
+needs it, but it's there for a channel that wants to log outcomes or drive
+a typing indicator only while a reply is actually in flight.
+
+## Wiring it up: a Telegram channel
+
+Telegram's Bot API delivers updates as `{ update_id, message: { chat, from,
+text, entities, reply_to_message } }`, over long polling or a webhook — the
+transport detail chatter doesn't care about. Assume a small `TelegramClient`
+wrapper (`getUpdates`/`sendMessage`, however you fetch it) and build the
+`Channel`:
+
+```ts
+import type { AnswerFn, BucketsFor } from "@diegoaltoworks/chatter";
+import type { Channel, ChannelMessage } from "@diegoaltoworks/chatter/channels";
+import { createInboundPipeline } from "@diegoaltoworks/chatter/channels";
+
+interface TelegramUpdate {
+  message?: {
+    chat: { id: number; type: "private" | "group" | "supergroup" };
+    from: { id: number; username?: string };
+    text?: string;
+    entities?: Array<{ type: string; offset: number; length: number }>;
+    reply_to_message?: { from?: { id: number } };
+  };
+}
+
+export function createTelegramChannel(config: {
+  botToken: string;
+  allowedChats?: string[];
+  answerFn?: AnswerFn;
+  bucketsFor?: BucketsFor;
+  channelHint?: string;
+}): Channel {
+  return {
+    name: "telegram",
+    async start(deps) {
+      const client = new TelegramClient(config.botToken); // your own thin wrapper
+      const me = await client.getMe(); // { id, username }
+
+      // Created ONCE per channel start, not per update: gates, mute state
+      // and rate limiters live in its closure exactly like a hand-rolled
+      // handler's would.
+      const handle = createInboundPipeline(
+        { client: deps.client, store: deps.store, prompts: deps.prompts },
+        {
+          answerFn: config.answerFn ?? deps.config.answerFn,
+          bucketsFor: config.bucketsFor ?? deps.config.bucketsFor,
+          channelHint: config.channelHint ?? "Channel: Telegram.",
+          allowedChats: config.allowedChats,
+          muteRegex: /^\/mute$/i,
+          unmuteRegex: /^\/unmute$/i,
+          muteReply: "Muted. Send /unmute to turn me back on.",
+          unmuteReply: "I'm back.",
+        },
+      );
+
+      const sender = {
+        sendText: (chatId: string, text: string) => client.sendMessage(chatId, text),
+      };
+      deps.senders.register("telegram", sender);
+
+      client.onUpdate(async (update: TelegramUpdate) => {
+        const raw = update.message;
+        if (!raw?.text) return; // photos/stickers/etc. are a future intercept, not a gate change
+
+        const text = raw.text;
+        const chatId = String(raw.chat.id);
+        const mentioned = (raw.entities ?? []).some(
+          (e) => e.type === "mention" && text.slice(e.offset, e.offset + e.length) === `@${me.username}`,
+        );
+
+        const msg: ChannelMessage = {
+          chatId,
+          senderId: String(raw.from.id),
+          text,
+          isDirectMessage: raw.chat.type === "private",
+          mentionsBot: mentioned,
+          isReplyToBot: raw.reply_to_message?.from?.id === me.id,
+          fromBot: raw.from.id === me.id,
+        };
+
+        try {
+          await handle(msg, {
+            reply: {
+              sendAnswer: (id, text) => client.sendMessage(id, text, { replyToLastMessage: true }),
+              sendGateReply: (id, text) => client.sendMessage(id, text),
+            },
+            sender: `tg:${raw.from.id}`,
+            conversationId: chatId,
+          });
+        } catch (error) {
+          console.warn(`Telegram: inbound message handling failed:`, error);
+        }
+      });
+    },
+  };
+}
+```
+
+```ts
+await createServer({ ..., channels: [createTelegramChannel({ botToken: process.env.TG_TOKEN! })] });
+```
+
+Walking through what each piece is doing:
+
+- **One pipeline per channel start, one `handle()` call per message.**
+  `createInboundPipeline`'s gates, mute-state `Set`, and rate limiters are
+  stateful and live in its closure — build it once in `start()`, not inside
+  the update handler.
+- **`ChannelMessage` construction is the transport's whole job.** Telegram
+  has no separate "own mention" stripping step the way WhatsApp does (bot
+  usernames arrive as ordinary `@mention` entities a model can already
+  read), so there's nothing to clean here — a channel with WhatsApp's
+  problem would strip it the same way, before building `msg.text`.
+- **The reply object is built fresh per message** (not stored in config)
+  because the answer needs to thread onto *this* incoming message —
+  `reply_to_message_id`/`quoted` is per-reply state, not per-channel state.
+- **`sender` is per-call, not per-channel**, because it identifies who's
+  talking, not who's listening. Pass a plain string when it's already
+  known; pass a thunk (`() => Promise<string>`) when resolving it takes
+  work (an API call, a lookup) so the pipeline only pays for it once gates
+  and rate limits have already let the message through — exactly what the
+  WhatsApp channel does to resolve a LID identity to a phone number.
+- **Outbound-without-a-transport** (a scheduler, a flow) is a separate
+  concern from inbound: register a plain `ChannelSender` (`sendText`) into
+  `deps.senders` so brain-side features can send by channel name without
+  knowing this is Telegram — see [Server Setup](./server.md#sending-without-a-transport).
+
+## The `intercept` hook
+
+`InboundTurn.intercept` runs after gates and rate-limiting pass, before
+persona/buckets/history/`answerOnce` — for a feature that fully owns the
+reply for the messages it claims (WhatsApp's image-request routing is the
+shipped example: `./channels/whatsapp/images.ts`). Returning `true` stops
+the turn there; `false`/`undefined` falls through to the normal chat
+answer:
+
+```ts
+await handle(msg, {
+  reply,
+  intercept: async (sender) => {
+    if (!isDrawRequest(msg.text)) return false;
+    await generateAndSendImage(msg.chatId, msg.text, sender);
+    return true;
+  },
+});
+```
+
+It receives the resolved `sender` (already awaited if you passed a thunk),
+so an intercepted feature never has to re-resolve identity itself.
+
+## Conversation history
+
+Pass `history: { store, limit? }` (any `HistoryStore` — see
+[history.md](./history.md)) to load prior turns ahead of the new message and
+append both turns after. Off by default, so a new channel starts single-turn
+exactly like WhatsApp did before it opted in:
+
+```ts
+import { createTursoHistoryStore } from "@diegoaltoworks/chatter/history";
+
+const handle = createInboundPipeline(deps, {
+  ...,
+  history: { store: createTursoHistoryStore(deps.db, "telegram_history"), limit: 20 },
+});
+```
+
+History is keyed by `conversationId` (defaulting to `msg.chatId`) — pass an
+explicit one per call if a channel's thread identity differs from its chat
+id.
+
+## Observability: a rejected group is easy to miss
+
+A group chat id isn't guessable in advance, so if you use `allowedChats`,
+log it the same way WhatsApp does — `isBlockedByAllowlist` (also exported
+from `./channels`) is the exact predicate the pipeline uses internally, so
+calling it yourself on the same `ChannelMessage` tells you precisely when
+that's the reason a message was dropped:
+
+```ts
+import { isBlockedByAllowlist } from "@diegoaltoworks/chatter/channels";
+
+if (isBlockedByAllowlist(msg, { allowedChats: config.allowedChats ?? [] })) {
+  console.log(`Telegram: skipped group ${msg.chatId} - not in allowedChats`);
+}
+```
+
+Dedup this yourself if a chatty non-allowlisted group could flood your logs
+— the WhatsApp channel keeps a small `Set` of chat ids it has already
+logged, for exactly that reason.
+
+## Loop guards across multiple bot identities
+
+If your transport can run multiple identities in one process the way the
+WhatsApp channel can (several linked numbers sharing one deployment), reuse
+`SessionIdentityRegistry`/`isEffectivelyFromSelf` from `./channels` so one
+identity's own traffic is never mistaken for a stranger's by another. A
+single-bot-token channel like the Telegram example above has no such case —
+`fromBot` is a plain equality check against the one bot id it knows about.
+
+## What you get for free
+
+Everything routed through `createInboundPipeline` automatically honours a
+configured `answerFn` and `bucketsFor` (the same seams every other chatter
+surface uses — see [integrations.md](./integrations.md)), applies output
+guardrails, and answers through `prepareChat`, so a new channel never
+hand-rolls its own prompt assembly or drifts from the model/config the rest
+of the server uses.

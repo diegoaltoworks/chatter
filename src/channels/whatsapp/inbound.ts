@@ -45,21 +45,18 @@
 
 import type { WAMessage, WASocket } from "@whiskeysockets/baileys";
 import type OpenAI from "openai";
-import { type AnswerFn, answerOnce } from "../../core/answer";
-import { type BucketsFor, resolveBuckets } from "../../core/buckets";
-import { prepareChat } from "../../core/pipeline";
+import type { AnswerFn } from "../../core/answer";
+import type { BucketsFor } from "../../core/buckets";
 import type { PromptLoader } from "../../core/prompts";
 import type { VectorStore } from "../../core/retrieval";
 import type { HistoryStore } from "../../history/types";
 import {
   type ChannelMessage,
-  createSlidingWindowRateLimiter,
-  decideChannelAction,
   isBlockedByAllowlist,
   isEffectivelyFromSelf,
   type SessionIdentityRegistry,
-  underReplyRateLimit,
 } from "../gates";
+import { createInboundPipeline, type InboundReplySender } from "../pipeline";
 import type { WhatsAppMessageEvent } from "./channel";
 import type { WhatsAppImageHandler } from "./images";
 
@@ -290,32 +287,10 @@ export interface WhatsAppInboundConfig {
   now?: () => number;
 }
 
-const DEFAULT_HISTORY_LIMIT = 20;
-
-// Defence in depth, not a spend guard: unthrottled DMs let a single sender
-// (or a loop) hammer the brain at full speed; these are deliberately
-// generous defaults a host is expected to tune.
-const DEFAULT_GROUP_RATE_LIMIT = { max: 30, windowMs: 60 * 60 * 1000 };
-const DEFAULT_DM_RATE_LIMIT = { max: 20, windowMs: 60 * 60 * 1000 };
-
-/** A throwing/rejecting resolver degrades to "no persona" for this turn rather than failing the whole reply. */
-async function resolvePersonaLayer(
-  config: WhatsAppInboundConfig,
-  ctx: { senderPhone: string; text: string },
-): Promise<string | undefined> {
-  if (!config.personaResolver) return undefined;
-  try {
-    return await config.personaResolver(ctx);
-  } catch {
-    return undefined;
-  }
-}
-
-/** Builds the `onMessage` handler for `createWhatsAppChannel` (see `./channel`) — see the module docstring for how to wire `ServerDependencies` into it. */
+/** Builds the `onMessage` handler for `createWhatsAppChannel` (see `./channel`) — see the module docstring for how to wire `ServerDependencies` into it. Everything past turning a raw Baileys message into a `ChannelMessage` runs through `./channels`' `createInboundPipeline`, shared with every other channel. */
 export function createWhatsAppInboundHandler(
   config: WhatsAppInboundConfig,
 ): (event: WhatsAppMessageEvent) => Promise<void> {
-  const mutedChats = new Set<string>();
   // `sessionId:chatId` pairs already logged as blocked by the allowlist — a
   // host only needs to see a rejected group's jid once per session to add
   // it, and a chatty non-allowlisted group re-sending the same rejection
@@ -323,11 +298,37 @@ export function createWhatsAppInboundHandler(
   // linked numbers sharing this handler can each be in the same rejected
   // group, and each session's own log line is what tells its host about it.
   const loggedUnallowedChats = new Set<string>();
-  const now = config.now ?? Date.now;
-  const group = config.groupRateLimit ?? DEFAULT_GROUP_RATE_LIMIT;
-  const dm = config.dmRateLimit ?? DEFAULT_DM_RATE_LIMIT;
-  const underGroupRateLimit = createSlidingWindowRateLimiter(group.max, group.windowMs, now);
-  const underDmRateLimit = createSlidingWindowRateLimiter(dm.max, dm.windowMs, now);
+
+  // Read once, here, rather than off `config` on every message: the
+  // pipeline below closes over its own config snapshot at this same point,
+  // so reading `config.allowedChats`/`personaResolver`/`images` live later
+  // would silently disagree with what the pipeline actually gates on if a
+  // caller mutated `config` after construction.
+  const allowedChats = config.allowedChats ?? [];
+  const personaResolver = config.personaResolver;
+  const images = config.images;
+
+  const pipeline = createInboundPipeline(
+    { client: config.client, store: config.store, prompts: config.prompts },
+    {
+      answerFn: config.answerFn,
+      bucketsFor: config.bucketsFor,
+      model: config.model,
+      channelHint: config.channelHint,
+      personaResolver: personaResolver
+        ? ({ sender, text }) => personaResolver({ senderPhone: sender, text })
+        : undefined,
+      history: config.history,
+      allowedChats,
+      muteRegex: config.muteRegex,
+      unmuteRegex: config.unmuteRegex,
+      muteReply: config.muteReply,
+      unmuteReply: config.unmuteReply,
+      dmRateLimit: config.dmRateLimit,
+      groupRateLimit: config.groupRateLimit,
+      now: config.now,
+    },
+  );
 
   return async function handleWhatsAppMessage(event: WhatsAppMessageEvent): Promise<void> {
     const { sessionId, sock, message } = event;
@@ -377,96 +378,42 @@ export function createWhatsAppInboundHandler(
         fromBot,
       };
 
-      const allowedChats = config.allowedChats ?? [];
-      const action = decideChannelAction(msg, {
-        allowedChats,
-        mutedChats,
-        muteRegex: config.muteRegex,
-        unmuteRegex: config.unmuteRegex,
-      });
-
-      if (action === "mute") {
-        mutedChats.add(chatId);
-        if (config.muteReply) await sock.sendMessage(chatId, { text: config.muteReply });
-        return;
-      }
-      if (action === "unmute") {
-        mutedChats.delete(chatId);
-        if (config.unmuteReply) await sock.sendMessage(chatId, { text: config.unmuteReply });
-        return;
-      }
-      if (action === "ignore" && isBlockedByAllowlist(msg, { allowedChats })) {
+      // Logged independently of the pipeline's own decision-making — a
+      // group jid isn't guessable in advance, and this is the one gate
+      // outcome worth a host seeing without instrumenting every drop.
+      if (isBlockedByAllowlist(msg, { allowedChats })) {
         const dedupKey = `${sessionId}:${chatId}`;
         if (!loggedUnallowedChats.has(dedupKey)) {
           loggedUnallowedChats.add(dedupKey);
           console.log(`WhatsApp[${sessionId}]: skipped group ${chatId} - not in allowedChats`);
         }
       }
-      if (action !== "reply") return;
 
-      if (!underReplyRateLimit(msg, { dm: underDmRateLimit, group: underGroupRateLimit })) {
-        return;
-      }
+      const reply: InboundReplySender = {
+        sendAnswer: async (targetChatId, replyText) => {
+          await sock.sendMessage(targetChatId, { text: replyText }, { quoted: message });
+        },
+        sendGateReply: async (targetChatId, replyText) => {
+          await sock.sendMessage(targetChatId, { text: replyText });
+        },
+      };
 
-      const senderPhone = await senderPhoneFor(sock, message, chatId);
-
-      if (config.images) {
-        const handled = await config.images({
-          sock,
-          message,
-          chatId,
-          senderId: senderPhone,
-          text,
-          hasPhoto: Boolean(message.message?.imageMessage),
-        });
-        if (handled) return;
-      }
-
-      const personaLayer = await resolvePersonaLayer(config, { senderPhone, text });
-      const buckets = await resolveBuckets({
-        mode: "public",
-        sender: senderPhone,
-        bucketsFor: config.bucketsFor,
-      });
-
-      const priorTurns = config.history
-        ? await config.history.store.load(chatId, config.history.limit ?? DEFAULT_HISTORY_LIMIT)
-        : [];
-      const messages = [...priorTurns, { role: "user" as const, content: text }];
-      // Appended right after the load/messages snapshot, not after the reply:
-      // the window between another instance's load for this chat and this
-      // turn landing in the store is as narrow as it can be without a
-      // transactional read-modify-write.
-      await config.history?.store.append(chatId, { role: "user", content: text });
-      const { system } = await prepareChat({
-        store: config.store,
-        prompts: config.prompts,
-        mode: "public",
-        messages,
-        personaLayer,
-        channelHint: config.channelHint,
-        buckets,
-      });
-
-      const { content } = await answerOnce({
-        answerFn: config.answerFn,
-        client: config.client,
-        system,
-        messages,
-        mode: "public",
-        sender: senderPhone,
+      await pipeline(msg, {
+        reply,
         conversationId: chatId,
-        model: config.model,
+        sender: () => senderPhoneFor(sock, message, chatId),
+        intercept: images
+          ? (senderPhone) =>
+              images({
+                sock,
+                message,
+                chatId,
+                senderId: senderPhone,
+                text,
+                hasPhoto: Boolean(message.message?.imageMessage),
+              })
+          : undefined,
       });
-
-      // Recorded as soon as each turn exists, not after delivery: a
-      // sendMessage failure below must not erase the model's answer from
-      // history, and a load/append race with a concurrent message for the
-      // same chat is narrower the sooner the user's own turn lands.
-      if (content) {
-        await config.history?.store.append(chatId, { role: "assistant", content });
-        await sock.sendMessage(chatId, { text: content }, { quoted: message });
-      }
     } catch (error) {
       console.warn(`WhatsApp[${sessionId}]: inbound message handling failed:`, error);
     }
