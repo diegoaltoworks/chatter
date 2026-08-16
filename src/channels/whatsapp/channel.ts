@@ -23,8 +23,8 @@ import { createConsoleLogger, type Logger } from "../../core/logger";
 import { exponentialBackoffMs } from "../backoff";
 import type { Channel } from "../index";
 import type { ChannelSender } from "../senders";
-import type { AuthStateRuntime } from "./authState";
-import { useTursoAuthState } from "./authState";
+import type { AuthStateRuntime, WaAuthKV } from "./authState";
+import { createTursoWaAuthKV, useAuthState } from "./authState";
 import { type Baileys, loadBaileys as defaultLoadBaileys, silentLogger } from "./baileys";
 import {
   createTursoWaLeaseStore,
@@ -75,6 +75,10 @@ export interface WhatsAppChannelConfig {
   waitMs?: number;
   /** Logger for connection/lease lifecycle events. Default: a console logger writing to stderr. */
   logger?: Logger;
+  /** Deploy-overlap lease. Defaults to a `wa_lease` table in `deps.db`; inject your own to run this channel without a libsql database (see docs/patterns/adding-a-store.md). */
+  leaseStore?: WaLeaseStore;
+  /** Baileys auth-state persistence, encrypted above this seam. Defaults to a `wa_auth` table in `deps.db`; inject your own to run this channel without a libsql database. */
+  authStore?: WaAuthKV;
 }
 
 /** A live, leased session: what `stop()` (or losing the lease) must tear down. */
@@ -263,14 +267,17 @@ export function createWhatsAppChannel(config: WhatsAppChannelConfig): Channel {
       // `config.retriever` and no `config.database` would otherwise hit this
       // channel's first db call as a bare `undefined.execute` TypeError deep
       // inside the lease-gated retry loop instead of a clear message here.
-      if (!deps.db) {
+      // Both stores are only actually required when the caller hasn't
+      // injected replacements of their own.
+      if ((!config.leaseStore || !config.authStore) && !deps.db) {
         throw new Error(
           "The WhatsApp channel needs a libsql client for auth state and the session lease: " +
-            "set config.database (config.retriever alone does not open one).",
+            "set config.database (config.retriever alone does not open one), or supply both " +
+            "config.leaseStore and config.authStore.",
         );
       }
-      const db: Client = deps.db;
-      const leaseStore = createTursoWaLeaseStore(db);
+      const leaseStore = config.leaseStore ?? createTursoWaLeaseStore(deps.db as Client);
+      const authStore = config.authStore ?? createTursoWaAuthKV(deps.db as Client);
       senders = deps.senders;
       // Resolve the optional peer dependency eagerly, before returning: a
       // missing package then fails THIS start() call, which `createServer`
@@ -298,8 +305,8 @@ export function createWhatsAppChannel(config: WhatsAppChannelConfig): Channel {
           appStateSyncKeyFromObject: (value) =>
             baileys.proto.Message.AppStateSyncKeyData.fromObject(value),
         };
-        const { state, saveCreds } = await useTursoAuthState(
-          db,
+        const { state, saveCreds } = await useAuthState(
+          authStore,
           config.sessionSecret,
           sessionId,
           runtime,

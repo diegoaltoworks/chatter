@@ -2,10 +2,26 @@ import { describe, expect, test } from "bun:test";
 import { createClient } from "@libsql/client";
 import type { ChannelSenderRegistry } from "../channels/senders";
 import { createScheduler } from "./scheduler";
-import type { ScheduleEntry } from "./types";
+import type { ScheduleClaimStore, ScheduleEntry } from "./types";
 
 function memoryClient() {
   return createClient({ url: ":memory:" });
+}
+
+/** An in-memory `ScheduleClaimStore` — proves `claimStore` fully replaces the Turso-backed default, no `db` calls involved. */
+function fakeClaimStore(): ScheduleClaimStore & { claimed: Map<string, true> } {
+  const claimed = new Map<string, true>();
+  return {
+    claimed,
+    async claim(id) {
+      if (claimed.has(id)) return false;
+      claimed.set(id, true);
+      return true;
+    },
+    async release(id) {
+      claimed.delete(id);
+    },
+  };
 }
 
 function fakeSenders(overrides: Partial<ChannelSenderRegistry> = {}): ChannelSenderRegistry {
@@ -65,6 +81,37 @@ describe("createScheduler", () => {
 
     expect(result.sent).toEqual(["job-1"]);
     expect(sent).toBe(1);
+  });
+
+  test("an injected claimStore replaces the Turso-backed default entirely", async () => {
+    const entries: ScheduleEntry[] = [
+      { id: "job-1", fireAt: Date.now() - 1_000, channel: "whatsapp", chatId: "chat-1" },
+    ];
+    const store = fakeClaimStore();
+    const db = memoryClient();
+    let sent = 0;
+    const scheduler = createScheduler({
+      db,
+      claimStore: store,
+      senders: fakeSenders({
+        sendText: async () => {
+          sent += 1;
+          return true;
+        },
+      }),
+      fetchPending: () => entries,
+    });
+
+    const result = await scheduler.tickOnce();
+
+    expect(result.sent).toEqual(["job-1"]);
+    expect(sent).toBe(1);
+    expect(store.claimed.has("job-1")).toBe(true);
+
+    const tables = await db.execute(
+      "SELECT name FROM sqlite_master WHERE type='table' AND name='chatter_schedule_claims'",
+    );
+    expect(tables.rows).toHaveLength(0);
   });
 
   test("does not deliver entries that are not yet due", async () => {

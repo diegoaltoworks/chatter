@@ -64,6 +64,13 @@ await createServer({ ..., channels: [whatsapp] });
 - **`onMessage`** receives every raw inbound message on every session. A
   throwing or rejecting handler is caught and logged - it never crashes the
   socket's event loop.
+- **`leaseStore`** / **`authStore`** are injectable seams for the deploy lease
+  and the encrypted auth-state persistence (see
+  [Deploy lease](#deploy-lease) and
+  [patterns/adding-a-store.md](./patterns/adding-a-store.md)). Both default to
+  Turso-backed stores against `deps.db`; supplying both lets the channel run
+  without `config.database` at all - `deps.db` is only required when at
+  least one of the two is left unset.
 
 ## Answering messages
 
@@ -448,6 +455,19 @@ const app = await createServer({ ..., channels: [whatsapp] });
 process.on("SIGTERM", async () => {
   await app.stopChannels();
   process.exit(0);
+});
+```
+
+Both the lease and the auth state behind it are injectable. Pass
+`leaseStore` (a `WaLeaseStore`) and/or `authStore` (a `WaAuthKV`, from
+`@diegoaltoworks/chatter/whatsapp`) to run this channel against a backend
+other than the shipped Turso tables:
+
+```ts
+const whatsapp = createWhatsAppChannel({
+  sessionSecret: process.env.WA_SESSION_SECRET as string,
+  leaseStore: myLeaseStore, // implements WaLeaseStore
+  authStore: myAuthStore, // implements WaAuthKV
 });
 ```
 

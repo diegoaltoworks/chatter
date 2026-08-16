@@ -56,11 +56,15 @@ import {
 } from "../src/channels/matrix";
 import type { TelegramChannelConfig, TelegramUpdate } from "../src/channels/telegram";
 import { createTelegramChannel, toChannelMessage } from "../src/channels/telegram";
+import type { WaAuthKV, WaLeaseStore, WhatsAppChannelConfig } from "../src/channels/whatsapp";
+import { createWhatsAppChannel } from "../src/channels/whatsapp";
 import type { FlowHandler, FlowHandlerContext, FlowHandlerResult, LoadedFlow } from "../src/flows";
 import type { HistoryMessage, HistoryStore } from "../src/history";
 import { createHistoryCompactor } from "../src/history";
 import { createPersonaResolver } from "../src/personas";
 import { openaiRoutes } from "../src/routes/openai";
+import type { ScheduleClaimStore, SchedulerConfig } from "../src/scheduler";
+import { createScheduler } from "../src/scheduler";
 import type { ChatterConfig } from "../src/types";
 
 function fakeDeps(): ServerDependencies {
@@ -631,5 +635,41 @@ describe("API surface", () => {
     expect(body.choices[0].message.content).toBe("hi there");
     expect(body.choices[0].message.role).toBe("assistant");
     expect(body.usage?.total_tokens).toBe(2);
+  });
+
+  // The injectable store seams (docs/patterns/adding-a-store.md): a caller
+  // can satisfy each with a plain object literal and never import the
+  // Turso-backed defaults these config fields fall back to.
+  test("SchedulerConfig.claimStore accepts a plain ScheduleClaimStore literal", () => {
+    const claimStore: ScheduleClaimStore = {
+      claim: async () => true,
+      release: async () => {},
+    };
+    const config: Pick<SchedulerConfig, "claimStore" | "db"> = {
+      claimStore,
+      db: {} as SchedulerConfig["db"],
+    };
+    expect(config.claimStore).toBe(claimStore);
+    expect(typeof createScheduler).toBe("function");
+  });
+
+  test("WhatsAppChannelConfig.leaseStore and authStore accept plain object literals", () => {
+    const leaseStore: WaLeaseStore = {
+      tryAcquire: async () => true,
+      release: async () => {},
+    };
+    const authStore: WaAuthKV = {
+      read: async () => null,
+      write: async () => {},
+      remove: async () => {},
+      clear: async () => {},
+    };
+    const config: WhatsAppChannelConfig = {
+      sessionSecret: "test-session-secret-value",
+      leaseStore,
+      authStore,
+    };
+    const channel = createWhatsAppChannel(config);
+    expect(channel.name).toBe("whatsapp");
   });
 });

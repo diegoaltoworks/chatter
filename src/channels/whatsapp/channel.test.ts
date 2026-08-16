@@ -2,7 +2,7 @@ import { describe, expect, mock, test } from "bun:test";
 import { createClient } from "@libsql/client";
 import type { Logger } from "../../core/logger";
 import { createSenderRegistry } from "../senders";
-import { type AuthStateRuntime, useTursoAuthState } from "./authState";
+import { type AuthStateRuntime, useTursoAuthState, type WaAuthKV } from "./authState";
 import {
   acquireSessionLease,
   createWhatsAppChannel,
@@ -12,7 +12,46 @@ import {
   shutdownWaSessions,
   type WaSessionHandle,
 } from "./channel";
-import { createTursoWaLeaseStore } from "./lease";
+import { createTursoWaLeaseStore, type WaLeaseStore } from "./lease";
+
+/** An in-memory `WaAuthKV` for tests that inject `config.authStore`. */
+function fakeAuthKV(): WaAuthKV {
+  const rows = new Map<string, string>();
+  return {
+    async read(id) {
+      return rows.has(id) ? (rows.get(id) as string) : null;
+    },
+    async write(id, value) {
+      rows.set(id, value);
+    },
+    async remove(id) {
+      rows.delete(id);
+    },
+    async clear(sessionId) {
+      const prefix = sessionId === "default" ? undefined : `s:${sessionId}/`;
+      for (const id of [...rows.keys()]) {
+        const isDefaultRow = !id.startsWith("s:");
+        if (prefix ? id.startsWith(prefix) : isDefaultRow) rows.delete(id);
+      }
+    },
+  };
+}
+
+/** An in-memory `WaLeaseStore` for tests that inject `config.leaseStore`. */
+function fakeLeaseStore(): WaLeaseStore {
+  const held = new Map<string, string>();
+  return {
+    async tryAcquire(sessionId, instanceId) {
+      const current = held.get(sessionId);
+      if (current && current !== instanceId) return false;
+      held.set(sessionId, instanceId);
+      return true;
+    },
+    async release(sessionId, instanceId) {
+      if (held.get(sessionId) === instanceId) held.delete(sessionId);
+    },
+  };
+}
 
 describe("createWhatsAppChannel", () => {
   test("throws immediately on a weak sessionSecret, before any connection attempt", () => {
@@ -327,6 +366,61 @@ describe("createWhatsAppChannel", () => {
     (deps as { db: unknown }).db = undefined;
 
     await expect(channel.start(deps)).rejects.toThrow(/needs a libsql client/);
+  });
+
+  test("start() fails fast when only one of leaseStore/authStore is injected and deps.db is absent", async () => {
+    const channel = createWhatsAppChannel({
+      sessionSecret: "test-session-secret-value",
+      loadBaileys: async () => fakeBaileysModule({ registered: true, sockets: [] }),
+      schedule: () => undefined,
+      leaseStore: fakeLeaseStore(),
+    });
+    const { deps } = testDeps();
+    (deps as { db: unknown }).db = undefined;
+
+    await expect(channel.start(deps)).rejects.toThrow(/needs a libsql client/);
+  });
+
+  test("start() succeeds without deps.db when both leaseStore and authStore are injected", async () => {
+    const sockets: FakeSocket[] = [];
+    const channel = createWhatsAppChannel({
+      sessionSecret: "test-session-secret-value",
+      loadBaileys: async () => fakeBaileysModule({ registered: true, sockets }),
+      schedule: () => undefined,
+      leaseStore: fakeLeaseStore(),
+      authStore: fakeAuthKV(),
+    });
+    const { deps, senders } = testDeps();
+    (deps as { db: unknown }).db = undefined;
+
+    await channel.start(deps);
+    await flush();
+    sockets[0]?.ev.emit("connection.update", { connection: "open" });
+
+    expect(sockets).toHaveLength(1);
+    expect(senders.available("whatsapp")).toBe(true);
+  });
+
+  test("an injected authStore persists creds across a reconnect, independent of deps.db", async () => {
+    const authStore = fakeAuthKV();
+    const sockets: FakeSocket[] = [];
+    const channel = createWhatsAppChannel({
+      sessionSecret: "test-session-secret-value",
+      loadBaileys: async () => fakeBaileysModule({ registered: true, sockets }),
+      schedule: () => undefined,
+      leaseStore: fakeLeaseStore(),
+      authStore,
+    });
+    const { deps } = testDeps();
+    (deps as { db: unknown }).db = undefined;
+
+    await channel.start(deps);
+    await flush();
+    sockets[0]?.ev.emit("creds.update", undefined);
+    // Real scrypt-backed encrypt() runs inside saveCreds(); give it real time.
+    await flush(300);
+
+    expect(await authStore.read("creds")).not.toBeNull();
   });
 
   test("an unpaired session never connects and schedules a re-check instead", async () => {

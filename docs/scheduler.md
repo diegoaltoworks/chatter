@@ -69,6 +69,20 @@ before the crashed instance's send actually failed can also duplicate. Don't
 build on a guarantee stronger than "no double-send in the common case,
 at-least-once on an ambiguous failure."
 
+The claim store is injectable - pass `claimStore` to run the scheduler
+against a backend other than the shipped Turso implementation (see
+[patterns/adding-a-store.md](./patterns/adding-a-store.md)); `db` is ignored
+when `claimStore` is set:
+
+```ts
+const scheduler = createScheduler({
+  db: deps.db,
+  claimStore: myClaimStore, // implements ScheduleClaimStore
+  senders: deps.senders,
+  fetchPending: () => myStore.dueWithinLookahead(),
+});
+```
+
 ## Grace window
 
 An entry stops being eligible once its fire time is more than `graceMs` (default
