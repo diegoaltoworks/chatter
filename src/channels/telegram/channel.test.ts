@@ -52,6 +52,8 @@ function fakeApi(batches: TelegramUpdate[][], options: { getMeFails?: boolean } 
     setMessageReaction: async (chatId, messageId, emoji) => {
       reactions.push({ chatId, messageId, emoji });
     },
+    setWebhook: async () => undefined,
+    deleteWebhook: async () => undefined,
   };
 }
 

@@ -192,6 +192,21 @@ export interface TelegramApi {
   sendMessage(chatId: string, text: string, options?: { replyToMessageId?: number }): Promise<void>;
   sendMedia(chatId: string, payload: unknown): Promise<void>;
   setMessageReaction(chatId: string, messageId: number, emoji: string): Promise<void>;
+  /**
+   * Registers `url` as this bot's webhook, switching Telegram from queuing
+   * updates for `getUpdates` to POSTing them there instead. `secretToken`,
+   * when given, is echoed back on every webhook POST as
+   * `X-Telegram-Bot-Api-Secret-Token` — see `./webhook`'s fail-closed check.
+   */
+  setWebhook(url: string, options?: { secretToken?: string }): Promise<void>;
+  /**
+   * Clears the registered webhook so `getUpdates` starts working again: a
+   * registered webhook suppresses long-polling entirely, so switching a bot
+   * from webhook mode back to `createTelegramChannel` needs this called
+   * first — the channel itself never calls it, since it has no way to know
+   * a webhook was ever registered.
+   */
+  deleteWebhook(): Promise<void>;
 }
 
 function errorText(error: unknown): string {
@@ -293,6 +308,17 @@ export function createTelegramApi(config: TelegramApiConfig): TelegramApi {
         message_id: messageId,
         reaction: [{ type: "emoji", emoji }],
       });
+    },
+    async setWebhook(url, options) {
+      await call("setWebhook", {
+        url,
+        // Only what this channel interprets — see the matching comment on getUpdates.
+        allowed_updates: ["message"],
+        ...(options?.secretToken ? { secret_token: options.secretToken } : {}),
+      });
+    },
+    async deleteWebhook() {
+      await call("deleteWebhook");
     },
   };
 }

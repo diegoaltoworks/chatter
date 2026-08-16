@@ -205,6 +205,39 @@ describe("createTelegramApi", () => {
     });
   });
 
+  test("setWebhook posts the url and, when given, the secret token", async () => {
+    const { doFetch, calls } = fakeFetch([{ body: { ok: true, result: true } }]);
+    const api = createTelegramApi({ botToken: "tok", fetch: doFetch });
+
+    await api.setWebhook("https://example.com/webhooks/telegram", { secretToken: "shh" });
+
+    expect(calls[0]?.url).toEndWith("/setWebhook");
+    expect(calls[0]?.body).toEqual({
+      url: "https://example.com/webhooks/telegram",
+      allowed_updates: ["message"],
+      secret_token: "shh",
+    });
+  });
+
+  test("setWebhook omits the secret token when not given", async () => {
+    const { doFetch, calls } = fakeFetch([{ body: { ok: true, result: true } }]);
+    const api = createTelegramApi({ botToken: "tok", fetch: doFetch });
+
+    await api.setWebhook("https://example.com/webhooks/telegram");
+
+    expect(calls[0]?.body).not.toHaveProperty("secret_token");
+  });
+
+  test("deleteWebhook calls the Bot API with no body", async () => {
+    const { doFetch, calls } = fakeFetch([{ body: { ok: true, result: true } }]);
+    const api = createTelegramApi({ botToken: "tok", fetch: doFetch });
+
+    await api.deleteWebhook();
+
+    expect(calls[0]?.url).toEndWith("/deleteWebhook");
+    expect(calls[0]?.body).toEqual({});
+  });
+
   test("a self-hosted base url replaces the default origin", async () => {
     const { doFetch, calls } = fakeFetch([{ body: { ok: true, result: [] } }]);
     const api = createTelegramApi({

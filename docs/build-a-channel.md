@@ -9,9 +9,10 @@ nothing here is WhatsApp-specific by accident.
 
 The Telegram walkthrough below is deliberately a *sketch*: it is the shortest
 thing that works, not the shipped channel. The real one lives in
-`src/channels/telegram/` (about 200 lines over four files) and adds what a
-sketch skips — long-poll backoff, message splitting, allowlist logging,
-token redaction. Read this for the SPI, read that for the precedent.
+`src/channels/telegram/` and adds what a sketch skips — long-poll backoff,
+message splitting, allowlist logging, token redaction, and a second transport
+(a webhook route, alongside the long poll) sharing the same update-handling
+logic. Read this for the SPI, read that for the precedent.
 
 ```ts
 import { createInboundPipeline } from "@diegoaltoworks/chatter/channels";
@@ -303,7 +304,8 @@ channel answers it:
 | A transport message-size limit | `api.ts` — `splitTelegramText` at 4096 chars, threading the first chunk only |
 | Shutdown while a request is in flight | `channel.ts` — an `AbortController` cuts the long poll in `stop()` |
 | Sender identity that isn't a phone number | `updates.ts` — a namespaced `tg:<id>` key, never a bare numeral |
-| A non-allowlisted group nobody can see | `channel.ts` — `isBlockedByAllowlist`, logged once per chat |
+| A non-allowlisted group nobody can see | `handler.ts` — `isBlockedByAllowlist`, logged once per chat |
+| A second way to receive updates, without duplicating the logic above | `handler.ts` — the same update handler feeds both `channel.ts`'s long poll and `webhook.ts`'s `customRoutes` mount |
 
 Its tests (`src/channels/telegram/*.test.ts`) drive the full inbound path
 against a fake Bot API — no network, no token — which is also the pattern to
