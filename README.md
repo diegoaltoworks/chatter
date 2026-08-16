@@ -215,7 +215,8 @@ const server = await createMCPServer({
   // ... other config ...
   toolRateLimit: 30,  // Max 30 requests per minute per tool (optional)
   logging: {
-    console: true,  // JSON logs to stdout (default: true)
+    console: true,   // JSON `mcp_chat` events via the logger, stderr (default: true)
+    content: false,  // also log the conversation itself (default: false)
     onChat: async (event) => {
       // Custom logging - includes conversation tracking and cost data
       console.log('Chat event:', {
@@ -245,6 +246,14 @@ const server = await createMCPServer({
   }
 });
 ```
+
+The default `mcp_chat` console event carries metadata only: tool name,
+conversation id, message and context counts, duration and token cost. Set
+`logging.content: true` plus `logLevel: "debug"` to also get an
+`mcp_chat_content` event with the user message, history, retrieved context and
+answer. `onChat` always receives the full event, since the host decides where
+it lands. Content is scrubbed of credentials wherever it is emitted. See
+[docs/server.md](docs/server.md#logging).
 
 **Claude Desktop Configuration:**
 

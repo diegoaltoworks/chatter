@@ -64,13 +64,28 @@ export interface MCPServerOptions extends ChatterConfig {
   /** Logging and observability */
   logging?: {
     /**
-     * Emit an `mcp_chat` event (via `logger`, at `info`) for every tool call.
-     * Default: true. Still subject to `logLevel`/`logger` — e.g. `logLevel:
-     * "warn"` silences these events the same way it silences startup
-     * banners, even with `console: true`.
+     * Emit an `mcp_chat` event (via `logger`, at `info`) for every tool call:
+     * tool name, conversation id, message/context counts, duration and token
+     * cost, never the conversation itself (see `content`). Default: true.
+     * Still subject to `logLevel`/`logger` - e.g. `logLevel: "warn"` silences
+     * these events the same way it silences startup banners, even with
+     * `console: true`.
      */
     console?: boolean;
-    /** Custom logging callback for external monitoring */
+    /**
+     * Also emit the conversation itself - user message, history, retrieved
+     * context, answer - as an `mcp_chat_content` event. Default: false, so
+     * the default log carries metadata only. Needs `console` left on, and
+     * lands at `debug`, so it also needs `logLevel: "debug"` (or a custom
+     * `logger` that keeps debug) to reach the log. Scrubbed of credentials
+     * first, like every other logged content.
+     */
+    content?: boolean;
+    /**
+     * Custom logging callback for external monitoring. Receives the full
+     * event, conversation content included, scrubbed of credentials. The
+     * host owns where that lands, so `console`/`content` do not gate it.
+     */
     onChat?: MCPLogCallback;
   };
 

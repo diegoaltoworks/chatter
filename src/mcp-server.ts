@@ -74,7 +74,12 @@ export async function createMCPServer(config: MCPServerOptions) {
   const transportMode = config.transport || "stdio";
 
   const rateLimiter = createMcpRateLimiter(config.toolRateLimit);
-  const logger = createLogger(config.logging?.console !== false, config.logging?.onChat, log);
+  const logger = createLogger(
+    config.logging?.console !== false,
+    config.logging?.onChat,
+    log,
+    config.logging?.content === true,
+  );
 
   const publicToolConfig = {
     enabled: config.tools?.public?.enabled !== false,

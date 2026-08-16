@@ -346,6 +346,29 @@ custom implementation owns its own filtering.
 Per-request detail that would otherwise flood the log on every call (auth/session
 key checks, demo session creation) logs at `debug`, which the default logger
 suppresses - set `logLevel: "debug"` or a custom logger to see it.
+
+The MCP server's per-tool-call `mcp_chat` event follows the same split. On by
+default (`logging.console`), it carries metadata only - tool name, conversation
+id, message and context counts, duration, token counts and cost - and never
+what was asked, retrieved or answered:
+
+```typescript
+{
+  logging: {
+    console: true,    // mcp_chat metadata event at info (default: true)
+    content: true,    // plus an mcp_chat_content event at debug (default: false)
+  },
+  logLevel: "debug",  // needed for content to survive the default logger
+}
+```
+
+Conversation content is opt-in twice over: `logging.content` has to be set
+(with `console` left on), and the event lands at `debug`, so a host that
+leaves `logLevel` alone still logs nothing sensitive. The `logging.onChat` callback is unaffected by either
+flag - it always receives the full event, because a host that registers a sink
+has chosen where that data goes. Everything emitted, console event or
+callback, is passed through the same credential scrubbing applied to answers,
+so an API key pasted into a chat never reaches the log verbatim.
 Route factories and channels receive the resolved logger as `deps.logger`.
 Standalone module factories called directly by the host - `createWhatsAppChannel`,
 `createPersonaResolver`, `createScheduler`, `createFlowEngine`, `createWhatsAppInboundHandler`,
