@@ -3,7 +3,7 @@
  *
  * Same contract as Baileys' own `useMultiFileAuthState`, but rows in a
  * key-value store instead of files, AES-GCM encrypted (see `crypto.ts`) so
- * session material — which grants full account access — is never stored
+ * session material - which grants full account access - is never stored
  * readable. The store itself only ever sees ciphertext: encryption lives in
  * this module, above the store, so a custom `WaAuthKV` cannot accidentally
  * persist plaintext session material.
@@ -12,7 +12,7 @@
  * no runtime dependency); the few Baileys runtime values this module needs
  * (`BufferJSON`, `initAuthCreds`, the app-state-sync-key constructor) are
  * passed in by the caller, which already holds them from the dynamic import
- * in `baileys.ts` — see that module for why the import is dynamic.
+ * in `baileys.ts` - see that module for why the import is dynamic.
  */
 
 import type { Client } from "@libsql/client";
@@ -44,15 +44,32 @@ export interface AuthStateRuntime {
 
 /**
  * Raw storage for Baileys auth rows, keyed by an already session-scoped
- * `id` (see `useAuthState`'s `rowId`). Values are opaque ciphertext strings —
+ * `id` (see `useAuthState`'s `rowId`). Values are opaque ciphertext strings -
  * this layer has no encryption knowledge, only persistence.
  */
 export interface WaAuthKV {
   read(id: string): Promise<string | null>;
   write(id: string, value: string): Promise<void>;
   remove(id: string): Promise<void>;
-  /** Deletes every row belonging to `sessionId` — the "default" session's unprefixed rows, or a named session's `s:<sessionId>/` prefix. */
+  /**
+   * Deletes every row belonging to `sessionId` and no other session's -
+   * use {@link isAuthRowForSession} to decide which stored ids qualify
+   * rather than re-deriving the "default" session's unprefixed special case
+   * by hand; getting this wrong logs out a sibling number.
+   */
   clear(sessionId: string): Promise<void>;
+}
+
+/**
+ * Pure: does row id `id` (as stored - already passed through `rowId`) belong
+ * to `sessionId`? Mirrors `useAuthState`'s `rowId` and the SQL in
+ * `createTursoWaAuthKV`'s `clear` - keep the three in sync. The "default"
+ * session's rows are UNPREFIXED (see `useAuthState`), so its scope is
+ * everything *not* claimed by a named session's `s:<sessionId>/` prefix.
+ */
+export function isAuthRowForSession(id: string, sessionId: string): boolean {
+  if (sessionId === "default") return !id.startsWith("s:");
+  return id.startsWith(`s:${sessionId}/`);
 }
 
 const schemaReady = new WeakMap<Client, Promise<unknown>>();
@@ -93,6 +110,7 @@ export function createTursoWaAuthKV(db: Client): WaAuthKV {
       await ensureAuthSchema(db);
       await db.execute({ sql: "DELETE FROM wa_auth WHERE id = ?", args: [id] });
     },
+    // Mirrors isAuthRowForSession - keep the two in sync.
     async clear(sessionId) {
       await ensureAuthSchema(db);
       if (sessionId === "default") {
@@ -109,7 +127,7 @@ export function createTursoWaAuthKV(db: Client): WaAuthKV {
 
 /**
  * Sessions share one `WaAuthKV`, namespaced by row-id prefix. The "default"
- * session uses UNPREFIXED ids — exactly a single-session layout — so an
+ * session uses UNPREFIXED ids - exactly a single-session layout - so an
  * existing default session needs no migration when multi-session support is
  * introduced.
  */
@@ -174,7 +192,7 @@ export async function useAuthState(
       },
     },
     saveCreds: () => write("creds", creds),
-    // Scoped to THIS session — never nuke a sibling number's pairing.
+    // Scoped to THIS session - never nuke a sibling number's pairing.
     clear: () => store.clear(sessionId),
   };
 }

@@ -16,7 +16,7 @@ export const DEFAULT_FALLBACK_MESSAGE = "You have a scheduled message.";
 export interface SchedulerConfig {
   /**
    * The libsql client the default `ScheduleClaimStore` is built against.
-   * Ignored when `claimStore` is supplied — the type stays required for now
+   * Ignored when `claimStore` is supplied - the type stays required for now
    * (narrowing it to reflect that is deferred), so a caller that only wants
    * to inject `claimStore` still has to pass a `Client`, even an unused one.
    */

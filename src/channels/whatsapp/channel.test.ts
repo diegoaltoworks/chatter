@@ -2,7 +2,12 @@ import { describe, expect, mock, test } from "bun:test";
 import { createClient } from "@libsql/client";
 import type { Logger } from "../../core/logger";
 import { createSenderRegistry } from "../senders";
-import { type AuthStateRuntime, useTursoAuthState, type WaAuthKV } from "./authState";
+import {
+  type AuthStateRuntime,
+  isAuthRowForSession,
+  useTursoAuthState,
+  type WaAuthKV,
+} from "./authState";
 import {
   acquireSessionLease,
   createWhatsAppChannel,
@@ -28,10 +33,8 @@ function fakeAuthKV(): WaAuthKV {
       rows.delete(id);
     },
     async clear(sessionId) {
-      const prefix = sessionId === "default" ? undefined : `s:${sessionId}/`;
       for (const id of [...rows.keys()]) {
-        const isDefaultRow = !id.startsWith("s:");
-        if (prefix ? id.startsWith(prefix) : isDefaultRow) rows.delete(id);
+        if (isAuthRowForSession(id, sessionId)) rows.delete(id);
       }
     },
   };
@@ -333,6 +336,16 @@ function flush(ms = 20): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+/** Polls until `predicate` is true, or throws after `timeoutMs` - for asserting on real scrypt-backed async work without betting a fixed delay is long enough. */
+async function waitFor(predicate: () => Promise<boolean>, timeoutMs = 2000): Promise<void> {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    if (await predicate()) return;
+    await flush(10);
+  }
+  throw new Error("waitFor: timed out");
+}
+
 const silentLogger: Logger = { debug() {}, info() {}, warn() {}, error() {} };
 
 function testDeps(db = createClient({ url: ":memory:" })) {
@@ -401,7 +414,7 @@ describe("createWhatsAppChannel", () => {
     expect(senders.available("whatsapp")).toBe(true);
   });
 
-  test("an injected authStore persists creds across a reconnect, independent of deps.db", async () => {
+  test("an injected authStore is written to on creds.update, independent of deps.db", async () => {
     const authStore = fakeAuthKV();
     const sockets: FakeSocket[] = [];
     const channel = createWhatsAppChannel({
@@ -417,8 +430,9 @@ describe("createWhatsAppChannel", () => {
     await channel.start(deps);
     await flush();
     sockets[0]?.ev.emit("creds.update", undefined);
-    // Real scrypt-backed encrypt() runs inside saveCreds(); give it real time.
-    await flush(300);
+    // saveCreds() is fire-and-forget from the "creds.update" handler and runs
+    // real scrypt-backed encrypt(); poll instead of betting on a fixed delay.
+    await waitFor(async () => (await authStore.read("creds")) !== null);
 
     expect(await authStore.read("creds")).not.toBeNull();
   });

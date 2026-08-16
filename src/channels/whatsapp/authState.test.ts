@@ -1,10 +1,16 @@
 import { describe, expect, test } from "bun:test";
 import { createClient } from "@libsql/client";
 import { BufferJSON, initAuthCreds, proto } from "@whiskeysockets/baileys";
-import { type AuthStateRuntime, useAuthState, useTursoAuthState, type WaAuthKV } from "./authState";
+import {
+  type AuthStateRuntime,
+  isAuthRowForSession,
+  useAuthState,
+  useTursoAuthState,
+  type WaAuthKV,
+} from "./authState";
 import { decrypt } from "./crypto";
 
-/** An in-memory `WaAuthKV` — proves `useAuthState` works against any store, not just the Turso default. */
+/** An in-memory `WaAuthKV` - proves `useAuthState` works against any store, not just the Turso default. */
 function fakeAuthKV(): WaAuthKV & { rows: Map<string, string> } {
   const rows = new Map<string, string>();
   return {
@@ -19,10 +25,8 @@ function fakeAuthKV(): WaAuthKV & { rows: Map<string, string> } {
       rows.delete(id);
     },
     async clear(sessionId) {
-      const prefix = sessionId === "default" ? undefined : `s:${sessionId}/`;
       for (const id of [...rows.keys()]) {
-        const isDefaultRow = !id.startsWith("s:");
-        if (prefix ? id.startsWith(prefix) : isDefaultRow) rows.delete(id);
+        if (isAuthRowForSession(id, sessionId)) rows.delete(id);
       }
     },
   };
@@ -182,6 +186,19 @@ describe("useTursoAuthState", () => {
     const reloadedNamed = await useTursoAuthState(db, "secret", "second-number", runtime);
     expect(reloadedDefault.state.creds.registered).toBe(true);
     expect(reloadedNamed.state.creds.registered).toBe(false);
+  });
+});
+
+describe("isAuthRowForSession", () => {
+  test("the default session claims only unprefixed ids", () => {
+    expect(isAuthRowForSession("creds", "default")).toBe(true);
+    expect(isAuthRowForSession("s:second-number/creds", "default")).toBe(false);
+  });
+
+  test("a named session claims only its own prefix", () => {
+    expect(isAuthRowForSession("s:second-number/creds", "second-number")).toBe(true);
+    expect(isAuthRowForSession("creds", "second-number")).toBe(false);
+    expect(isAuthRowForSession("s:third-number/creds", "second-number")).toBe(false);
   });
 });
 

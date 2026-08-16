@@ -8,7 +8,7 @@ function memoryClient() {
   return createClient({ url: ":memory:" });
 }
 
-/** An in-memory `ScheduleClaimStore` — proves `claimStore` fully replaces the Turso-backed default, no `db` calls involved. */
+/** An in-memory `ScheduleClaimStore` - proves `claimStore` fully replaces the Turso-backed default, no `db` calls involved. */
 function fakeClaimStore(): ScheduleClaimStore & { claimed: Map<string, true> } {
   const claimed = new Map<string, true>();
   return {

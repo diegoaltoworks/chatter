@@ -640,17 +640,26 @@ describe("API surface", () => {
   // The injectable store seams (docs/patterns/adding-a-store.md): a caller
   // can satisfy each with a plain object literal and never import the
   // Turso-backed defaults these config fields fall back to.
-  test("SchedulerConfig.claimStore accepts a plain ScheduleClaimStore literal", () => {
+  test("SchedulerConfig.claimStore accepts a plain ScheduleClaimStore literal and construction never touches db", async () => {
     const claimStore: ScheduleClaimStore = {
       claim: async () => true,
       release: async () => {},
     };
-    const config: Pick<SchedulerConfig, "claimStore" | "db"> = {
+    const config: SchedulerConfig = {
       claimStore,
-      db: {} as SchedulerConfig["db"],
+      // A `Client` whose methods throw proves the claim store fully
+      // replaces it - construction (and a tick) must never call `db`.
+      db: {
+        execute: () => {
+          throw new Error("db must not be touched when claimStore is supplied");
+        },
+      } as unknown as SchedulerConfig["db"],
+      senders: createSenderRegistry(),
+      fetchPending: () => [],
     };
-    expect(config.claimStore).toBe(claimStore);
-    expect(typeof createScheduler).toBe("function");
+    const scheduler = createScheduler(config);
+    const result = await scheduler.tickOnce();
+    expect(result.sent).toEqual([]);
   });
 
   test("WhatsAppChannelConfig.leaseStore and authStore accept plain object literals", () => {

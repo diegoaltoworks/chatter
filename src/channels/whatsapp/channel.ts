@@ -1,10 +1,11 @@
 /**
  * WhatsApp web-client transport: a {@link Channel} that runs one Baileys
  * socket per configured session id (one WhatsApp number each), auth state
- * encrypted in the host's own database (`deps.db` — no second connection
- * opened), and a deploy lease so two overlapping instances can never hold the
- * same session's socket at once (WhatsApp treats a second connection as a
- * takeover and logs the first one out).
+ * encrypted above an injectable {@link WaAuthKV} (defaults to a table in the
+ * host's own database, `deps.db` - no second connection opened), and a
+ * deploy lease behind an injectable `WaLeaseStore` so two overlapping
+ * instances can never hold the same session's socket at once (WhatsApp
+ * treats a second connection as a takeover and logs the first one out).
  *
  * Message INTERPRETATION — mention/reply detection, allowlists, loop guards —
  * is deliberately not this module's job; it hands every raw inbound message
@@ -16,7 +17,6 @@
  * this channel as opt-in, never a default.
  */
 
-import type { Client } from "@libsql/client";
 import type { WAMessage, WAMessageKey, WASocket } from "@whiskeysockets/baileys";
 import { assertStrongSecret } from "../../auth/secretStrength";
 import { createConsoleLogger, type Logger } from "../../core/logger";
@@ -276,8 +276,8 @@ export function createWhatsAppChannel(config: WhatsAppChannelConfig): Channel {
             "config.leaseStore and config.authStore.",
         );
       }
-      const leaseStore = config.leaseStore ?? createTursoWaLeaseStore(deps.db as Client);
-      const authStore = config.authStore ?? createTursoWaAuthKV(deps.db as Client);
+      const leaseStore = config.leaseStore ?? createTursoWaLeaseStore(deps.db);
+      const authStore = config.authStore ?? createTursoWaAuthKV(deps.db);
       senders = deps.senders;
       // Resolve the optional peer dependency eagerly, before returning: a
       // missing package then fails THIS start() call, which `createServer`

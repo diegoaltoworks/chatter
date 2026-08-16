@@ -376,10 +376,13 @@ call and no interceptors of its own has no reason to introduce it.
 
 ## Auth state
 
-Session material (which grants full account access) is stored encrypted in
-the same database connection the rest of chatter uses - `deps.db` - under a
-`wa_auth` table, created on first use. No second database connection is
-opened.
+Session material (which grants full account access) is encrypted above an
+injectable `WaAuthKV` (see `authStore` under
+[Configuring the channel](#configuring-the-channel)) - encryption lives in
+`authState.ts`, so a custom store only ever sees ciphertext. By default that
+store is a `wa_auth` table in the same database connection the rest of
+chatter uses (`deps.db`), created on first use; no second database
+connection is opened.
 
 ## Pairing
 
