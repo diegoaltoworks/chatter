@@ -4,109 +4,48 @@
  */
 
 import { afterAll, beforeAll, describe, expect, it } from "bun:test";
-import { mkdirSync, rmSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
 import { ApiKeyManager } from "../../src/auth/apikeys";
 import { createSession } from "../../src/core/session";
 import { createServer } from "../../src/server";
 import type { ChatterConfig } from "../../src/types";
+import {
+  type FakeOpenAI,
+  type IntegrationDirs,
+  installFakeOpenAI,
+  integrationConfig,
+  setupIntegrationDirs,
+} from "./harness";
 
 describe("Public Routes Integration", () => {
-  const testDir = join(import.meta.dir, ".test-public-routes");
-  const knowledgeDir = join(testDir, "knowledge");
-  const promptsDir = join(testDir, "prompts");
-
+  let dirs: IntegrationDirs;
+  let fakeOpenAI: FakeOpenAI;
   let app: Awaited<ReturnType<typeof createServer>>;
   let apiKeyManager: ApiKeyManager;
   let validApiKey: string;
 
   beforeAll(async () => {
-    // Skip if no environment variables (CI/local without setup)
-    if (!process.env.OPENAI_API_KEY || !process.env.TURSO_URL) {
-      console.log("⚠️  Skipping integration tests - missing OPENAI_API_KEY or TURSO_URL");
-      return;
-    }
+    dirs = setupIntegrationDirs("public-routes");
+    fakeOpenAI = installFakeOpenAI({ reply: "Our support hours are 9 AM to 5 PM EST." });
 
-    // Create test directories
-    mkdirSync(knowledgeDir, { recursive: true });
-    mkdirSync(promptsDir, { recursive: true });
-    mkdirSync(join(knowledgeDir, "base"), { recursive: true });
-    mkdirSync(join(knowledgeDir, "public"), { recursive: true });
-
-    // Create test knowledge
-    writeFileSync(
-      join(knowledgeDir, "base", "company.md"),
-      "# Test Company\nWe are a test company that makes widgets.\nOur support hours are 9 AM to 5 PM EST.",
-    );
-
-    writeFileSync(
-      join(knowledgeDir, "public", "pricing.md"),
-      "# Pricing\nOur basic plan is $10/month.\nPro plan is $50/month.",
-    );
-
-    // Create test prompts
-    writeFileSync(
-      join(promptsDir, "base.txt"),
-      "You are {{botName}}, a helpful assistant for {{personName}}.",
-    );
-
-    writeFileSync(join(promptsDir, "public.txt"), "Be friendly and concise.");
-
-    writeFileSync(join(promptsDir, "private.txt"), "Internal mode.");
-
-    // Create API key manager
     apiKeyManager = new ApiKeyManager("test-secret-for-integration-tests");
     validApiKey = await apiKeyManager.create({ name: "integration-test" });
 
-    // Create test server configuration
-    const config: ChatterConfig = {
-      bot: {
-        name: "TestBot",
-        personName: "Test Company",
-        publicUrl: "http://localhost:8181",
-        description: "Integration test bot",
-      },
-      knowledgeDir,
-      promptsDir,
-      openai: {
-        apiKey: process.env.OPENAI_API_KEY ?? "",
-      },
-      database: {
-        url: process.env.TURSO_URL ?? "",
-        authToken: process.env.TURSO_AUTH_TOKEN || "",
-      },
-      auth: {
-        secret: "test-secret-for-integration-tests",
-      },
-      features: {
-        enablePublicChat: true,
-        enablePrivateChat: false,
-        enableDemoRoutes: false,
-      },
-      rateLimit: {
-        public: 100, // High limit for tests
-        private: 100,
-      },
-      server: {
-        cors: true,
-      },
-    };
+    const config: ChatterConfig = integrationConfig(dirs, {
+      auth: { secret: "test-secret-for-integration-tests" },
+      features: { enablePublicChat: true, enablePrivateChat: false, enableDemoRoutes: false },
+      rateLimit: { public: 100, private: 100 },
+    });
 
-    // Create server
     app = await createServer(config);
   });
 
   afterAll(() => {
-    // Clean up test directory
-    try {
-      rmSync(testDir, { recursive: true, force: true });
-    } catch {}
+    fakeOpenAI.restore();
+    dirs.cleanup();
   });
 
   describe("Authentication", () => {
     it("should reject request without API key", async () => {
-      if (!app) return; // Skip if setup failed
-
       const req = new Request("http://localhost:8181/api/public/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -121,8 +60,6 @@ describe("Public Routes Integration", () => {
     });
 
     it("should reject request with invalid API key", async () => {
-      if (!app) return;
-
       const req = new Request("http://localhost:8181/api/public/chat", {
         method: "POST",
         headers: {
@@ -137,8 +74,6 @@ describe("Public Routes Integration", () => {
     });
 
     it("should accept request with valid API key", async () => {
-      if (!app) return;
-
       const req = new Request("http://localhost:8181/api/public/chat", {
         method: "POST",
         headers: {
@@ -151,11 +86,10 @@ describe("Public Routes Integration", () => {
 
       const res = await app.fetch(req);
       expect(res.status).toBe(200);
+      expect((await res.json()).reply).toBe("Our support hours are 9 AM to 5 PM EST.");
     });
 
     it("should accept request with session key", async () => {
-      if (!app) return;
-
       const session = createSession();
 
       const req = new Request("http://localhost:8181/api/public/chat", {
@@ -175,8 +109,6 @@ describe("Public Routes Integration", () => {
 
   describe("Request Validation", () => {
     it("should reject empty request body", async () => {
-      if (!app) return;
-
       const req = new Request("http://localhost:8181/api/public/chat", {
         method: "POST",
         headers: {
@@ -195,8 +127,6 @@ describe("Public Routes Integration", () => {
     });
 
     it("should accept single message format", async () => {
-      if (!app) return;
-
       const req = new Request("http://localhost:8181/api/public/chat", {
         method: "POST",
         headers: {
@@ -211,13 +141,10 @@ describe("Public Routes Integration", () => {
       expect(res.status).toBe(200);
 
       const json = await res.json();
-      expect(json.reply).toBeDefined();
-      expect(typeof json.reply).toBe("string");
+      expect(json.reply).toBe("Our support hours are 9 AM to 5 PM EST.");
     });
 
     it("should accept messages array format", async () => {
-      if (!app) return;
-
       const req = new Request("http://localhost:8181/api/public/chat", {
         method: "POST",
         headers: {
@@ -242,8 +169,6 @@ describe("Public Routes Integration", () => {
     });
 
     it("should reject empty messages array", async () => {
-      if (!app) return;
-
       const req = new Request("http://localhost:8181/api/public/chat", {
         method: "POST",
         headers: {
@@ -261,8 +186,6 @@ describe("Public Routes Integration", () => {
 
   describe("CORS", () => {
     it("should set CORS headers", async () => {
-      if (!app) return;
-
       const req = new Request("http://localhost:8181/api/public/chat", {
         method: "POST",
         headers: {
@@ -278,8 +201,6 @@ describe("Public Routes Integration", () => {
     });
 
     it("should handle OPTIONS preflight request", async () => {
-      if (!app) return;
-
       const req = new Request("http://localhost:8181/api/public/chat", {
         method: "OPTIONS",
       });
@@ -292,9 +213,7 @@ describe("Public Routes Integration", () => {
   });
 
   describe("RAG Integration", () => {
-    it("should use knowledge base to answer questions", async () => {
-      if (!app) return;
-
+    it("should query the knowledge base and pass retrieved context to the model", async () => {
       const req = new Request("http://localhost:8181/api/public/chat", {
         method: "POST",
         headers: {
@@ -309,15 +228,21 @@ describe("Public Routes Integration", () => {
       expect(res.status).toBe(200);
 
       const json = await res.json();
-      // Response should reference knowledge base content
-      expect(json.reply).toBeDefined();
-      expect(typeof json.reply).toBe("string");
-      expect(json.reply.length).toBeGreaterThan(0);
+      expect(json.reply).toBe("Our support hours are 9 AM to 5 PM EST.");
+
+      // Find the embeddings call carrying THIS turn's question text - not
+      // just any embeddings call, which would also match server-boot chunk
+      // embedding and pass even if retrieval never ran for this request.
+      const embedded = fakeOpenAI.calls.find(
+        (c) =>
+          c.path === "/v1/embeddings" &&
+          Array.isArray(c.body?.input) &&
+          (c.body.input as string[]).includes("What are your support hours?"),
+      );
+      expect(embedded).toBeDefined();
     });
 
     it("should access public and base knowledge", async () => {
-      if (!app) return;
-
       const req = new Request("http://localhost:8181/api/public/chat", {
         method: "POST",
         headers: {
@@ -333,14 +258,11 @@ describe("Public Routes Integration", () => {
 
       const json = await res.json();
       expect(json.reply).toBeDefined();
-      // Should be able to reference pricing from public knowledge
     });
   });
 
   describe("Health and Config Endpoints", () => {
     it("should respond to health check", async () => {
-      if (!app) return;
-
       const req = new Request("http://localhost:8181/healthz");
       const res = await app.fetch(req);
 
@@ -350,8 +272,6 @@ describe("Public Routes Integration", () => {
     });
 
     it("should return public config", async () => {
-      if (!app) return;
-
       const req = new Request("http://localhost:8181/config");
       const res = await app.fetch(req);
 

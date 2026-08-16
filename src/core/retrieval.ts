@@ -103,20 +103,25 @@ export class VectorStore {
     // Cleanup: remove chunks that no longer exist in markdown files
     await this.cleanupStaleChunks(rows.map((r) => r.id));
 
-    // Upsert chunks
-    const tx = await this.db.transaction("write");
-    try {
-      for (const r of rows) {
-        await tx.execute({
+    // Upsert chunks. `batch()`, not `transaction()`: an explicit
+    // transaction() hands the driver's pooled connection to the returned
+    // handle and lazily opens a new one for the client's next call — for a
+    // remote Turso database that reconnects to the same data, but for a
+    // local/`:memory:` database (docs/tests) it silently opens a second,
+    // empty database, and every read after this point 404s on its own
+    // tables. `batch()` runs its statements atomically without giving up
+    // the connection.
+    const UPSERT_BATCH = 500;
+    for (let i = 0; i < rows.length; i += UPSERT_BATCH) {
+      const batch = rows.slice(i, i + UPSERT_BATCH);
+      await this.db.batch(
+        batch.map((r) => ({
           sql: `INSERT INTO chunks(id,bucket,source,text) VALUES(?,?,?,?)
                 ON CONFLICT(id) DO NOTHING`,
           args: [r.id, r.bucket, r.source, r.text],
-        });
-      }
-      await tx.commit();
-    } catch (e) {
-      await tx.rollback();
-      throw e;
+        })),
+        "write",
+      );
     }
 
     // Find which embeddings are missing
@@ -148,20 +153,15 @@ export class VectorStore {
       const batchIds = missing.slice(i, i + BATCH);
       const inputs = batchIds.map((id) => textById.get(id) || "");
       const emb = await this.client.embeddings.create({ model: EMB_MODEL, input: inputs });
-      const tx2 = await this.db.transaction("write");
-      try {
-        emb.data.forEach((d, idx) => {
-          const id = batchIds[idx];
-          tx2.execute({
-            sql: "INSERT INTO embeddings(id,model,embedding) VALUES(?,?,?)",
-            args: [id, EMB_MODEL, JSON.stringify(d.embedding)],
-          });
-        });
-        await tx2.commit();
-      } catch (e) {
-        await tx2.rollback();
-        throw e;
-      }
+      // See the chunks upsert above: batch(), not transaction(), to keep
+      // the connection alive for whatever reads this store does next.
+      await this.db.batch(
+        emb.data.map((d, idx) => ({
+          sql: "INSERT INTO embeddings(id,model,embedding) VALUES(?,?,?)",
+          args: [batchIds[idx], EMB_MODEL, JSON.stringify(d.embedding)],
+        })),
+        "write",
+      );
     }
 
     console.log(`✅ Successfully embedded ${missing.length} new chunks`);
