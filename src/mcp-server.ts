@@ -179,6 +179,9 @@ export async function createMCPServer(config: MCPServerOptions) {
           mode: "public",
           messages: conversationMessages,
           buckets,
+          rewriteQuery: config.rewriteQuery,
+          rerankContext: config.rerankContext,
+          logger: log,
         });
 
         // Generate response
@@ -293,6 +296,9 @@ export async function createMCPServer(config: MCPServerOptions) {
           mode: "private",
           messages: conversationMessages,
           buckets,
+          rewriteQuery: config.rewriteQuery,
+          rerankContext: config.rerankContext,
+          logger: log,
         });
 
         // Generate response

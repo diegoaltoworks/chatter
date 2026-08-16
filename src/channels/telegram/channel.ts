@@ -21,6 +21,7 @@
 import type { AnswerFn, TransformReply } from "../../core/answer";
 import type { BucketsFor } from "../../core/buckets";
 import { createConsoleLogger, type Logger } from "../../core/logger";
+import type { RerankContext, RewriteQuery } from "../../core/pipeline";
 import type { HistoryStore } from "../../history/types";
 import { isBlockedByAllowlist } from "../gates";
 import type { Channel } from "../index";
@@ -42,6 +43,10 @@ export interface TelegramChannelConfig {
   allowedChats?: string[];
   answerFn?: AnswerFn;
   bucketsFor?: BucketsFor;
+  /** Rewrites the retrieval query before it reaches the vector store — see `ChatterConfig.rewriteQuery`. Falls back to the server's own. */
+  rewriteQuery?: RewriteQuery;
+  /** Post-processes retrieved chunks before they're folded into the prompt — see `ChatterConfig.rerankContext`. Falls back to the server's own. */
+  rerankContext?: RerankContext;
   /** Modifies or vetoes the produced reply before delivery — see `ChatterConfig.transformReply`. Falls back to the server's own. */
   transformReply?: TransformReply;
   model?: string;
@@ -140,6 +145,8 @@ export function createTelegramChannel(config: TelegramChannelConfig): Channel {
           channel: channelName,
           answerFn: config.answerFn ?? deps.config.answerFn,
           bucketsFor: config.bucketsFor ?? deps.config.bucketsFor,
+          rewriteQuery: config.rewriteQuery ?? deps.config.rewriteQuery,
+          rerankContext: config.rerankContext ?? deps.config.rerankContext,
           transformReply: config.transformReply ?? deps.config.transformReply,
           model: config.model,
           channelHint: config.channelHint ?? "Channel: Telegram.",

@@ -854,6 +854,73 @@ describe("createWhatsAppInboundHandler", () => {
     expect(capturedInput?.conversationId).toBe("447700900123@s.whatsapp.net");
   });
 
+  test("rewriteQuery reshapes the retrieval query and sees the resolved sender", async () => {
+    const queries: string[] = [];
+    const store = {
+      query: async (q: string) => {
+        queries.push(q);
+        return ["context"];
+      },
+    } as unknown as VectorStore;
+    const seen: unknown[] = [];
+
+    const { handler, sock } = createHarness({
+      store,
+      rewriteQuery: (ctx) => {
+        seen.push(ctx);
+        return `expanded: ${ctx.query}`;
+      },
+    });
+
+    await handler(waEvent(sock));
+
+    expect(queries).toEqual(["expanded: hello there"]);
+    expect(seen).toEqual([{ query: "hello there", mode: "public", sender: "+447700900123" }]);
+  });
+
+  test("rerankContext reorders the chunks folded into the assembled system prompt", async () => {
+    const store = { query: async () => ["first", "second"] } as unknown as VectorStore;
+    let capturedSystem = "";
+
+    const { handler, sock } = createHarness({
+      store,
+      rerankContext: async ({ chunks }) => [...chunks].reverse(),
+      answerFn: async (input) => {
+        capturedSystem = input.system;
+        return "ok";
+      },
+    });
+
+    await handler(waEvent(sock));
+
+    expect(capturedSystem).toContain("second\n\nfirst");
+  });
+
+  test("a throwing rewriteQuery is logged and retrieval falls back to the unmodified query", async () => {
+    const queries: string[] = [];
+    const store = {
+      query: async (q: string) => {
+        queries.push(q);
+        return ["context"];
+      },
+    } as unknown as VectorStore;
+    const { logger, allCalls } = fakeLogger();
+
+    const { handler, sock, answerCalls } = createHarness({
+      store,
+      logger,
+      rewriteQuery: () => {
+        throw new Error("boom");
+      },
+    });
+
+    await handler(waEvent(sock));
+
+    expect(queries).toEqual(["hello there"]);
+    expect(answerCalls).toHaveLength(1);
+    expect(allCalls.some((args) => String(args[0]).includes("rewriteQuery"))).toBe(true);
+  });
+
   test("a personaResolver's output feeds prepareChat's personaLayer", async () => {
     let capturedSystem = "";
     const { handler, sock } = createHarness({

@@ -358,4 +358,95 @@ describe("createTelegramChannel", () => {
     expect(api.sent).toEqual([{ chatId: "-4242", text: "the answer", replyToMessageId: 55 }]);
     expect(logger.lines.some((line) => line.includes("transformReply"))).toBe(true);
   });
+
+  test("a channel-level rewriteQuery reaches retrieval and overrides the server's own", async () => {
+    const queries: string[] = [];
+    const api = fakeApi([[{ update_id: 1, message: message() }]]);
+    const logger = silentLogger();
+    const deps = fakeDeps(logger, {
+      rewriteQuery: () => "server rewrite",
+    });
+    deps.store = {
+      query: async (q: string) => {
+        queries.push(q);
+        return ["context"];
+      },
+    } as unknown as ServerDependencies["store"];
+
+    const channel = createTelegramChannel({
+      botToken: "t",
+      api,
+      sleep: async () => undefined,
+      logger,
+      rewriteQuery: () => "channel rewrite",
+    });
+    await channel.start(deps);
+    await settle();
+    await channel.stop?.();
+
+    expect(queries).toEqual(["channel rewrite"]);
+  });
+
+  test("the server's rewriteQuery/rerankContext are used when the channel sets neither", async () => {
+    const queries: string[] = [];
+    const rerankSeen: unknown[] = [];
+    const api = fakeApi([[{ update_id: 1, message: message() }]]);
+    const logger = silentLogger();
+    const deps = fakeDeps(logger, {
+      rewriteQuery: (ctx) => `server: ${ctx.query}`,
+      rerankContext: (ctx) => {
+        rerankSeen.push(ctx);
+        return [...ctx.chunks].reverse();
+      },
+    });
+    deps.store = {
+      query: async (q: string) => {
+        queries.push(q);
+        return ["first", "second"];
+      },
+    } as unknown as ServerDependencies["store"];
+
+    const channel = createTelegramChannel({
+      botToken: "t",
+      api,
+      sleep: async () => undefined,
+      logger,
+    });
+    await channel.start(deps);
+    await settle();
+    await channel.stop?.();
+
+    expect(queries).toEqual(["server: @MyBot hello"]);
+    expect(rerankSeen).toEqual([{ query: "server: @MyBot hello", chunks: ["first", "second"] }]);
+  });
+
+  test("a throwing rewriteQuery is logged and the poll loop keeps answering with the unmodified query", async () => {
+    const queries: string[] = [];
+    const api = fakeApi([[{ update_id: 1, message: message() }]]);
+    const logger = silentLogger();
+    const deps = fakeDeps(logger);
+    deps.store = {
+      query: async (q: string) => {
+        queries.push(q);
+        return ["context"];
+      },
+    } as unknown as ServerDependencies["store"];
+
+    const channel = createTelegramChannel({
+      botToken: "t",
+      api,
+      sleep: async () => undefined,
+      logger,
+      rewriteQuery: () => {
+        throw new Error("boom");
+      },
+    });
+    await channel.start(deps);
+    await settle();
+    await channel.stop?.();
+
+    expect(queries).toEqual(["@MyBot hello"]);
+    expect(api.sent).toEqual([{ chatId: "-4242", text: "the answer", replyToMessageId: 55 }]);
+    expect(logger.lines.some((line) => line.includes("rewriteQuery"))).toBe(true);
+  });
 });

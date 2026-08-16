@@ -20,7 +20,13 @@ import { answerOnce, applyTransformReply } from "../core/answer";
 import type { BucketsFor } from "../core/buckets";
 import { resolveBuckets } from "../core/buckets";
 import type { Logger } from "../core/logger";
-import { type PipelineMessage, type PipelineMode, prepareChat } from "../core/pipeline";
+import {
+  type PipelineMessage,
+  type PipelineMode,
+  prepareChat,
+  type RerankContext,
+  type RewriteQuery,
+} from "../core/pipeline";
 import type { PromptLoader } from "../core/prompts";
 import type { VectorStore } from "../core/retrieval";
 import type { HistoryStore } from "../history/types";
@@ -53,6 +59,10 @@ export interface InboundPipelineConfig {
   channel?: string;
   answerFn?: AnswerFn;
   bucketsFor?: BucketsFor;
+  /** Rewrites the retrieval query before it reaches the vector store — see `ChatterConfig.rewriteQuery`. */
+  rewriteQuery?: RewriteQuery;
+  /** Post-processes retrieved chunks before they're folded into the prompt — see `ChatterConfig.rerankContext`. */
+  rerankContext?: RerankContext;
   /** Modifies or vetoes the produced reply before delivery — see `ChatterConfig.transformReply`. */
   transformReply?: TransformReply;
   model?: string;
@@ -216,6 +226,10 @@ export function createInboundPipeline(
       personaLayer,
       channelHint: config.channelHint,
       buckets,
+      sender,
+      rewriteQuery: config.rewriteQuery,
+      rerankContext: config.rerankContext,
+      logger: config.logger,
     });
 
     const { content: produced } = await answerOnce({
