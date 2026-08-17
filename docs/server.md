@@ -633,6 +633,22 @@ knowledge/
 - Only changed files are re-embedded
 - No need to rebuild entire database on updates
 
+**Concurrent builds are serialised.** A build ends by deleting every chunk the
+current `knowledgeDir` did not produce, so two instances booting against one
+database at the same time (a rolling deploy, a manual deploy racing an
+automated one) could each delete the chunks the other had just written.
+`build()` therefore holds a single-writer lock row in the same database for
+the whole ingest. An instance that cannot take the lock logs a warning, skips
+its own build, and serves what the holder writes - it never deletes anything.
+The lock is heartbeated while the build runs and ages out after 10 minutes of
+silence, so a crashed instance frees it for the next boot instead of wedging
+every later one.
+
+Both knobs are optional `VectorStore` options: `buildLock` accepts any
+implementation of the `BuildLock` interface (default: `createTursoBuildLock`
+against the store's own client), and `instanceId` names this process in the
+lock row (default: a random id per store).
+
 ### System Prompts
 
 Create a `prompts/` directory with text files:

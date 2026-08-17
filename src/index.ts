@@ -42,6 +42,14 @@ export { answerOnce, answerStream, applyTransformReply } from "./core/answer";
 export type { BucketsFor, BucketsForContext } from "./core/buckets";
 // Retrieval bucket seam (role-gated knowledge, with the anonymous ceiling)
 export { defaultBuckets, resolveBuckets } from "./core/buckets";
+export type { BuildLock, BuildLockRow } from "./core/buildLock";
+// Single-writer lock keeping concurrent knowledge-base builds from racing
+export {
+  BUILD_LOCK_KEY,
+  BUILD_LOCK_STALE_MS,
+  canAcquireBuildLock,
+  createTursoBuildLock,
+} from "./core/buildLock";
 export { detectLeakage, guardOutput, scrubOutput } from "./core/guardrails";
 export { completeOnce, completeStream, DEFAULT_MODEL } from "./core/llm";
 export { loadKnowledge } from "./core/loaders";

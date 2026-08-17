@@ -28,7 +28,11 @@ interface Retriever {
   startup, before anything queries the store, if it's present. Implement it
   for a one-time ingest/embed step (what `VectorStore.build()` does);
   omit it for a retriever backed by an index another process already keeps
-  current.
+  current. Every instance boots, so `build` runs once per instance against
+  one shared backend: if yours prunes or overwrites anything, guard the
+  destructive part with a single-writer lock the way `VectorStore` does (see
+  `src/core/buildLock.ts`), or a rolling deploy will have two builds deleting
+  each other's writes.
 
 ## Wiring it in
 
