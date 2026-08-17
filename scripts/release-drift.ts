@@ -7,8 +7,8 @@
  * workflow. On 2026-08-16 that assumption broke. GitHub stopped creating
  * workflow runs for this repository for roughly seventeen hours (no `push`
  * runs, no `pull_request` runs, no check suite at all on the merge commits),
- * so eleven merges landed on `main` with nothing to gate them and nothing to
- * publish them. Nothing failed, because nothing ran. The registry stayed on
+ * so fourteen merges landed on `main` with nothing to gate them and nothing
+ * to publish them. Nothing failed, because nothing ran. The registry stayed on
  * the previous day's version while `main` carried a knowledge-base data-loss
  * fix that production never received.
  *
