@@ -224,6 +224,41 @@ every run after that refuses to open a second, competing release PR - loudly
 hide a wedged release train behind an ordinary-looking Actions log. Closing or
 fixing the stuck PR by hand is what unsticks it.
 
+### When the chain never starts
+
+Every guard above assumes the chain ran and something in it said no. On
+2026-08-16 the chain did not run at all: between 09:41Z and roughly 03:00Z the
+next day, GitHub created no workflow run for this repository on any event
+trigger. Not push, not pull_request - the merge commits from that window carry
+no `github-actions` check suite whatsoever, only the third-party ones. Eleven
+PRs merged to `main` with no CI, and nothing published; the registry stayed on
+the previous day's version while `main` carried a fix for a knowledge-base
+wipe. Nothing went red, because nothing ran. Scheduled runs came back first, and the next push after
+that triggered CI normally, so this was event delivery on GitHub's side rather
+than anything in these files: no workflow was disabled, nothing about the
+repository changed, and neither trigger needed fixing.
+
+Two things came out of it:
+
+- `.github/workflows/release-watchdog.yml` runs `scripts/release-drift.ts` on
+  a schedule, which is the only trigger that still fires when event delivery
+  is the broken part. It compares the newest `v*` tag against npm's `latest`
+  and looks for human-authored commits sitting unreleased on `main` past a
+  grace period, then opens (and later closes) a single "Release train stalled"
+  issue and fails its own run, since a failing scheduled workflow emails the
+  repository owner and an issue on its own does not. Dependabot-authored
+  commits are exempt, because waiting is what the human gate above asks of
+  them.
+- The run-cleanup workflow used to keep only the newest run of the last 100,
+  weekly. Answering "did a push-event CI run ever exist for this merge?"
+  needed exactly the history it deletes, so retention is now by age (30 days)
+  rather than by count.
+
+Recovering from a stall of either kind is the same move as clearing the human
+gate: run **Publish to NPM** from the Actions tab. `workflow_dispatch` does
+not depend on the push trigger, and the release it cuts moves the tag past
+everything stranded behind it.
+
 Nobody types a version number: the release job derives the next version from
 the highest `v*` tag and opens the release PR with the bump already committed,
 which is why the resulting `chore(release): v...` commit is excluded from

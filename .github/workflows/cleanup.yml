@@ -12,9 +12,21 @@ jobs:
     permissions:
       actions: write
     steps:
-      - name: Delete all but latest run
+      # Retention is by age, not by count. This used to delete all but the
+      # single newest run of the last 100, which meant the run history never
+      # went back more than a few hours. Diagnosing the 2026-08-16 stranding
+      # incident needed exactly that history: the question "did a push-event CI
+      # run ever exist for this merge?" is only answerable from runs the
+      # cleanup had not yet eaten. Thirty days keeps a release cycle's worth of
+      # evidence and still bounds the list.
+      - name: Delete runs older than the retention window
         run: |
-          gh run list --repo ${{ github.repository }} --limit 100 --json databaseId --jq '.[1:][].databaseId' | \
-          xargs -I {} gh run delete {} --repo ${{ github.repository }} || true
+          CUTOFF=$(date -u -d '30 days ago' +%Y-%m-%dT%H:%M:%SZ)
+          echo "Deleting workflow runs created before $CUTOFF"
+          gh api --paginate "repos/${{ github.repository }}/actions/runs?per_page=100" \
+            --jq ".workflow_runs[] | select(.created_at < \"$CUTOFF\") | .id" \
+            > /tmp/stale-runs.txt
+          echo "$(wc -l < /tmp/stale-runs.txt) run(s) to delete"
+          xargs -r -I {} gh run delete {} --repo ${{ github.repository }} < /tmp/stale-runs.txt
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
