@@ -230,8 +230,9 @@ Every guard above assumes the chain ran and something in it said no. On
 2026-08-16 the chain did not run at all: between 09:41Z and roughly 03:00Z the
 next day, GitHub created no workflow run for this repository on any event
 trigger. Not push, not pull_request - the merge commits from that window carry
-no `github-actions` check suite whatsoever, only the third-party ones. Eleven
-PRs merged to `main` with no CI, and nothing published; the registry stayed on
+no `github-actions` check suite whatsoever, only the third-party ones.
+Fourteen PRs merged to `main` with no CI (bf35dd9 through f32f98a), and
+nothing published; the registry stayed on
 the previous day's version while `main` carried a fix for a knowledge-base
 wipe. Nothing went red, because nothing ran. Scheduled runs came back first, and the next push after
 that triggered CI normally, so this was event delivery on GitHub's side rather
