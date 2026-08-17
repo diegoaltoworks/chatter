@@ -254,9 +254,24 @@ jobs:
           echo "version=${{ steps.pr.outputs.version }}" >> "$GITHUB_OUTPUT"
           git push origin --delete "${{ steps.pr.outputs.branch }}" || true
 
+      # Fetches the commit before checking it out. The squash-merge above
+      # created it server-side, so this clone has never seen it: the checkout
+      # at the top of the job predates the merge, and `git push` moves objects
+      # the other way. `git checkout` on a commit the object store does not
+      # hold fails the whole release *after* the version bump has already
+      # landed on main, which is the worst point to stop - it leaves main
+      # claiming a version nothing published. Explicit rather than an
+      # unconditional `git fetch origin main`, since the release commit is
+      # identified by SHA and a plain branch fetch would race a merge landing
+      # behind it. Fetching by SHA needs `uploadpack.allowReachableSHA1InWant`,
+      # which github.com has, and it's a no-op when the object is already local
+      # (the resumed-release path, where the commit came down with main).
       - name: Check out the release commit
         if: steps.pending.outputs.version != '' || steps.merge.outputs.sha != ''
-        run: git checkout "${{ steps.pending.outputs.sha || steps.merge.outputs.sha }}"
+        run: |
+          SHA="${{ steps.pending.outputs.sha || steps.merge.outputs.sha }}"
+          git fetch --no-tags origin "$SHA"
+          git checkout "$SHA"
 
       # The same gates as CI, through the same entry point, so the publish
       # path cannot quietly run a smaller set than the release branch's own
