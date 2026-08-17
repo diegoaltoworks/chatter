@@ -44,6 +44,64 @@ function fakeEmbedder(embedding: number[]): Embedder {
   return async (input) => input.map(() => embedding);
 }
 
+/** Records every statement a store sends, without changing what the client does. */
+function trackSql(db: LibsqlClient) {
+  const sql: string[] = [];
+  const client = new Proxy(db, {
+    get(target, prop, receiver) {
+      if (prop === "execute") {
+        return (stmt: string | { sql: string }) => {
+          sql.push(typeof stmt === "string" ? stmt : stmt.sql);
+          return target.execute(stmt as Parameters<LibsqlClient["execute"]>[0]);
+        };
+      }
+      if (prop === "batch") {
+        return (stmts: Array<string | { sql: string }>, mode?: unknown) => {
+          for (const stmt of stmts) sql.push(typeof stmt === "string" ? stmt : stmt.sql);
+          return target.batch(
+            stmts as Parameters<LibsqlClient["batch"]>[0],
+            mode as Parameters<LibsqlClient["batch"]>[1],
+          );
+        };
+      }
+      const value = Reflect.get(target, prop, receiver);
+      return typeof value === "function" ? value.bind(target) : value;
+    },
+  });
+  return { client, sql };
+}
+
+/** Collects log output so a test can assert on it, and keeps test output quiet. */
+function collectingLogger() {
+  const lines: string[] = [];
+  const record =
+    (level: string) =>
+    (...args: unknown[]) => {
+      lines.push(`${level} ${args.join(" ")}`);
+    };
+  return {
+    lines,
+    logger: {
+      debug: record("debug"),
+      info: record("info"),
+      warn: record("warn"),
+      error: record("error"),
+    },
+  };
+}
+
+function writeKnowledge(root: string, name: string, text: string) {
+  const dir = join(root, name);
+  mkdirSync(join(dir, "base"), { recursive: true });
+  writeFileSync(join(dir, "base", "info.md"), text);
+  return dir;
+}
+
+async function countRows(db: LibsqlClient, table: string) {
+  const res = await db.execute(`SELECT COUNT(*) as count FROM ${table}`);
+  return Number(res.rows[0]?.count ?? 0);
+}
+
 describe("VectorStore connection", () => {
   test("exposes the injected client instead of opening a second connection", () => {
     const { db } = createFakeDb();
@@ -181,6 +239,139 @@ describe("VectorStore connection", () => {
       expect(await store.query("support hours", 3, ["base"])).toEqual([
         "# Info\nSupport hours are 9-5.",
       ]);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  test("concurrent builds against one database leave the same chunks a single build would", async () => {
+    // Two instances booting at the same time against one production database
+    // (a rolling deploy, a manual deploy racing an automated one) must never
+    // end up with fewer chunks than either boot alone would have written.
+    const dir = mkdtempSync(join(tmpdir(), "chatter-retrieval-concurrent-"));
+    const knowledgeDir = writeKnowledge(dir, "knowledge", "# Info\nSupport hours are 9-5.");
+
+    try {
+      const solo = createClient({ url: "file::memory:", authToken: "" });
+      await new VectorStore(fakeEmbedder([1, 0]), {
+        databaseClient: solo,
+        knowledgeDir,
+        logger: collectingLogger().logger,
+      }).build();
+      const soloChunks = await countRows(solo, "chunks");
+      const soloEmbeddings = await countRows(solo, "embeddings");
+      expect(soloChunks).toBeGreaterThan(0);
+
+      const shared = createClient({ url: "file::memory:", authToken: "" });
+      const options = { databaseClient: shared, knowledgeDir, logger: collectingLogger().logger };
+      await Promise.all([
+        new VectorStore(fakeEmbedder([1, 0]), { ...options, instanceId: "a" }).build(),
+        new VectorStore(fakeEmbedder([1, 0]), { ...options, instanceId: "b" }).build(),
+      ]);
+
+      expect(await countRows(shared, "chunks")).toBe(soloChunks);
+      expect(await countRows(shared, "embeddings")).toBe(soloEmbeddings);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  test("a build that starts while another is in flight skips its destructive delete phase", async () => {
+    // The second knowledge-base wipe: every boot saw a non-zero document
+    // count (so the zero-docs guard could not catch it), but each boot's
+    // cleanup pass diffed against a database another boot was still writing
+    // and deleted its chunks as stale. The second builder must take no
+    // destructive action at all while the first holds the lock.
+    const dir = mkdtempSync(join(tmpdir(), "chatter-retrieval-inflight-"));
+    const firstDir = writeKnowledge(dir, "first", "# Info\nFirst revision content.");
+    const secondDir = writeKnowledge(dir, "second", "# Info\nA different revision entirely.");
+
+    try {
+      const db = createClient({ url: "file::memory:", authToken: "" });
+
+      // Hold the first build open inside its embedding step: by then its
+      // chunks are written and its embeddings are not, the exact window the
+      // racing boot used to delete.
+      let firstIsEmbedding: () => void = () => {};
+      const embedding = new Promise<void>((resolve) => {
+        firstIsEmbedding = resolve;
+      });
+      let releaseFirst: () => void = () => {};
+      const held = new Promise<void>((resolve) => {
+        releaseFirst = resolve;
+      });
+      const gatedEmbed: Embedder = async (input) => {
+        firstIsEmbedding();
+        await held;
+        return input.map(() => [1, 0]);
+      };
+
+      const first = new VectorStore(gatedEmbed, {
+        databaseClient: db,
+        knowledgeDir: firstDir,
+        instanceId: "first",
+        logger: collectingLogger().logger,
+      });
+      const tracked = trackSql(db);
+      const secondLog = collectingLogger();
+      const second = new VectorStore(fakeEmbedder([1, 0]), {
+        databaseClient: tracked.client,
+        knowledgeDir: secondDir,
+        instanceId: "second",
+        logger: secondLog.logger,
+      });
+
+      const firstBuild = first.build();
+      await embedding;
+
+      await second.build();
+
+      expect(tracked.sql.filter((s) => /DELETE FROM chunks/i.test(s))).toEqual([]);
+      expect(
+        secondLog.lines.some((l) => l.startsWith("warn") && l.includes("Another instance")),
+      ).toBe(true);
+
+      releaseFirst();
+      await firstBuild;
+
+      // The first instance's knowledge survived intact and is queryable.
+      expect(await first.query("content", 3, ["base"])).toEqual([
+        "# Info\nFirst revision content.",
+      ]);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  test("a later build still cleans up stale chunks once the lock is free", async () => {
+    // The lock must not turn cleanup off permanently: a boot that actually
+    // holds it still prunes what the knowledge dir no longer contains.
+    const dir = mkdtempSync(join(tmpdir(), "chatter-retrieval-lock-release-"));
+    const knowledgeDir = writeKnowledge(dir, "knowledge", "# Info\nSupport hours are 9-5.");
+
+    try {
+      const db = createClient({ url: "file::memory:", authToken: "" });
+      const logger = collectingLogger().logger;
+      await new VectorStore(fakeEmbedder([1, 0]), {
+        databaseClient: db,
+        knowledgeDir,
+        instanceId: "first",
+        logger,
+      }).build();
+      const firstIds = (await db.execute("SELECT id FROM chunks")).rows.map((r) => String(r.id));
+
+      writeFileSync(join(knowledgeDir, "base", "info.md"), "# Info\nNew content entirely.");
+      const second = new VectorStore(fakeEmbedder([1, 0]), {
+        databaseClient: db,
+        knowledgeDir,
+        instanceId: "second",
+        logger,
+      });
+      await second.build();
+
+      const after = (await db.execute("SELECT id FROM chunks")).rows.map((r) => String(r.id));
+      expect(after.filter((id) => firstIds.includes(id))).toEqual([]);
+      expect(after.length).toBeGreaterThan(0);
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }

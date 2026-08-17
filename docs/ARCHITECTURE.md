@@ -75,17 +75,28 @@ way" reference they point back to.
    auth-state cache backed by an in-process `Map` would let each instance
    enforce its own, independent view. libsql (Turso) is the shipped
    implementation (`createTursoScheduleClaimStore`, `createTursoWaLeaseStore`,
-   `createTursoWaAuthKV`, `usage/tursoStore.ts`); table creation is idempotent
+   `createTursoWaAuthKV`, `createTursoBuildLock`, `usage/tursoStore.ts`); table
+   creation is idempotent
    (`CREATE TABLE IF NOT EXISTS`) and a claim/reservation is atomic, so two
    instances racing the same key can never both win. Every such store's
    config field (`SchedulerConfig.claimStore`,
-   `WhatsAppChannelConfig.leaseStore`/`authStore`) is injectable, defaulting
+   `WhatsAppChannelConfig.leaseStore`/`authStore`,
+   `VectorStoreOptions.buildLock`) is injectable, defaulting
    to the Turso-backed factory only when unset - a caller can swap in a
    different backend without touching the seam that consumes it. Enforced:
    `src/usage/limits.test.ts`, `src/usage/tursoStore.test.ts`,
    `src/scheduler/claimStore.test.ts`, `src/scheduler/scheduler.test.ts`,
-   `src/channels/whatsapp/channel.test.ts`. See
+   `src/channels/whatsapp/channel.test.ts`, `src/core/buildLock.test.ts`. See
    [patterns/adding-a-store.md](./patterns/adding-a-store.md).
+
+   The same rule covers work that is destructive rather than metered:
+   `VectorStore.build()` deletes every chunk its own `knowledgeDir` did not
+   produce, so it runs under a single-writer lock (`chatter_build_lock`) held
+   for the whole ingest. A second instance booting mid-build takes no
+   destructive action at all, rather than diffing against a database the
+   holder is still writing. Enforced: `src/core/retrieval.test.ts` ("a build
+   that starts while another is in flight skips its destructive delete
+   phase").
 
 9. **Channel-agnostic reply gates (`decideChannelAction`) import nothing from
    the rest of chatter, and never see transport-specific fields.** Mention

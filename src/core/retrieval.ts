@@ -1,5 +1,11 @@
 import type { Client as LibsqlClient } from "@libsql/client";
 import type OpenAI from "openai";
+import {
+  BUILD_LOCK_KEY,
+  BUILD_LOCK_STALE_MS,
+  type BuildLock,
+  createTursoBuildLock,
+} from "./buildLock";
 import { type Bucket, loadKnowledge } from "./loaders";
 import { createConsoleLogger, type Logger } from "./logger";
 
@@ -121,6 +127,18 @@ export interface VectorStoreOptions {
   knowledgeDir?: string;
   /** Logger for build progress. Default: a console logger writing to stderr. */
   logger?: Logger;
+  /**
+   * Single-writer lock `build()` holds while it rewrites the knowledge base,
+   * so two instances booting against one database cannot delete each other's
+   * chunks. Default: a lock table in `databaseClient` (see
+   * [buildLock.ts](./buildLock.ts)); supply your own to back it with
+   * something else, or a lock that always grants to opt out.
+   */
+  buildLock?: BuildLock;
+  /** Identifies this process while it holds the build lock. Default: a random id per store. */
+  instanceId?: string;
+  /** How long a held build lock survives with no heartbeat before another instance may take it over. Default: 10 minutes. */
+  buildLockStaleMs?: number;
 }
 
 export class VectorStore implements Retriever {
@@ -132,6 +150,9 @@ export class VectorStore implements Retriever {
   readonly db: LibsqlClient;
   private knowledgeDir: string;
   private logger: Logger;
+  private buildLock: BuildLock;
+  private instanceId: string;
+  private buildLockStaleMs: number;
 
   constructor(
     private embed: Embedder,
@@ -140,9 +161,22 @@ export class VectorStore implements Retriever {
     this.db = options.databaseClient;
     this.knowledgeDir = options.knowledgeDir || DEFAULT_KNOWLEDGE_DIR;
     this.logger = options.logger ?? createConsoleLogger();
+    this.buildLock = options.buildLock ?? createTursoBuildLock(this.db);
+    this.instanceId = options.instanceId ?? crypto.randomUUID();
+    this.buildLockStaleMs = options.buildLockStaleMs ?? BUILD_LOCK_STALE_MS;
   }
 
-  // On boot: ingest new chunks and embed only missing ones.
+  /**
+   * On boot: ingest new chunks and embed only missing ones.
+   *
+   * The whole ingest runs under a single-writer lock held in the database
+   * (see [buildLock.ts](./buildLock.ts)), because the cleanup step deletes
+   * every chunk id the current `knowledgeDir` did not produce. Without the
+   * lock, a second instance booting mid-build diffs against a database the
+   * first one is still writing and deletes its chunks. An instance that
+   * cannot take the lock skips its build entirely and serves what the holder
+   * has already written, rather than racing it.
+   */
   async build() {
     this.logger.info("Building knowledge base...");
 
@@ -155,6 +189,33 @@ export class VectorStore implements Retriever {
     `);
     await this.db.execute("CREATE INDEX IF NOT EXISTS idx_chunks_bucket ON chunks(bucket);");
 
+    if (!(await this.renewBuildLock())) {
+      this.logger.warn(
+        "Another instance is building the knowledge base against this database - " +
+          "skipping this build and using what it has written. Nothing was deleted.",
+      );
+      return;
+    }
+
+    try {
+      await this.buildUnderLock();
+    } finally {
+      await this.buildLock.release(BUILD_LOCK_KEY, this.instanceId);
+    }
+  }
+
+  /** Acquires the build lock, or refreshes the heartbeat if this store already holds it. */
+  private renewBuildLock(): Promise<boolean> {
+    return this.buildLock.tryAcquire(
+      BUILD_LOCK_KEY,
+      this.instanceId,
+      Date.now(),
+      this.buildLockStaleMs,
+    );
+  }
+
+  /** The ingest itself. Only ever runs with the build lock held. */
+  private async buildUnderLock() {
     const docs = loadKnowledge(this.knowledgeDir);
     this.logger.info(`Loaded ${docs.length} knowledge documents`);
 
@@ -249,6 +310,15 @@ export class VectorStore implements Retriever {
         })),
         "write",
       );
+      // Embedding a large knowledge base can outlast the lock's stale
+      // window, so heartbeat between batches: a build that is still making
+      // progress keeps the lock instead of looking abandoned.
+      if (!(await this.renewBuildLock())) {
+        this.logger.warn(
+          "Lost the knowledge-base build lock to another instance mid-build - " +
+            "remaining chunks may be embedded by that instance instead.",
+        );
+      }
     }
 
     this.logger.info(`Successfully embedded ${missing.length} new chunks`);
