@@ -16,8 +16,7 @@ Welcome to the Chatter documentation! This guide will help you set up and deploy
      codebase:
      [0001, brain and sockets split](./decisions/0001-brain-and-sockets-split.md),
      [0002, no LangChain in core](./decisions/0002-no-langchain-in-core.md),
-     [0003, slot-filling is brain territory](./decisions/0003-slot-filling-is-brain-territory.md),
-     [0004, main-protection keeps only non-fast-forward and deletion protections](./decisions/0004-main-protection-stays-non-fast-forward-only.md)
+     [0003, slot-filling is brain territory](./decisions/0003-slot-filling-is-brain-territory.md)
 
 2. **[Requirements](./requirements.md)** - What you need before starting
    - OpenAI API setup
@@ -116,7 +115,6 @@ Welcome to the Chatter documentation! This guide will help you set up and deploy
     - The subpath contract and what each one gives you
     - Adding a subpath without breaking consumers
     - The packed-tarball check that verifies it before release
-    - The release chain, its human gate, and how the toolchain is pinned
 
 18. **[Testing](./testing.md)** - Run and extend the test suite
     - Unit vs. integration tests, and what each needs
@@ -130,12 +128,6 @@ Welcome to the Chatter documentation! This guide will help you set up and deploy
     - Authentication
     - Customization
     - Performance and scaling
-
-### Archive
-
-- **[Cross-Module Review](./sprint-review.md)** - A dated, point-in-time audit
-  (v0.40) of cross-module paths and security invariants, not a standing
-  guarantee about the current codebase.
 
 ## Documentation Flow
 

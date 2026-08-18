@@ -20,13 +20,10 @@
  *  - A tracker ticket id (this repo's Jira project key followed by a
  *    number) in a comment. Tracker state belongs in the PR description; a
  *    ticket reference baked into a comment rots the moment the ticket
- *    closes or gets renumbered, and this repo's own ticket ids must never
- *    appear in committed source (see process.md).
- *  - A source-code comment naming where lifted code came from, using the
- *    term process.md sanctions for that provenance. Fine in prose describing
- *    the naming rule itself (see docs/ARCHITECTURE.md's invariant 10); a
- *    code comment stating it is development history that belongs in the PR
- *    description that lifted the code, not a comment that outlives it.
+ *    closes or gets renumbered.
+ *  - A source-code comment naming where lifted code came from. That is
+ *    development history that belongs in the PR description that lifted
+ *    the code, not a comment that outlives it.
  *
  * comment-gate.test.ts feeds these every `.ts` file (including `*.test.ts`
  * - a stray ticket id or stale anchor in a test file is just as much a
@@ -188,7 +185,7 @@ export function fileLineAnchorViolations(
 }
 
 /**
- * This repo's Jira project key (see process.md's Jira section). Scoped to
+ * This repo's Jira project key. Scoped to
  * `CHAT` specifically, not a generic `[A-Z]+-\d+` shape - a generic pattern
  * false-positives on ordinary tech acronyms that are also letters-hyphen-digits
  * (`SHA-256`, `UTF-8`, `AES-256`, `GPT-4`).
@@ -225,21 +222,17 @@ const REFERENCE_IMPLEMENTATION = /\breference implementation\b/i;
 
 /**
  * `file:line` locations pre-approved to spell out the naming rule this check
- * enforces (see process.md's naming gotcha) - stating the rule is not a leak
- * of what it forbids.
+ * enforces - stating the rule is not a leak of what it forbids. Empty by
+ * default; extend if prose ever needs to describe the rule.
  */
-export const REFERENCE_IMPLEMENTATION_ALLOWLIST: ReadonlySet<string> = new Set([
-  "docs/ARCHITECTURE.md:110",
-  "docs/ARCHITECTURE.md:117",
-]);
+export const REFERENCE_IMPLEMENTATION_ALLOWLIST: ReadonlySet<string> = new Set();
 
 /**
- * A comment naming where lifted code came from, using the term process.md
- * sanctions for that (this docstring avoids spelling it out so this file
- * doesn't flag itself). Fine in prose describing the naming rule itself, but
- * a code comment stating that provenance is development history, not
- * something a reader needs to understand the current code; it belongs in
- * the PR description that lifted the code, not a comment that outlives it.
+ * A comment naming where lifted code came from (this docstring avoids
+ * spelling out the flagged term so this file doesn't flag itself). That
+ * provenance is development history, not something a reader needs to
+ * understand the current code; it belongs in the PR description that
+ * lifted the code, not a comment that outlives it.
  */
 export function referenceImplementationViolations(
   relativePath: string,

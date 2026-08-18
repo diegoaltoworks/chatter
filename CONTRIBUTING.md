@@ -141,11 +141,8 @@ chatter/
   `scripts/comment-gate.test.ts`: a comment must not hardcode this
   package's current released version (the release workflow owns
   `package.json#version`; see [Release Process](#release-process)) or
-  reference a tracker ticket id, a `path:line` anchor a comment makes must
-  point at a file and line that actually exist, and a source-code comment
-  must not name where lifted code came from (see
-  `docs/ARCHITECTURE.md`'s invariant 10) - that provenance belongs in the PR
-  description that lifted the code, not a comment that outlives it.
+  reference a tracker ticket id, and a `path:line` anchor a comment makes
+  must point at a file and line that actually exist.
 
 ### Commits
 
@@ -211,8 +208,7 @@ straight to `main` so main-protection never sees a commit without a passed
 check. Once merged, the same run re-runs the gates, builds, verifies the
 packed tarball and the built package under Node, tags the commit, publishes to
 npm with provenance, and cuts the GitHub release with its notes. Do not bump
-`package.json` by hand - the workflow owns the version. See
-[docs/packaging.md](./docs/packaging.md#the-release-chain) for the full chain.
+`package.json` by hand - the workflow owns the version.
 
 The bump type is derived from the conventional-commit type of every commit
 since the last release tag (not just the one that triggered the run): any
@@ -242,7 +238,7 @@ comment so Dependabot can still offer updates), Bun is pinned to one exact
 version shared by the workflows and the Dockerfile, and every install runs
 `--frozen-lockfile`. `scripts/supply-chain.test.ts` audits all of that, so a
 new workflow or a copy-pasted step fails the gates rather than quietly opening
-the path back up. See [Packaging](docs/packaging.md) for the full chain.
+the path back up.
 
 ## Questions?
 

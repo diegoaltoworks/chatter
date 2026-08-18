@@ -109,25 +109,18 @@ Complete guides for setup, deployment, and integration - see
 - **[Conversation History](./docs/history.md)** - Structural, host-replaceable multi-turn context
 - **[Scheduler](./docs/scheduler.md)** - Exactly-once outbound scheduling
 - **[Deployment](./docs/deployment.md)** - Google Cloud Run, Fly.io, Railway, VPS
-- **[Packaging](./docs/packaging.md)** - The subpath contract and the release chain
+- **[Packaging](./docs/packaging.md)** - The subpath contract and how it is verified
 - **[Testing](./docs/testing.md)** - Comprehensive testing guide
 - **[FAQs](./docs/faqs.md)** - Troubleshooting and common questions
 - **Architecture Decisions** - The ADRs behind the shape of the codebase:
   [0001, brain and sockets split](./docs/decisions/0001-brain-and-sockets-split.md),
   [0002, no LangChain in core](./docs/decisions/0002-no-langchain-in-core.md),
-  [0003, slot-filling is brain territory](./docs/decisions/0003-slot-filling-is-brain-territory.md),
-  [0004, main-protection keeps only non-fast-forward and deletion protections](./docs/decisions/0004-main-protection-stays-non-fast-forward-only.md)
+  [0003, slot-filling is brain territory](./docs/decisions/0003-slot-filling-is-brain-territory.md)
 - **Patterns** - Worked "how do I add X" guides:
   [adding a capability](./docs/patterns/adding-a-capability.md),
   [adding a store](./docs/patterns/adding-a-store.md),
   [adding a retriever](./docs/patterns/adding-a-retriever.md),
   [exemplars](./docs/patterns/exemplars.md)
-
-### Archive
-
-- **[Cross-Module Review](./docs/sprint-review.md)** - A dated, point-in-time
-  audit (v0.40) of cross-module paths and security invariants, not a
-  standing guarantee about the current codebase.
 
 ## Demo
 

@@ -3,8 +3,7 @@
 What has to stay true for chatter to be the thing described in
 [docs/decisions/](./decisions/) - not a wishlist, a list of the invariants
 this codebase actually depends on. Each one names the test that fails if it
-breaks; an invariant with no enforcing test is marked **aspirational** and
-says why it isn't (yet, or ever) a mechanical check.
+breaks.
 
 Read this before touching a seam (`answerFn`, `bucketsFor`, the Channel SPI),
 adding a subpath, or adding a store - [docs/patterns/](./patterns/) has the
@@ -107,19 +106,7 @@ way" reference they point back to.
    `src/channels/gates.test.ts`. See
    [patterns/exemplars.md](./patterns/exemplars.md).
 
-10. **No commit, PR, code comment, or doc names the reference implementation
-    this project was informed by, or attributes work to an AI tool.** The
-    actual forbidden project name is **aspirational** - enforced by review
-    discipline, not a test: a lexical grep-gate for it would have to embed
-    that name somewhere in this repo to check for it, which defeats the rule
-    it exists to enforce. There is no test to point to here, on purpose. A
-    narrower, mechanically-checkable piece of the same rule *is* enforced,
-    though: a source-code comment naming "the reference implementation" (the
-    sanctioned neutral term prose is allowed to use, per process.md) as
-    provenance is a leak of development history a comment shouldn't carry.
-    Enforced: `scripts/comment-gate.test.ts`.
-
-11. **A comment does not hardcode this package's current released version, does
+10. **A comment does not hardcode this package's current released version, does
     not reference a tracker ticket id, and any `path:line` anchor it makes
     points at a file and line that actually exist.** All three go stale
     silently: the version the moment the next merge auto-publishes, a ticket
@@ -149,8 +136,8 @@ by file.
 
 ## Adding an invariant
 
-A new load-bearing property gets a numbered entry here and, unless it falls
-into the same trap as #10, a test named directly above. If the property is
+A new load-bearing property gets a numbered entry here and a test named
+directly above. If the property is
 lexical (something a regex over source/config can see - a forbidden call
 site, a workflow shape, a doc link), follow the pattern in
 `scripts/supply-chain.ts` and `scripts/architecture-invariants.ts`: pure
