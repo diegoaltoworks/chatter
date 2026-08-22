@@ -32,7 +32,7 @@ export interface PricingRates {
  * Bot identity configuration
  */
 export interface BotIdentity {
-  /** Bot display name (e.g., "DiegoBot", "AcmeBot") */
+  /** Bot display name (e.g., "AcmeBot") */
   name: string;
   /** Person or company name the bot represents */
   personName: string;
@@ -43,12 +43,17 @@ export interface BotIdentity {
 }
 
 /**
- * Bot branding configuration
+ * Bot branding configuration.
+ *
+ * Passthrough only: both colors are published on `GET /config` for a host's
+ * own page to read, and nothing shipped applies them. The built-in widgets are
+ * styled with the `chatter-ui-` CSS classes (see docs/client.md), so setting a
+ * color here does not restyle them.
  */
 export interface BotBranding {
-  /** Primary color for public chat widget */
+  /** Primary color to publish for the public chat, for a host page to apply itself */
   publicPrimaryColor?: string;
-  /** Primary color for private chat widget */
+  /** Primary color to publish for the private chat, for a host page to apply itself */
   privatePrimaryColor?: string;
 }
 

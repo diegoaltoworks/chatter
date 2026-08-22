@@ -69,9 +69,12 @@ retrieval backend can install Chatter without the Turso client.
 
 `VectorStore` itself takes an `Embedder` - `(input: string[]) => Promise<number[][]>`
 - rather than an OpenAI client, so it isn't hard-wired to one embeddings
-provider either. `createOpenAIEmbedder(client, model?)` is the adapter
-`createServer` uses by default; write your own `Embedder` to back `VectorStore`
-with a different provider while keeping its Turso storage and cosine search:
+provider either. `createOpenAIEmbedder(client)` is the adapter
+`createServer` uses by default. It takes no model parameter: `VectorStore`
+labels every stored row with the embedding model it was written under and never
+re-embeds rows written under a different one, so the model is pinned rather
+than passed in. Write your own `Embedder` to back `VectorStore` with a
+different provider while keeping its Turso storage and cosine search:
 
 ```typescript
 import { VectorStore, type Embedder } from "@diegoaltoworks/chatter";

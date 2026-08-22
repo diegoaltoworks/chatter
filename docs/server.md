@@ -63,8 +63,11 @@ Configure your bot's identity and branding:
     description: 'AI assistant for My Company'
   },
   branding: {
-    publicPrimaryColor: '#2563eb',   // Public chat theme color
-    privatePrimaryColor: '#7c3aed'   // Private chat theme color
+    // Published on GET /config for your own page to read. The built-in
+    // widgets do not apply them - style those with the chatter-ui- CSS
+    // classes instead (see docs/client.md).
+    publicPrimaryColor: '#2563eb',
+    privatePrimaryColor: '#7c3aed'
   }
 }
 ```

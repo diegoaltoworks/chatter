@@ -483,6 +483,48 @@ describe("prepareChat", () => {
       expect(seen).toEqual([["weak match"]]);
     });
 
+    test("a fallbackFn that mutates retrievedChunks cannot inject context into the turn", async () => {
+      const store = { query: async () => [] } satisfies Retriever;
+      const { prompts } = createFakes();
+
+      const result = await prepareChat({
+        store,
+        prompts,
+        mode: "public",
+        messages,
+        fallbackFn: (ctx) => {
+          ctx.retrievedChunks.push("smuggled");
+          return "guidance";
+        },
+      });
+
+      expect(result.context).toEqual([]);
+      expect(result.system).not.toContain("smuggled");
+      expect(result.system).toContain("guidance");
+    });
+
+    test("nor when rerankContext left retrievedChunks non-empty", async () => {
+      const store = { query: async () => ["weak match"] } satisfies Retriever;
+      const { prompts } = createFakes();
+
+      const result = await prepareChat({
+        store,
+        prompts,
+        mode: "public",
+        messages,
+        rerankContext: async () => [],
+        fallbackFn: (ctx) => {
+          ctx.retrievedChunks.push("smuggled");
+          return "guidance";
+        },
+      });
+
+      expect(result.context).toEqual([]);
+      expect(result.system).not.toContain("smuggled");
+      expect(result.system).not.toContain("weak match");
+      expect(result.system).toContain("guidance");
+    });
+
     test("returning undefined leaves the prompt unchanged", async () => {
       const store = { query: async () => [] } satisfies Retriever;
       const { prompts } = createFakes();

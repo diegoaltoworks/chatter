@@ -32,7 +32,7 @@ async function publicConversationExample() {
   try {
     const conversation = [
       { role: "user", content: "What is your name?" },
-      { role: "assistant", content: "I am DiegoBot, how can I help you?" },
+      { role: "assistant", content: "I am an AI assistant, how can I help you?" },
       { role: "user", content: "What can you do?" },
     ];
 
@@ -98,7 +98,7 @@ async function streamingConversationExample() {
 
   const conversation = [
     { role: "user", content: "Who are you?" },
-    { role: "assistant", content: "I am DiegoBot, your AI assistant." },
+    { role: "assistant", content: "I am your AI assistant." },
     { role: "user", content: "Tell me more about yourself" },
   ];
 

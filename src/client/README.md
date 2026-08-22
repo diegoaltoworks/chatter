@@ -1,16 +1,21 @@
 # @diegoaltoworks/chatter
 
-Isomorphic TypeScript chatbot client for DiegoBot API. Works seamlessly in both Node.js and browser environments.
+Isomorphic TypeScript chatbot client for a Chatter server. Works seamlessly in both Node.js and browser environments.
 
 ## Features
 
 - 🚀 **Isomorphic** - Works in Node.js and browsers
-- 📦 **Multiple formats** - ESM, CJS, and UMD bundles
+- 📦 **Three bundles** - ESM and CJS for bundlers, plus a minified IIFE build that puts a `Chatter` global on `window` for a plain script tag
 - 🎨 **UI Components** - Ready-to-use Chat and ChatButton components
 - 💪 **TypeScript** - Full type safety
-- 🎯 **Zero dependencies** - Lean and fast
+- 🎯 **No dependencies of its own** - it calls the platform's global `fetch` and nothing else
 - 🔄 **Streaming support** - Real-time responses
 - 🎭 **Two modes** - Public and Private authentication
+
+The dependency point is about the widget's own code: installing the package
+still pulls the server's peers, because npm resolves them per package rather
+than per subpath. See [Peer tiers](../../docs/packaging.md#peer-tiers) for what
+that costs and how to avoid it. The script-tag build below avoids it entirely.
 
 ## Installation
 
@@ -24,10 +29,10 @@ npm install @diegoaltoworks/chatter
 
 ```html
 <!-- Include the script -->
-<script src="https://bot.diegoalto.app/chatter.js"></script>
+<script src="https://chat.example.com/chatter.js"></script>
 
 <!-- Include the styles -->
-<link rel="stylesheet" href="https://bot.diegoalto.app/chatter.css">
+<link rel="stylesheet" href="https://chat.example.com/chatter.css">
 ```
 
 ## Getting an API Key
@@ -53,7 +58,7 @@ For more information, see the [Chatter server documentation](https://github.com/
 import { ChatBot } from '@diegoaltoworks/chatter/client';
 
 const bot = new ChatBot({
-  host: 'bot.diegoalto.app',
+  host: 'chat.example.com',
   mode: 'public',
   apiKey: 'your-api-key'
 });
@@ -73,10 +78,10 @@ await bot.streamMessage('Tell me a story', {
 #### Browser (Script Tag)
 
 ```html
-<script src="https://bot.diegoalto.app/chatter.js"></script>
+<script src="https://chat.example.com/chatter.js"></script>
 <script>
   const bot = new Chatter.ChatBot({
-    host: 'bot.diegoalto.app',
+    host: 'chat.example.com',
     mode: 'public',
     apiKey: 'your-api-key'
   });
@@ -94,11 +99,11 @@ import { Chat } from '@diegoaltoworks/chatter/client';
 import '@diegoaltoworks/chatter/client/style.css';
 
 const chat = new Chat({
-  host: 'bot.diegoalto.app',
+  host: 'chat.example.com',
   mode: 'public',
   apiKey: 'your-api-key',
   container: '#chat-container',
-  title: 'DiegoBot',
+  title: 'Support Chat',
   subtitle: 'Ask me anything!',
   placeholder: 'Type your message...'
 });
@@ -107,17 +112,17 @@ const chat = new Chat({
 #### Browser (Script Tag)
 
 ```html
-<link rel="stylesheet" href="https://bot.diegoalto.app/chatter.css">
+<link rel="stylesheet" href="https://chat.example.com/chatter.css">
 <div id="chat"></div>
 
-<script src="https://bot.diegoalto.app/chatter.js"></script>
+<script src="https://chat.example.com/chatter.js"></script>
 <script>
   new Chatter.Chat({
-    host: 'bot.diegoalto.app',
+    host: 'chat.example.com',
     mode: 'public',
     apiKey: 'your-api-key',
     container: '#chat',
-    title: 'DiegoBot'
+    title: 'Support Chat'
   });
 </script>
 ```
@@ -129,7 +134,7 @@ import { ChatButton } from '@diegoaltoworks/chatter/client';
 import '@diegoaltoworks/chatter/client/style.css';
 
 const chatButton = new ChatButton({
-  host: 'bot.diegoalto.app',
+  host: 'chat.example.com',
   mode: 'public',
   apiKey: 'your-api-key',
   position: 'bottom-right',
@@ -144,12 +149,12 @@ const chatButton = new ChatButton({
 #### Browser (Script Tag)
 
 ```html
-<link rel="stylesheet" href="https://bot.diegoalto.app/chatter.css">
+<link rel="stylesheet" href="https://chat.example.com/chatter.css">
 
-<script src="https://bot.diegoalto.app/chatter.js"></script>
+<script src="https://chat.example.com/chatter.js"></script>
 <script>
   new Chatter.ChatButton({
-    host: 'bot.diegoalto.app',
+    host: 'chat.example.com',
     mode: 'public',
     apiKey: 'your-api-key',
     position: 'bottom-right'
@@ -168,7 +173,7 @@ new ChatBot(config: ChatBotConfig)
 ```
 
 **Config:**
-- `host` (string, required): API host (e.g., 'bot.diegoalto.app')
+- `host` (string, required): API host (e.g., 'chat.example.com')
 - `mode` ('public' | 'private', required): Authentication mode
 - `apiKey` (string, required): API key
 - `token` (string, optional): Access token (required for private mode)
@@ -264,7 +269,7 @@ For private/internal use with JWT authentication:
 
 ```typescript
 const bot = new ChatBot({
-  host: 'bot.diegoalto.app',
+  host: 'chat.example.com',
   mode: 'private',
   apiKey: 'your-api-key',
   token: 'your-jwt-token' // Required for private mode
@@ -274,8 +279,8 @@ const bot = new ChatBot({
 ## Examples
 
 See the `examples/` directory for complete working examples:
-- `examples/browser.html` - Browser usage with script tag
-- `examples/react.tsx` - React integration
+- `examples/simple.html` - The floating chat button in one script tag
+- `examples/browser.html` - Browser usage with a script tag, all three components
 - `examples/node.ts` - Node.js usage
 
 ## Building from Source

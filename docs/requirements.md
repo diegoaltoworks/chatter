@@ -16,10 +16,11 @@ Chatter requires a few external services to function. This guide walks through w
 **Environment Variables**:
 - `OPENAI_API_KEY` - Your OpenAI API key (starts with `sk-...`)
 
-**Cost Estimate**:
-- Embeddings: ~$0.10 per 1M tokens (for building knowledge base)
-- Completions: ~$0.03 per 1K tokens (GPT-4o-mini) or ~$3 per 1M tokens for GPT-4
-- Typical usage: $5-50/month depending on volume
+**Cost**: Chatter defaults to `gpt-4o` for completions (`DEFAULT_MODEL`,
+overridable with `config.openai.model`) and pays per embedded token when it
+builds the knowledge base. What that costs depends on the model you pick and
+your traffic, so read the current numbers off OpenAI's pricing page above
+rather than a figure copied into these docs.
 
 ### Turso
 
@@ -48,7 +49,7 @@ Chatter requires a few external services to function. This guide walks through w
 - `TURSO_URL` - Database URL (starts with `libsql://...`)
 - `TURSO_AUTH_TOKEN` - Authentication token
 
-**Pricing**: Free tier available (500 databases, 1GB storage)
+**Pricing**: Has a free tier a small deployment fits inside. Limits change; read them off https://turso.tech/pricing.
 
 ## Bringing Your Own Retrieval Stack
 
@@ -91,7 +92,7 @@ exported from the package root.
 - `CLERK_JWKS_URL` - JWKS endpoint (e.g., `https://clerk.example.com/.well-known/jwks.json`)
 - `CLERK_ISSUER` - Issuer URL (typically same as frontend URL)
 
-**Pricing**: Free tier available (10,000 monthly active users)
+**Pricing**: Has a free tier priced by monthly active users. Limits change; read them off https://clerk.com/pricing.
 
 ### Custom JWT Provider (Alternative to Clerk)
 
@@ -172,17 +173,21 @@ mode `@hono/node-server` is only required for `serve()` itself.
 
 **Why**: Chatter needs persistent processes for RAG embeddings, session state, and streaming responses.
 
-## Estimated Total Costs
+## What It Costs To Run
 
-For a typical small-to-medium deployment:
+Every dependency below has a usage-based or tiered price that its vendor
+changes independently of this project, so the honest answer is a list of what
+you pay for rather than a total:
 
-| Service | Monthly Cost |
-|---------|-------------|
-| OpenAI API | $5-50 (usage-based) |
-| Turso | Free (or $5+ for pro features) |
-| Clerk | Free (or $25+ for pro features) |
-| Hosting | Free-$20 (varies by platform) |
-| **Total** | **$5-100/month** |
+| Service | What you pay for |
+|---------|------------------|
+| OpenAI API | Completion and embedding tokens, per the model you configure |
+| Turso | Rows stored and read, free tier upwards |
+| Clerk | Monthly active users, free tier upwards (only if you use it) |
+| Hosting | Whatever your persistent-process host charges |
+
+Turso and Clerk both have free tiers a small deployment fits inside; OpenAI
+does not.
 
 ## Next Steps
 
