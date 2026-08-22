@@ -11,6 +11,7 @@ import type OpenAI from "openai";
 import type { Channel, ChannelSenderRegistry } from "./channels";
 import type { AnswerFn, TransformReply } from "./core/answer";
 import type { BucketsFor } from "./core/buckets";
+import type { KnowledgeHealthCheckConfig } from "./core/knowledgeHealth";
 import type { Logger, LogLevel } from "./core/logger";
 import type { FallbackFn, RerankContext, RewriteQuery } from "./core/pipeline";
 import type { PromptLoader } from "./core/prompts";
@@ -224,6 +225,16 @@ export interface ChatterConfig extends BrainHooks {
    * Unset: `database` is required, and the built-in `VectorStore` is used.
    */
   retriever?: Retriever;
+
+  /**
+   * Post-boot and periodic consistency checks on the default `VectorStore`
+   * knowledge base (chunk/embedding counts, orphaned and missing rows),
+   * logged so a collapse is visible immediately instead of waiting for a
+   * user to notice broken answers. Ignored when `retriever` is set - the
+   * checks query the `chunks`/`embeddings` schema `VectorStore` itself
+   * owns. See [knowledgeHealth.ts](./core/knowledgeHealth.ts).
+   */
+  knowledgeHealthCheck?: KnowledgeHealthCheckConfig;
 
   // Auth
   auth?: {
