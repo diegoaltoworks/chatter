@@ -1200,3 +1200,238 @@ describe("createWhatsAppChannel", () => {
     for (const sock of sockets) expect(sock.end).toHaveBeenCalledTimes(1);
   });
 });
+
+describe("createWhatsAppChannel().getStatus", () => {
+  test("reflects connect, open and close transitions", async () => {
+    const sockets: FakeSocket[] = [];
+    const channel = createWhatsAppChannel({
+      sessionSecret: "test-session-secret-value",
+      loadBaileys: async () => fakeBaileysModule({ registered: true, sockets }),
+      schedule: () => undefined,
+    });
+    const { deps } = testDeps();
+
+    await channel.start(deps);
+    await flush();
+    expect(channel.getStatus()).toEqual([
+      { sessionId: "default", state: "connecting", since: expect.any(Number) },
+    ]);
+
+    sockets[0]?.ev.emit("connection.update", { connection: "open" });
+    expect(channel.getStatus()).toEqual([
+      { sessionId: "default", state: "connected", since: expect.any(Number) },
+    ]);
+
+    sockets[0]?.ev.emit("connection.update", {
+      connection: "close",
+      lastDisconnect: { error: { output: { statusCode: 500 } } },
+    });
+    const [status] = channel.getStatus();
+    expect(status?.state).toBe("disconnected");
+    expect(status?.lastError).toMatch(/connection closed \(500\)/);
+  });
+
+  test("an unpaired session reports disconnected with a pairing hint", async () => {
+    const sockets: FakeSocket[] = [];
+    const channel = createWhatsAppChannel({
+      sessionSecret: "test-session-secret-value",
+      loadBaileys: async () => fakeBaileysModule({ registered: false, sockets }),
+      schedule: () => undefined,
+    });
+    const { deps } = testDeps();
+
+    await channel.start(deps);
+    await flush();
+
+    const [status] = channel.getStatus();
+    expect(status?.state).toBe("disconnected");
+    expect(status?.lastError).toMatch(/pair it first/);
+  });
+
+  test("a logged-out session reports disconnected with a re-pair hint and does not reconnect", async () => {
+    const sockets: FakeSocket[] = [];
+    const channel = createWhatsAppChannel({
+      sessionSecret: "test-session-secret-value",
+      loadBaileys: async () => fakeBaileysModule({ registered: true, sockets }),
+      schedule: () => undefined,
+    });
+    const { deps } = testDeps();
+
+    await channel.start(deps);
+    await flush();
+    sockets[0]?.ev.emit("connection.update", { connection: "open" });
+    sockets[0]?.ev.emit("connection.update", {
+      connection: "close",
+      lastDisconnect: { error: { output: { statusCode: 401 } } },
+    });
+
+    const [status] = channel.getStatus();
+    expect(status?.state).toBe("disconnected");
+    expect(status?.lastError).toMatch(/re-pair/);
+  });
+
+  test("multiple sessions report independent statuses in configured order", async () => {
+    const sockets: FakeSocket[] = [];
+    const channel = createWhatsAppChannel({
+      sessionSecret: "test-session-secret-value",
+      sessionIds: ["default", "second"],
+      loadBaileys: async () => fakeBaileysModule({ registered: true, sockets }),
+      schedule: () => undefined,
+    });
+    const { deps } = testDeps();
+
+    await channel.start(deps);
+    await flush();
+    sockets[0]?.ev.emit("connection.update", { connection: "open" });
+
+    const statuses = channel.getStatus();
+    expect(statuses.map((s) => s.sessionId)).toEqual(["default", "second"]);
+    expect(statuses[0]?.state).toBe("connected");
+    expect(statuses[1]?.state).toBe("connecting");
+  });
+});
+
+describe("createWhatsAppChannel watchdog", () => {
+  test("onUnhealthy fires once past unhealthyAfterMs, not before, and rearms on reconnect", async () => {
+    const sockets: FakeSocket[] = [];
+    let currentTime = 0;
+    const onUnhealthy = mock(() => undefined);
+    const channel = createWhatsAppChannel({
+      sessionSecret: "test-session-secret-value",
+      loadBaileys: async () => fakeBaileysModule({ registered: true, sockets }),
+      schedule: () => undefined,
+      now: () => currentTime,
+      heartbeatMs: 5,
+      watchdog: { unhealthyAfterMs: 1_000, onUnhealthy },
+    });
+    const { deps } = testDeps();
+
+    await channel.start(deps);
+    await flush();
+
+    currentTime = 500;
+    await flush(30);
+    expect(onUnhealthy).not.toHaveBeenCalled();
+
+    currentTime = 1_500;
+    await flush(30);
+    expect(onUnhealthy).toHaveBeenCalledTimes(1);
+
+    // Still unhealthy long after crossing the threshold - must not re-fire.
+    currentTime = 10_000;
+    await flush(30);
+    expect(onUnhealthy).toHaveBeenCalledTimes(1);
+
+    // Reconnect, then go unhealthy again - the watchdog must rearm.
+    sockets[0]?.ev.emit("connection.update", { connection: "open" });
+    sockets[0]?.ev.emit("connection.update", {
+      connection: "close",
+      lastDisconnect: { error: { output: { statusCode: 500 } } },
+    });
+
+    currentTime = 11_001;
+    await flush(30);
+    expect(onUnhealthy).toHaveBeenCalledTimes(2);
+  });
+
+  test("without onUnhealthy configured, a routine reconnect never logs at error level", async () => {
+    const sockets: FakeSocket[] = [];
+    let currentTime = 0;
+    const errors: unknown[] = [];
+    const logger: Logger = {
+      debug: () => undefined,
+      info: () => undefined,
+      warn: () => undefined,
+      error: (message: unknown) => errors.push(message),
+    };
+    const channel = createWhatsAppChannel({
+      sessionSecret: "test-session-secret-value",
+      loadBaileys: async () => fakeBaileysModule({ registered: true, sockets }),
+      schedule: () => undefined,
+      now: () => currentTime,
+      heartbeatMs: 5,
+      logger,
+    });
+    const { deps } = testDeps();
+
+    await channel.start(deps);
+    await flush();
+
+    // Still well within the bounded interval - a session that is merely
+    // connecting (or briefly reconnecting) must not read as an outage yet.
+    currentTime = 1_000;
+    await flush(30);
+    expect(errors).toHaveLength(0);
+  });
+
+  test("without onUnhealthy configured, a session stuck unhealthy gets a bounded, repeating error log", async () => {
+    const sockets: FakeSocket[] = [];
+    let currentTime = 0;
+    const errors: unknown[] = [];
+    const logger: Logger = {
+      debug: () => undefined,
+      info: () => undefined,
+      warn: () => undefined,
+      error: (message: unknown) => errors.push(message),
+    };
+    const channel = createWhatsAppChannel({
+      sessionSecret: "test-session-secret-value",
+      loadBaileys: async () => fakeBaileysModule({ registered: true, sockets }),
+      schedule: () => undefined,
+      now: () => currentTime,
+      heartbeatMs: 5,
+      logger,
+    });
+    const { deps } = testDeps();
+
+    await channel.start(deps);
+    await flush();
+    expect(errors).toHaveLength(0);
+
+    // Past the bounded interval, still never connected - first log fires.
+    currentTime = 6 * 60 * 1000;
+    await flush(30);
+    const firstCount = errors.length;
+    expect(firstCount).toBeGreaterThan(0);
+    expect(String(errors[0])).toMatch(/unhealthy/);
+
+    // Immediately after - no repeat yet.
+    currentTime += 1_000;
+    await flush(30);
+    expect(errors.length).toBe(firstCount);
+
+    // A full interval later - logs again.
+    currentTime += 6 * 60 * 1000;
+    await flush(30);
+    expect(errors.length).toBeGreaterThan(firstCount);
+  });
+
+  test("watchdog treats waiting_for_lease as unhealthy too - a lease held elsewhere still trips it", async () => {
+    let currentTime = 0;
+    const onUnhealthy = mock(() => undefined);
+    // Another instance already holds this session's lease, so every acquire
+    // attempt this channel makes is denied and it stays in waiting_for_lease.
+    const leaseStore = fakeLeaseStore();
+    await leaseStore.tryAcquire("default", "other-instance", Date.now(), 100_000);
+    const channel = createWhatsAppChannel({
+      sessionSecret: "test-session-secret-value",
+      loadBaileys: async () => fakeBaileysModule({ registered: true, sockets: [] }),
+      schedule: () => undefined,
+      leaseStore,
+      authStore: fakeAuthKV(),
+      now: () => currentTime,
+      heartbeatMs: 5,
+      watchdog: { unhealthyAfterMs: 1_000, onUnhealthy },
+    });
+    const { deps } = testDeps();
+    (deps as { db: unknown }).db = undefined;
+
+    await channel.start(deps);
+    await flush();
+    expect(channel.getStatus()[0]?.state).toBe("waiting_for_lease");
+
+    currentTime = 1_500;
+    await flush(30);
+    expect(onUnhealthy).toHaveBeenCalledTimes(1);
+  });
+});

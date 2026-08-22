@@ -497,6 +497,75 @@ just get logged out again on a tight loop, the exact behaviour the backoff
 exists to avoid. That session's connection loop exits for good; re-pair it
 with `wa-pair` and restart (or redeploy) the server to pick it back up.
 
+## Connection health
+
+A dead Baileys socket is invisible from outside: HTTP still serves 200, the
+container still looks "up", and nothing short of grepping logs at exactly the
+right moment reveals a session that stopped receiving messages hours ago.
+`createWhatsAppChannel`'s return value (`WhatsAppChannel`, a `Channel` plus
+one extra method) exposes each session's state directly, so a host can wire
+a real health check instead:
+
+```ts
+import type { WaSessionStatus, WhatsAppChannel } from "@diegoaltoworks/chatter/whatsapp";
+
+const whatsapp: WhatsAppChannel = createWhatsAppChannel({ ... });
+
+whatsapp.getStatus();
+// [{ sessionId: "default", state: "connected", since: 1755850000000 }]
+```
+
+`state` is one of `"connected"`, `"connecting"`, `"waiting_for_lease"` (not
+currently holding this session's [deploy lease](#deploy-lease), whether
+another instance holds it or renewing it is failing) or `"disconnected"`
+(closed, logged out, or unpaired). `since` is when it last changed state;
+`lastError` is the most recent failure description, cleared once the session
+reconnects.
+
+A Cloud Run liveness probe (or any uptime check) can turn that into a real
+signal instead of trusting that the process being alive means the session is.
+Use a path other than `/healthz` - `createServer` already registers that one
+for its own always-200 liveness check - and only fail on `"disconnected"`:
+`"connecting"` and `"waiting_for_lease"` are ordinary parts of a reconnect or
+a brief multi-instance deploy overlap, not signs the session is down.
+
+```ts
+app.get("/healthz/whatsapp", (c) => {
+  const down = whatsapp.getStatus().filter((s) => s.state === "disconnected");
+  if (down.length > 0) return c.json({ status: "unhealthy", sessions: down }, 503);
+  return c.json({ status: "ok" });
+});
+```
+
+Escalation past a health check is opt-in via `config.watchdog`:
+
+```ts
+const whatsapp = createWhatsAppChannel({
+  sessionSecret: process.env.WA_SESSION_SECRET as string,
+  watchdog: {
+    unhealthyAfterMs: 5 * 60 * 1000,
+    onUnhealthy: (status) => {
+      // Alert, or exit so the platform restarts the container - turning a
+      // silent multi-hour outage into a brief one.
+      process.exit(1);
+    },
+  },
+});
+```
+
+`onUnhealthy` fires once a session has been anything but `"connected"` for at
+least `unhealthyAfterMs`, not again until it reconnects and goes unhealthy a
+second time - checked on the same cadence as the lease heartbeat
+(`config.heartbeatMs`), so `unhealthyAfterMs` below that is rounded up to it.
+That "anything but connected" includes `waiting_for_lease`, so pick
+`unhealthyAfterMs` well above your expected multi-instance deploy overlap -
+otherwise an instance that is correctly waiting its turn for the lease looks
+identical to one that's stuck, and `onUnhealthy: process.exit` would restart
+it on a loop. Leaving `watchdog` unset does not mean silence: an unconfigured
+host still gets a bounded, repeating error-level log line while a session
+stays unhealthy, so a session stuck down is always visible in logs even with
+no extra wiring.
+
 ## Sending without a transport
 
 Each connected session registers a sender into the
