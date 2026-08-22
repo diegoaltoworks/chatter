@@ -36,10 +36,14 @@ export {
   reconnectDelayMs,
   senderNameFor,
   shutdownWaSessions,
+  type WaConnectionState,
   type WaSessionHandle,
+  type WaSessionStatus,
+  type WhatsAppChannel,
   type WhatsAppChannelConfig,
   type WhatsAppMediaPayload,
   type WhatsAppMessageEvent,
+  type WhatsAppWatchdogConfig,
 } from "./channel";
 export { decrypt, encrypt } from "./crypto";
 export {

@@ -36,6 +36,10 @@ import {
 
 const RECONNECT_DELAY_MS = 5_000;
 const RECONNECT_MAX_DELAY_MS = 10 * 60 * 1000;
+/** Bounds the default "still unhealthy" log to one line per session per
+ * window, however long a session stays down - a silent 15h outage should
+ * leave a grep-able trail, not a flood. */
+const UNHEALTHY_LOG_INTERVAL_MS = 5 * 60 * 1000;
 
 /** Exponential backoff: 5s, 10s, 20s ... capped at 10 minutes. Hammering
  * WhatsApp every few seconds during an outage or ban aggravates ban scoring. */
@@ -43,10 +47,51 @@ export function reconnectDelayMs(failures: number): number {
   return exponentialBackoffMs(RECONNECT_DELAY_MS, RECONNECT_MAX_DELAY_MS, failures);
 }
 
+/** Baileys rejects with Boom objects; keep whatever the payload says rather than `undefined`. */
+function describeError(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}
+
 export interface WhatsAppMessageEvent {
   sessionId: string;
   sock: WASocket;
   message: WAMessage;
+}
+
+/**
+ * A session's connection state, derived from the same `connection.update`
+ * and lease transitions the channel already reacts to - not a new event
+ * source. `connecting` covers both the first connect after acquiring the
+ * lease and every reconnect attempt; `waiting_for_lease` covers not
+ * currently holding this session's lease, whether another instance holds it
+ * or acquiring/renewing it is failing.
+ */
+export type WaConnectionState = "connected" | "connecting" | "waiting_for_lease" | "disconnected";
+
+export interface WaSessionStatus {
+  sessionId: string;
+  state: WaConnectionState;
+  /** `Date.now()`-style timestamp of the last state transition (not of the last read). */
+  since: number;
+  /** The most recent failure description; cleared once the session reconnects. */
+  lastError?: string;
+}
+
+/**
+ * Optional liveness escalation: `onUnhealthy` fires once a session has been
+ * anything but `connected` for at least `unhealthyAfterMs`, and rearms the
+ * moment it reconnects. That includes `waiting_for_lease` - legitimate
+ * during a brief multi-instance deploy overlap, so size `unhealthyAfterMs`
+ * comfortably above how long that overlap is expected to last, or an
+ * instance that never wins the lease (a stuck rollout) will trip the
+ * watchdog repeatedly. Off by default - an unconfigured host still gets a
+ * bounded, grep-able error log while unhealthy (see `createWhatsAppChannel`'s
+ * status checker), just no callback. A host can use `onUnhealthy` to alert,
+ * or to `process.exit` so the platform restarts the container.
+ */
+export interface WhatsAppWatchdogConfig {
+  unhealthyAfterMs: number;
+  onUnhealthy?: (status: WaSessionStatus) => void;
 }
 
 export interface WhatsAppChannelConfig {
@@ -79,6 +124,8 @@ export interface WhatsAppChannelConfig {
   leaseStore?: WaLeaseStore;
   /** Baileys auth-state persistence, encrypted above this seam. Defaults to a `wa_auth` table in `deps.db`; inject your own to run this channel without a libsql database. */
   authStore?: WaAuthKV;
+  /** Liveness escalation for a session stuck unhealthy. Off by default (see {@link WhatsAppWatchdogConfig}). */
+  watchdog?: WhatsAppWatchdogConfig;
 }
 
 /** A live, leased session: what `stop()` (or losing the lease) must tear down. */
@@ -158,6 +205,8 @@ export interface LeaseGatedConnectDeps {
    * no live socket and nothing pending never recovers on its own.
    */
   onConnectFailed?: (sessionId: string, error: unknown) => void;
+  /** Reports a connection-state transition, for the channel's status/watchdog seam. Optional - direct callers of `acquireSessionLease` in tests don't need it. */
+  onStatusChange?: (sessionId: string, state: WaConnectionState, lastError?: string) => void;
 }
 
 /**
@@ -188,6 +237,8 @@ export async function acquireSessionLease(
 
   if (isStopped()) return;
 
+  deps.onStatusChange?.(sessionId, "waiting_for_lease");
+
   const retry = () => {
     schedule(
       () =>
@@ -203,6 +254,7 @@ export async function acquireSessionLease(
     acquired = await leaseStore.tryAcquire(sessionId, instanceId, now(), staleMs);
   } catch (error) {
     logger.warn(`WhatsApp[${sessionId}]: lease acquire failed, retrying:`, error);
+    deps.onStatusChange?.(sessionId, "waiting_for_lease", describeError(error));
     retry();
     return;
   }
@@ -245,6 +297,11 @@ export async function acquireSessionLease(
       logger.error(
         `WhatsApp[${sessionId}]: lease heartbeats have been failing for ${failingForMs}ms, treating the lease as lost`,
       );
+      deps.onStatusChange?.(
+        sessionId,
+        "disconnected",
+        `lease heartbeats failing for ${failingForMs}ms`,
+      );
       demoteSelf();
       return;
     }
@@ -254,6 +311,7 @@ export async function acquireSessionLease(
         if (isStopped()) return;
         if (!stillHeld) {
           logger.error(`WhatsApp[${sessionId}]: lost the lease to another instance, disconnecting`);
+          deps.onStatusChange?.(sessionId, "disconnected", "lost the lease to another instance");
           demoteSelf();
           return;
         }
@@ -316,7 +374,13 @@ export function normalizeWaMediaPayload(payload: unknown): WhatsAppMediaPayload 
   return media;
 }
 
-export function createWhatsAppChannel(config: WhatsAppChannelConfig): Channel {
+/** `createWhatsAppChannel`'s return type: the {@link Channel} SPI plus a way to poll per-session connection health without log-scraping. */
+export interface WhatsAppChannel extends Channel {
+  /** Per-session status, in the order `sessionIds` was configured. */
+  getStatus(): WaSessionStatus[];
+}
+
+export function createWhatsAppChannel(config: WhatsAppChannelConfig): WhatsAppChannel {
   assertStrongSecret(config.sessionSecret, "WhatsApp sessionSecret (e.g. WA_SESSION_SECRET)");
   const channelName = config.name ?? "whatsapp";
   const sessionIds =
@@ -334,6 +398,36 @@ export function createWhatsAppChannel(config: WhatsAppChannelConfig): Channel {
   const failureCounts = new Map<string, number>();
   const registeredSenderNames = new Map<string, string>();
   let senders: { unregister(name: string): void } | undefined;
+
+  const statuses = new Map<string, WaSessionStatus>(
+    sessionIds.map((id) => [id, { sessionId: id, state: "waiting_for_lease", since: now() }]),
+  );
+  // Tracks when each session's CURRENT unhealthy streak began - not the same
+  // as `statuses`' own `since`, which resets on every state change even
+  // between two unhealthy states (waiting_for_lease -> connecting, say).
+  // The watchdog and the bounded log both need the streak's start, or a
+  // session that keeps retrying without ever reconnecting would look
+  // freshly-unhealthy on every transition and never cross the threshold.
+  const unhealthySince = new Map<string, number>();
+  const watchdogFired = new Set<string>();
+  const lastUnhealthyLogAt = new Map<string, number>();
+  let healthCheckInterval: ReturnType<typeof setInterval> | undefined;
+
+  function setStatus(sessionId: string, state: WaConnectionState, lastError?: string): void {
+    const prev = statuses.get(sessionId);
+    const since = prev && prev.state === state ? prev.since : now();
+    const resolvedLastError =
+      lastError !== undefined ? lastError : state === "connected" ? undefined : prev?.lastError;
+    statuses.set(sessionId, { sessionId, state, since, lastError: resolvedLastError });
+
+    if (state === "connected") {
+      unhealthySince.delete(sessionId);
+      watchdogFired.delete(sessionId);
+      lastUnhealthyLogAt.delete(sessionId);
+    } else if (!unhealthySince.has(sessionId)) {
+      unhealthySince.set(sessionId, since);
+    }
+  }
 
   return {
     name: channelName,
@@ -383,6 +477,7 @@ export function createWhatsAppChannel(config: WhatsAppChannelConfig): Channel {
         schedule,
         logger: log,
         onConnectFailed: recoverFromFailedConnect,
+        onStatusChange: setStatus,
       };
 
       /**
@@ -428,6 +523,7 @@ export function createWhatsAppChannel(config: WhatsAppChannelConfig): Channel {
         const handle = claimSession(sessionId, sessions);
         if (!handle) return;
         const delay = nextRetryDelayMs(sessionId);
+        setStatus(sessionId, "disconnected", describeError(error));
         log.error(
           `WhatsApp[${sessionId}]: connect attempt failed, releasing the lease and retrying in ${Math.round(delay / 1000)}s:`,
           error,
@@ -463,6 +559,7 @@ export function createWhatsAppChannel(config: WhatsAppChannelConfig): Channel {
         // before its first connect() call, so this only ever screens out a
         // stale timer.
         if (stopped || !sessions.has(sessionId)) return;
+        setStatus(sessionId, "connecting");
 
         const baileys = await loadBaileys();
         const runtime: AuthStateRuntime = {
@@ -482,6 +579,7 @@ export function createWhatsAppChannel(config: WhatsAppChannelConfig): Channel {
           log.warn(
             `WhatsApp[${sessionId}]: no paired session found — pair it first (see docs/channels.md). Re-checking in 60s.`,
           );
+          setStatus(sessionId, "disconnected", "no paired session - pair it first");
           schedule(() => attemptConnect(sessionId), 60_000);
           return;
         }
@@ -521,6 +619,7 @@ export function createWhatsAppChannel(config: WhatsAppChannelConfig): Channel {
           const { connection, lastDisconnect } = update;
           if (connection === "open") {
             failureCounts.set(sessionId, 0);
+            setStatus(sessionId, "connected");
             log.info(`WhatsApp[${sessionId}]: connected as ${sock.user?.id ?? "unknown"}`);
             const senderName = senderNameFor(channelName, sessionId);
             const sender: ChannelSender = {
@@ -552,6 +651,7 @@ export function createWhatsAppChannel(config: WhatsAppChannelConfig): Channel {
             const statusCode = (lastDisconnect?.error as { output?: { statusCode?: number } })
               ?.output?.statusCode;
             if (statusCode === baileys.DisconnectReason.loggedOut) {
+              setStatus(sessionId, "disconnected", "session logged out - re-pair required");
               log.error(
                 `WhatsApp[${sessionId}]: session logged out — re-pair to reconnect (see docs/channels.md).`,
               );
@@ -566,6 +666,7 @@ export function createWhatsAppChannel(config: WhatsAppChannelConfig): Channel {
             // holds the lease for.
             if (!stopped && sessions.has(sessionId)) {
               const delay = nextRetryDelayMs(sessionId);
+              setStatus(sessionId, "disconnected", `connection closed (${statusCode ?? "?"})`);
               log.warn(
                 `WhatsApp[${sessionId}]: connection closed (${statusCode ?? "?"}), reconnecting in ${Math.round(delay / 1000)}s...`,
               );
@@ -591,6 +692,53 @@ export function createWhatsAppChannel(config: WhatsAppChannelConfig): Channel {
         }
       }
 
+      /**
+       * Runs on the same cadence as the lease heartbeat, independent of
+       * whether any session currently holds its lease - `waiting_for_lease`
+       * has to be observable too, not just a dead socket. `config.watchdog`
+       * fires its callback once per unhealthy streak; when no `onUnhealthy`
+       * is configured this instead keeps a bounded error log going, so an
+       * unconfigured host still gets a grep-able signal instead of silence.
+       */
+      function checkHealth(): void {
+        const nowMs = now();
+        for (const sessionId of sessionIds) {
+          const unhealthySinceMs = unhealthySince.get(sessionId);
+          if (unhealthySinceMs === undefined) continue;
+          const status = statuses.get(sessionId);
+          if (!status) continue;
+
+          const watchdog = config.watchdog;
+          if (
+            watchdog &&
+            nowMs - unhealthySinceMs >= watchdog.unhealthyAfterMs &&
+            !watchdogFired.has(sessionId)
+          ) {
+            watchdogFired.add(sessionId);
+            watchdog.onUnhealthy?.(status);
+          }
+
+          if (!watchdog?.onUnhealthy) {
+            // Defaults to the streak's own start, not 0/-Infinity: a routine
+            // reconnect that clears within one interval should never log at
+            // error level at all, only a session that stays down.
+            const lastLogged = lastUnhealthyLogAt.get(sessionId) ?? unhealthySinceMs;
+            if (nowMs - lastLogged >= UNHEALTHY_LOG_INTERVAL_MS) {
+              lastUnhealthyLogAt.set(sessionId, nowMs);
+              log.error(
+                `WhatsApp[${sessionId}]: unhealthy (${status.state}) since ${new Date(status.since).toISOString()}` +
+                  (status.lastError ? ` - ${status.lastError}` : ""),
+              );
+            }
+          }
+        }
+      }
+
+      healthCheckInterval = setInterval(checkHealth, heartbeatMs);
+      if (typeof healthCheckInterval === "object" && "unref" in healthCheckInterval) {
+        healthCheckInterval.unref();
+      }
+
       for (const sessionId of sessionIds) {
         void acquireSessionLease(sessionId, leaseDeps).catch((error) =>
           log.error(`WhatsApp[${sessionId}]: failed to start:`, error),
@@ -599,6 +747,11 @@ export function createWhatsAppChannel(config: WhatsAppChannelConfig): Channel {
     },
     async stop() {
       stopped = true;
+      if (healthCheckInterval) clearInterval(healthCheckInterval);
+      // Otherwise getStatus() keeps reporting whatever state a session was
+      // in the instant before teardown - "connected" while its socket is
+      // being ended - for as long as the process stays up after stop().
+      for (const sessionId of sessionIds) setStatus(sessionId, "disconnected", "channel stopped");
       // The "close" handler unregisters its own session's sender once the
       // socket actually closes, but that fires asynchronously — unregister
       // eagerly here too so a caller sending immediately after `stop()`
@@ -608,6 +761,11 @@ export function createWhatsAppChannel(config: WhatsAppChannelConfig): Channel {
       }
       registeredSenderNames.clear();
       await shutdownWaSessions(sessions);
+    },
+    getStatus(): WaSessionStatus[] {
+      return sessionIds.map(
+        (id) => statuses.get(id) ?? { sessionId: id, state: "waiting_for_lease", since: now() },
+      );
     },
   };
 }
