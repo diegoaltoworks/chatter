@@ -207,7 +207,7 @@ const currentVersion: string = JSON.parse(readFileSync(join(root, "package.json"
  * predates the mechanical check and may only shrink as files get touched
  * and cleaned up - lower it whenever a change removes some, never raise it.
  */
-const EM_DASH_BASELINE = 490;
+const EM_DASH_BASELINE = 488;
 
 describe("this repo's tracked source and docs", () => {
   test("there are files to check", () => {

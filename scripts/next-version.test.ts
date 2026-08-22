@@ -45,6 +45,12 @@ describe("bumpFromCommits", () => {
     expect(bumpFromCommits(commits, "0.48.0")).toBe("minor");
   });
 
+  test("exactly at the 1.0 boundary, a `!` breaking marker bumps major", () => {
+    expect(bumpFromCommits([{ subject: "feat!: drop the old seam", body: "" }], "1.0.0")).toBe(
+      "major",
+    );
+  });
+
   test("at or past 1.0, a `!` breaking marker bumps major", () => {
     expect(bumpFromCommits([commit("feat!: drop the old config shape")], "1.2.3")).toBe("major");
     expect(bumpFromCommits([commit("fix(api)!: change the response shape")], "1.2.3")).toBe(
