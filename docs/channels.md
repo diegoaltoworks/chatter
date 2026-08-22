@@ -480,7 +480,12 @@ This applies to an established connection; pairing has its own, much tighter
 policy (above), because a human is holding a phone whose link attempt times
 out. A closed connection reconnects with exponential backoff (5s, 10s, 20s,
 ... capped at 10 minutes) - hammering WhatsApp during an outage or a ban
-aggravates ban scoring. A session that WhatsApp explicitly logs out does
+aggravates ban scoring. A connection attempt that fails outright counts on
+that same backoff: if it throws before there is a socket to reconnect from
+(a database blip while loading auth state, for instance) the session
+releases its [deploy lease](#deploy-lease) and goes back to waiting for it,
+rather than sitting on a lease it is no longer using. A session that
+WhatsApp explicitly logs out does
 **not** reconnect - retrying with the same, now-revoked credentials would
 just get logged out again on a tight loop, the exact behaviour the backoff
 exists to avoid. That session's connection loop exits for good; re-pair it

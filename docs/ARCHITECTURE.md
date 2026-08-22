@@ -89,6 +89,24 @@ way" reference they point back to.
    `src/channels/whatsapp/channel.test.ts`, `src/core/buildLock.test.ts`. See
    [patterns/adding-a-store.md](./patterns/adding-a-store.md).
 
+   Holding such a lease also obliges the holder to keep using it: this
+   channel may never simultaneously hold a session's lease, have no live
+   socket for it, and have no retry scheduled. That combination is invisible
+   from the outside (the process still passes health checks and still renews
+   the lease) and never resolves on its own, so every failed connect attempt
+   releases the session and re-enters the same lease-gated retry loop, on the
+   same backoff a closed connection uses. This matters most for an attempt
+   that throws before Baileys returns a socket at all - a database blip while
+   loading auth state, say - because there is then no socket to fire the
+   "close" event the reconnect path would otherwise recover from. Exactly one
+   path may recover a session: giving one up is a synchronous claim, so a
+   heartbeat that lost the lease and a connect that threw in the same tick
+   cannot both start a retry chain and end up with two sockets on one number.
+   Enforced: `src/channels/whatsapp/channel.test.ts` ("a reconnect whose
+   connect() throws re-enters the retry loop instead of dead-ending", "a
+   failed connect and a heartbeat that lost the lease start one retry chain,
+   not two").
+
    The same rule covers work that is destructive rather than metered:
    `VectorStore.build()` deletes every chunk its own `knowledgeDir` did not
    produce, so it runs under a single-writer lock (`chatter_build_lock`) held

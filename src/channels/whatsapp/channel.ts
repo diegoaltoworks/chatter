@@ -105,14 +105,35 @@ export async function shutdownWaSessions(sessions: Map<string, WaSessionHandle>)
   );
 }
 
+/**
+ * Claim a session for teardown, returning its handle - or `undefined` if
+ * another path already claimed it. The lookup and the delete are synchronous,
+ * so of two paths racing to give up the same session (a heartbeat that found
+ * the lease taken over, a connect attempt that threw) exactly one wins. Only
+ * the winner may schedule the next attempt: two winners would mean two retry
+ * chains, both re-acquiring under this instance's own id (which the lease
+ * store grants, being the same holder), and eventually two sockets for one
+ * WhatsApp number.
+ */
+function claimSession(
+  sessionId: string,
+  sessions: Map<string, WaSessionHandle>,
+): WaSessionHandle | undefined {
+  const handle = sessions.get(sessionId);
+  if (!handle) return undefined;
+  sessions.delete(sessionId);
+  return handle;
+}
+
+/** Gives up a session, resolving to whether this call was the one that claimed it. */
 async function loseSession(
   sessionId: string,
   sessions: Map<string, WaSessionHandle>,
-): Promise<void> {
-  const handle = sessions.get(sessionId);
-  if (!handle) return;
-  sessions.delete(sessionId);
+): Promise<boolean> {
+  const handle = claimSession(sessionId, sessions);
+  if (!handle) return false;
   await shutdownWaSessions(new Map([[sessionId, handle]]));
+  return true;
 }
 
 export interface LeaseGatedConnectDeps {
@@ -128,6 +149,15 @@ export interface LeaseGatedConnectDeps {
   waitMs?: number;
   schedule?: (fn: () => void, ms: number) => void;
   logger?: Logger;
+  /**
+   * Recovery for a `connect` that threw, replacing the default (release the
+   * session, re-check after `waitMs`). The channel injects one so a thrown
+   * connect backs off on the same failure counter a closed connection uses
+   * instead of re-attempting at a flat interval. Whatever it does, it must
+   * end with another attempt scheduled: a session whose lease is held with
+   * no live socket and nothing pending never recovers on its own.
+   */
+  onConnectFailed?: (sessionId: string, error: unknown) => void;
 }
 
 /**
@@ -138,6 +168,11 @@ export interface LeaseGatedConnectDeps {
  * heartbeat ever finds the lease gone (this instance went stale and another
  * took over), the session is torn down and this re-enters the same
  * wait-and-retry loop rather than staying connected alongside the new holder.
+ *
+ * Every failed connect attempt lands back here too, whether it threw on its
+ * first try or on a reconnect: this loop is the only way a session recovers,
+ * so an attempt that fails without leaving a socket behind (no socket, no
+ * future "close" event) must re-enter it rather than stop at a log line.
  */
 export async function acquireSessionLease(
   sessionId: string,
@@ -183,7 +218,15 @@ export async function acquireSessionLease(
       .then((stillHeld) => {
         if (stillHeld || isStopped()) return;
         logger.error(`WhatsApp[${sessionId}]: lost the lease to another instance — disconnecting`);
-        void loseSession(sessionId, sessions).then(retry);
+        // Only re-check if this call is what actually gave the session up: a
+        // connect attempt that threw at the same moment already owns the
+        // recovery, and a second retry chain for one session is exactly what
+        // the lease exists to prevent. Teardown finishes before the re-check
+        // is scheduled because the socket here is a live one - it has to be
+        // off the wire before anything reconnects.
+        void loseSession(sessionId, sessions).then((lost) => {
+          if (lost) retry();
+        });
       })
       .catch((error) => logger.warn(`WhatsApp[${sessionId}]: lease heartbeat failed:`, error));
   }, heartbeatMs);
@@ -198,6 +241,10 @@ export async function acquireSessionLease(
   try {
     await connect(sessionId);
   } catch (error) {
+    if (deps.onConnectFailed) {
+      deps.onConnectFailed(sessionId, error);
+      return;
+    }
     logger.error(`WhatsApp[${sessionId}]: connect failed right after acquiring the lease:`, error);
     await loseSession(sessionId, sessions);
     retry();
@@ -287,6 +334,89 @@ export function createWhatsAppChannel(config: WhatsAppChannelConfig): Channel {
       // already reported this channel as started.
       await loadBaileys();
 
+      const leaseDeps: LeaseGatedConnectDeps = {
+        leaseStore,
+        instanceId,
+        sessions,
+        isStopped: () => stopped,
+        connect,
+        now,
+        staleMs,
+        heartbeatMs,
+        waitMs,
+        schedule,
+        logger: log,
+        onConnectFailed: recoverFromFailedConnect,
+      };
+
+      /**
+       * The next backoff delay for this session, consuming one failure. Every
+       * kind of failed attempt shares this counter - a closed connection, and
+       * a connect that threw wherever it was scheduled from - so a database
+       * outage that makes connecting throw backs off like any other failure
+       * instead of retrying forever at the base delay. Only a connection that
+       * opens resets it.
+       */
+      function nextRetryDelayMs(sessionId: string): number {
+        const failures = failureCounts.get(sessionId) ?? 0;
+        failureCounts.set(sessionId, failures + 1);
+        return reconnectDelayMs(failures);
+      }
+
+      /** Run a connect attempt, routing a rejection into the shared recovery. */
+      function attemptConnect(sessionId: string): void {
+        void connect(sessionId).catch((error) => recoverFromFailedConnect(sessionId, error));
+      }
+
+      /**
+       * The single recovery path for a connect attempt that threw, wherever
+       * it was scheduled from: the first attempt after acquiring the lease, a
+       * reconnect after a close, or the unpaired re-check. Baileys registers
+       * the reconnect loop on the socket it returns, so an attempt that
+       * throws before that leaves no socket and therefore no future "close"
+       * event to retry from. Dead-ending here would leave the session holding
+       * its lease with nothing connected and nothing scheduled: an instance
+       * that looks healthy from the outside and never serves another message.
+       * So this releases the session and re-enters the lease-gated retry loop,
+       * the same recovery the initial-connect failure path takes.
+       */
+      function recoverFromFailedConnect(sessionId: string, error: unknown): void {
+        // Same guard the close handler applies: a session this instance gave
+        // up on purpose must not be revived by a rejection landing later.
+        if (stopped) return;
+        // Claim it before anything else, so that a heartbeat finding the
+        // lease taken over in the same tick recovers this session or this
+        // does, never both - two retry chains for one session would both
+        // re-acquire under this instance's own id and end up with two sockets
+        // on one WhatsApp number.
+        const handle = claimSession(sessionId, sessions);
+        if (!handle) return;
+        const delay = nextRetryDelayMs(sessionId);
+        log.error(
+          `WhatsApp[${sessionId}]: connect attempt failed, releasing the lease and retrying in ${Math.round(delay / 1000)}s:`,
+          error,
+        );
+        // Scheduled before the teardown rather than chained onto it: the
+        // socket here is already dead (this attempt threw, or its predecessor
+        // closed), so nothing is on the wire for a reconnect to race, while a
+        // release that never settles - a stalled database connection, the very
+        // failure being recovered from - would otherwise leave the session
+        // with no socket and nothing scheduled all over again.
+        schedule(
+          () =>
+            void acquireSessionLease(sessionId, leaseDeps).catch((retryError) =>
+              log.error(`WhatsApp[${sessionId}]: lease re-check failed:`, retryError),
+            ),
+          delay,
+        );
+        void shutdownWaSessions(new Map([[sessionId, handle]])).catch((teardownError) =>
+          log.warn(
+            `WhatsApp[${sessionId}]: teardown after a failed connect failed:`,
+            teardownError,
+          ),
+        );
+      }
+
       async function connect(sessionId: string): Promise<void> {
         // A retry/reconnect timer scheduled before stop() (or before this
         // session lost its lease to another instance) can still fire during
@@ -316,7 +446,7 @@ export function createWhatsAppChannel(config: WhatsAppChannelConfig): Channel {
           log.warn(
             `WhatsApp[${sessionId}]: no paired session found — pair it first (see docs/channels.md). Re-checking in 60s.`,
           );
-          schedule(() => void connect(sessionId).catch(() => undefined), 60_000);
+          schedule(() => attemptConnect(sessionId), 60_000);
           return;
         }
 
@@ -399,18 +529,14 @@ export function createWhatsAppChannel(config: WhatsAppChannelConfig): Channel {
             // open a fresh socket for a session this instance no longer
             // holds the lease for.
             if (!stopped && sessions.has(sessionId)) {
-              const delay = reconnectDelayMs(failureCounts.get(sessionId) ?? 0);
-              failureCounts.set(sessionId, (failureCounts.get(sessionId) ?? 0) + 1);
+              const delay = nextRetryDelayMs(sessionId);
               log.warn(
                 `WhatsApp[${sessionId}]: connection closed (${statusCode ?? "?"}), reconnecting in ${Math.round(delay / 1000)}s...`,
               );
-              schedule(
-                () =>
-                  void connect(sessionId).catch((error) =>
-                    log.error(`WhatsApp[${sessionId}]: reconnect failed:`, error),
-                  ),
-                delay,
-              );
+              // attemptConnect, not a bare catch-and-log: a reconnect that
+              // throws has no socket to fire another "close" from, so only
+              // the shared recovery keeps the retry chain alive.
+              schedule(() => attemptConnect(sessionId), delay);
             }
           }
         });
@@ -430,19 +556,9 @@ export function createWhatsAppChannel(config: WhatsAppChannelConfig): Channel {
       }
 
       for (const sessionId of sessionIds) {
-        void acquireSessionLease(sessionId, {
-          leaseStore,
-          instanceId,
-          sessions,
-          isStopped: () => stopped,
-          connect,
-          now,
-          staleMs,
-          heartbeatMs,
-          waitMs,
-          schedule,
-          logger: log,
-        }).catch((error) => log.error(`WhatsApp[${sessionId}]: failed to start:`, error));
+        void acquireSessionLease(sessionId, leaseDeps).catch((error) =>
+          log.error(`WhatsApp[${sessionId}]: failed to start:`, error),
+        );
       }
     },
     async stop() {
