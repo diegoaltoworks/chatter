@@ -41,7 +41,7 @@ function fakeAuthKV(): WaAuthKV {
 }
 
 /** An in-memory `WaLeaseStore` for tests that inject `config.leaseStore`. */
-function fakeLeaseStore(): WaLeaseStore {
+function fakeLeaseStore(): WaLeaseStore & { isHeld: (sessionId: string) => boolean } {
   const held = new Map<string, string>();
   return {
     async tryAcquire(sessionId, instanceId) {
@@ -52,6 +52,71 @@ function fakeLeaseStore(): WaLeaseStore {
     },
     async release(sessionId, instanceId) {
       if (held.get(sessionId) === instanceId) held.delete(sessionId);
+    },
+    isHeld: (sessionId) => held.has(sessionId),
+  };
+}
+
+/**
+ * A `WaLeaseStore` whose acquires can be left in flight, for driving the
+ * ordering where a heartbeat's renewal is still pending when a connect
+ * attempt fails.
+ */
+function parkableLeaseStore(): WaLeaseStore & {
+  parkAcquires: () => void;
+  resolveParkedAcquires: (stillHeld: boolean) => void;
+} {
+  let parking = false;
+  let parked: ((stillHeld: boolean) => void)[] = [];
+  return {
+    tryAcquire() {
+      if (parking) return new Promise<boolean>((resolve) => parked.push(resolve));
+      return Promise.resolve(true);
+    },
+    async release() {},
+    parkAcquires: () => {
+      parking = true;
+    },
+    resolveParkedAcquires: (stillHeld) => {
+      const waiting = parked;
+      parked = [];
+      parking = false;
+      for (const resolve of waiting) resolve(stillHeld);
+    },
+  };
+}
+
+/**
+ * A `WaAuthKV` whose reads can be switched to reject, standing in for the
+ * database blip that makes a connect attempt throw while loading auth state.
+ */
+function flakyAuthKV(): WaAuthKV & {
+  failReads: (failing: boolean) => void;
+  parkReads: () => void;
+  failParkedReads: () => void;
+} {
+  const inner = fakeAuthKV();
+  let failing = false;
+  let parking = false;
+  let parked: ((error: Error) => void)[] = [];
+  return {
+    ...inner,
+    read(id) {
+      if (parking) return new Promise((_resolve, reject) => parked.push(reject));
+      if (failing) return Promise.reject(new Error("ECONNRESET reading auth state"));
+      return inner.read(id);
+    },
+    failReads: (value) => {
+      failing = value;
+    },
+    /** Leave the next reads pending, so a connect attempt sits in flight. */
+    parkReads: () => {
+      parking = true;
+    },
+    failParkedReads: () => {
+      const waiting = parked;
+      parked = [];
+      for (const reject of waiting) reject(new Error("ECONNRESET reading auth state"));
     },
   };
 }
@@ -232,6 +297,35 @@ describe("acquireSessionLease", () => {
     expect(release).toHaveBeenCalledWith("default", "i1");
     expect(sessions.has("default")).toBe(false);
     expect(schedule).toHaveBeenCalledTimes(1);
+  });
+
+  test("an injected onConnectFailed owns the recovery for a thrown connect", async () => {
+    const failure = new Error("auth state unavailable");
+    const connect = mock(async () => {
+      throw failure;
+    });
+    const release = mock(async () => undefined);
+    const schedule = mock(() => undefined);
+    const onConnectFailed = mock(() => undefined);
+    const sessions = new Map<string, WaSessionHandle>();
+
+    await acquireSessionLease("default", {
+      leaseStore: { tryAcquire: mock(async () => true), release },
+      instanceId: "i1",
+      sessions,
+      isStopped: () => false,
+      connect,
+      schedule,
+      onConnectFailed,
+    });
+
+    expect(onConnectFailed).toHaveBeenCalledWith("default", failure);
+    // The handler takes over the entire recovery - releasing the session and
+    // scheduling the next attempt on its own backoff - so the default path
+    // must not also fire and start a second, competing retry chain.
+    expect(release).not.toHaveBeenCalled();
+    expect(schedule).not.toHaveBeenCalled();
+    sessions.get("default")?.stopHeartbeat();
   });
 
   // The module's core safety property: if another instance ever takes the
@@ -761,6 +855,206 @@ describe("createWhatsAppChannel", () => {
     });
     expect(scheduled).toHaveLength(3);
     expect(scheduled[2]?.[1]).toBe(5_000);
+  });
+
+  // The failure mode this guards against in production: a routine close
+  // scheduled a reconnect, the reconnect threw while loading auth state
+  // (transient database error), and the retry chain ended there - lease
+  // still held, no socket, nothing scheduled, and no future "close" event to
+  // wake it. The instance kept answering health checks and renewing its
+  // lease while serving nothing, until a human restarted it.
+  test("a reconnect whose connect() throws re-enters the retry loop instead of dead-ending", async () => {
+    const sockets: FakeSocket[] = [];
+    const scheduled: [() => void, number][] = [];
+    const schedule = mock((fn: () => void, ms: number) => {
+      scheduled.push([fn, ms]);
+    });
+    const leaseStore = fakeLeaseStore();
+    const authStore = flakyAuthKV();
+    const channel = createWhatsAppChannel({
+      sessionSecret: "test-session-secret-value",
+      loadBaileys: async () => fakeBaileysModule({ registered: true, sockets }),
+      schedule,
+      leaseStore,
+      authStore,
+    });
+    const { deps } = testDeps();
+
+    await channel.start(deps);
+    await waitFor(async () => sockets.length === 1);
+    sockets[0]?.ev.emit("connection.update", { connection: "open" });
+    expect(leaseStore.isHeld("default")).toBe(true);
+
+    // The database goes away, then the connection drops: the scheduled
+    // reconnect rejects while loading auth state, leaving no socket behind
+    // and so no "close" event that could drive a further attempt.
+    authStore.failReads(true);
+    sockets[0]?.ev.emit("connection.update", {
+      connection: "close",
+      lastDisconnect: { error: { output: { statusCode: 428 } } },
+    });
+    expect(scheduled).toHaveLength(1);
+    expect(scheduled[0]?.[1]).toBe(5_000);
+    scheduled[0]?.[0]();
+
+    // Recovery, not a dead end - and none of the three zombie conditions
+    // holds: the lease is released, and another attempt is pending, with the
+    // thrown attempt counted on the same backoff as a closed connection.
+    await waitFor(async () => scheduled.length === 2);
+    expect(sockets).toHaveLength(1);
+    expect(leaseStore.isHeld("default")).toBe(false);
+    expect(scheduled[1]?.[1]).toBe(10_000);
+
+    // Still down: the next attempt re-acquires the lease, throws again, and
+    // keeps backing off rather than hot-looping at the base delay or
+    // stopping altogether.
+    scheduled[1]?.[0]();
+    await waitFor(async () => scheduled.length === 3);
+    expect(sockets).toHaveLength(1);
+    expect(leaseStore.isHeld("default")).toBe(false);
+    expect(scheduled[2]?.[1]).toBe(20_000);
+
+    // Database back: the same retry chain reconnects unaided.
+    authStore.failReads(false);
+    scheduled[2]?.[0]();
+    await waitFor(async () => sockets.length === 2);
+    expect(leaseStore.isHeld("default")).toBe(true);
+
+    await channel.stop?.();
+  });
+
+  test("a lease release that never settles still leaves the next attempt scheduled", async () => {
+    const sockets: FakeSocket[] = [];
+    const scheduled: [() => void, number][] = [];
+    const schedule = mock((fn: () => void, ms: number) => {
+      scheduled.push([fn, ms]);
+    });
+    const authStore = flakyAuthKV();
+    // The database is not rejecting, it is hanging - so the teardown after a
+    // failed connect never completes. Waiting on it before scheduling the
+    // next attempt would reproduce the zombie this whole path exists to
+    // prevent, from the same failure it is recovering from.
+    const leaseStore: WaLeaseStore = {
+      async tryAcquire() {
+        return true;
+      },
+      release: () => new Promise<void>(() => {}),
+    };
+    const channel = createWhatsAppChannel({
+      sessionSecret: "test-session-secret-value",
+      loadBaileys: async () => fakeBaileysModule({ registered: true, sockets }),
+      schedule,
+      leaseStore,
+      authStore,
+    });
+    const { deps } = testDeps();
+
+    await channel.start(deps);
+    await waitFor(async () => sockets.length === 1);
+    sockets[0]?.ev.emit("connection.update", { connection: "open" });
+
+    authStore.failReads(true);
+    sockets[0]?.ev.emit("connection.update", {
+      connection: "close",
+      lastDisconnect: { error: { output: { statusCode: 428 } } },
+    });
+    scheduled[0]?.[0]();
+
+    await waitFor(async () => scheduled.length === 2);
+    expect(scheduled[1]?.[1]).toBe(10_000);
+  });
+
+  test("a failed connect and a heartbeat that lost the lease start one retry chain, not two", async () => {
+    const sockets: FakeSocket[] = [];
+    const scheduled: [() => void, number][] = [];
+    const schedule = mock((fn: () => void, ms: number) => {
+      scheduled.push([fn, ms]);
+    });
+    const leaseStore = parkableLeaseStore();
+    const authStore = flakyAuthKV();
+    const channel = createWhatsAppChannel({
+      sessionSecret: "test-session-secret-value",
+      loadBaileys: async () => fakeBaileysModule({ registered: true, sockets }),
+      schedule,
+      leaseStore,
+      authStore,
+      heartbeatMs: 5,
+      waitMs: 30_000,
+    });
+    const { deps } = testDeps();
+
+    await channel.start(deps);
+    await waitFor(async () => sockets.length === 1);
+    sockets[0]?.ev.emit("connection.update", { connection: "open" });
+
+    // A heartbeat renewal is left in flight (a slow database is what makes
+    // this window more than theoretical) while the connection drops and the
+    // reconnect fails.
+    authStore.failReads(true);
+    leaseStore.parkAcquires();
+    await flush();
+    sockets[0]?.ev.emit("connection.update", {
+      connection: "close",
+      lastDisconnect: { error: { output: { statusCode: 428 } } },
+    });
+    scheduled[0]?.[0]();
+    await waitFor(async () => scheduled.length === 2);
+    expect(scheduled[1]?.[1]).toBe(10_000); // the failed connect's own recovery
+
+    // The parked renewal now comes back saying another instance holds the
+    // lease. The failed connect already gave the session up and owns the
+    // recovery, so this must not add a second chain: two chains re-acquire
+    // under one instance id (which the lease store grants, same holder) and
+    // end up running two sockets for one WhatsApp number.
+    leaseStore.resolveParkedAcquires(false);
+    await flush();
+
+    expect(scheduled).toHaveLength(2);
+    expect(sockets).toHaveLength(1);
+
+    await channel.stop?.();
+  });
+
+  test("a connect already in flight when stop() lands does not resurrect the session", async () => {
+    const sockets: FakeSocket[] = [];
+    const scheduled: [() => void, number][] = [];
+    const schedule = mock((fn: () => void, ms: number) => {
+      scheduled.push([fn, ms]);
+    });
+    const leaseStore = fakeLeaseStore();
+    const authStore = flakyAuthKV();
+    const channel = createWhatsAppChannel({
+      sessionSecret: "test-session-secret-value",
+      loadBaileys: async () => fakeBaileysModule({ registered: true, sockets }),
+      schedule,
+      leaseStore,
+      authStore,
+    });
+    const { deps } = testDeps();
+
+    await channel.start(deps);
+    await waitFor(async () => sockets.length === 1);
+    sockets[0]?.ev.emit("connection.update", { connection: "open" });
+
+    // Park the auth read so the reconnect is genuinely mid-flight - a
+    // rejection arriving before stop() would be screened out by connect()'s
+    // own entry guard and never reach the recovery path at all.
+    authStore.parkReads();
+    sockets[0]?.ev.emit("connection.update", {
+      connection: "close",
+      lastDisconnect: { error: { output: { statusCode: 428 } } },
+    });
+    scheduled[0]?.[0]();
+    await flush();
+
+    await channel.stop?.();
+    authStore.failParkedReads();
+    await flush();
+
+    // Recovery is for sessions this instance still wants: a deliberate
+    // teardown must not be handed a fresh retry chain by a late rejection.
+    expect(scheduled).toHaveLength(1);
+    expect(sockets).toHaveLength(1);
   });
 
   test("a pending reconnect timer that fires after this instance lost the session's lease does not open an orphan socket", async () => {

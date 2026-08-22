@@ -229,8 +229,8 @@ const REFERENCE_IMPLEMENTATION = /\breference implementation\b/i;
  * of what it forbids.
  */
 export const REFERENCE_IMPLEMENTATION_ALLOWLIST: ReadonlySet<string> = new Set([
-  "docs/ARCHITECTURE.md:110",
-  "docs/ARCHITECTURE.md:117",
+  "docs/ARCHITECTURE.md:128",
+  "docs/ARCHITECTURE.md:135",
 ]);
 
 /**
