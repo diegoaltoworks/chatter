@@ -447,6 +447,12 @@ connection. A revision that loses the race waits and re-checks rather than
 connecting; a revision that goes stale (crashed without a clean shutdown)
 frees its lease automatically once the stale window passes.
 
+The holder watches its own heartbeats too: if renewal calls stop confirming
+success (the database is unreachable, not just another instance winning the
+lease) for as long as the stale window, this instance treats the lease as
+lost and tears its own session down rather than risk a second live socket
+once another revision takes over the now-stale row.
+
 Wire the channel's `stop()` into your shutdown path (see
 [Server Setup's Shutdown section](./server.md#shutdown)) so the lease
 releases promptly on a graceful deploy rather than waiting out the stale
