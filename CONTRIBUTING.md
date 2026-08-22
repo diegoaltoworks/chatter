@@ -165,8 +165,8 @@ chatter/
   the PR title, composed on GitHub and never passed through this hook -
   keep the PR title itself conventional-commit shaped.
 - Mark a breaking change with `!` before the colon (`feat!:`, `fix(api)!:`) or
-  a `BREAKING CHANGE:` footer in the commit body. Past 1.0 this ships a major
-  version; before 1.0 it still only reaches minor (see Release Process).
+  a `BREAKING CHANGE:` footer in the commit body. Once the latest release tag
+  is past 1.0 this ships a major version (see Release Process).
 
 ## Definition of Done
 
@@ -214,15 +214,38 @@ npm with provenance, and cuts the GitHub release with its notes. Do not bump
 `package.json` by hand - the workflow owns the version. See
 [docs/packaging.md](./docs/packaging.md#the-release-chain) for the full chain.
 
+### Cutting a major by hand
+
+Crossing a major boundary is the one exception, because the automation cannot
+get there on its own: while the latest release tag is still 0.x the bump
+derivation caps a breaking change at minor, so its ceiling is the next minor.
+A major is cut by merging a PR that sets `package.json` to the target version,
+under a squash-merge subject of exactly `chore(release): v<version>` and
+nothing else appended.
+
+That subject is load-bearing twice over. The publish job skips any commit whose
+message starts with `chore(release): v`, so the merge publishes nothing by
+itself, and the job's unfinished-release check finds the commit again by
+grepping for that same subject, so it can resume from it. Get the subject wrong
+and the version bump is stranded on `main` with no commit the workflow will
+match, which fails every later publish run until someone fixes it forward.
+
+Publish it by dispatching the publish workflow from the Actions tab. That
+dispatch is the human approval for a major, and it tags and releases in the
+same run. Never create the version tag by hand: the tag is what tells the
+workflow a version is already released, so a tag with no publish behind it
+wedges the release train. Because the merge leaves `main` in the resume state,
+it must be the last merge before the dispatch - the next merge would otherwise
+publish the major unattended, off whatever tree it lands on.
+
 The bump type is derived from the conventional-commit type of every commit
 since the last release tag (not just the one that triggered the run): any
 `feat` commit ships a minor, everything else (`fix`, `chore`, `docs`, etc.)
 ships a patch. A breaking change - a `!` before the colon (`feat!:`) or a
 `BREAKING CHANGE:` / `BREAKING-CHANGE:` footer in the commit body - ships a
-major once the package is past 1.0; before 1.0 it still only reaches minor,
-since semver leaves 0.x compatibility undefined and minor is already the
-strongest signal available. See `scripts/next-version.ts` for the
-derivation.
+major, once the latest release tag is past 1.0. While that tag is still 0.x a
+breaking change caps at minor, since semver leaves 0.x compatibility undefined.
+See `scripts/next-version.ts` for the derivation.
 
 One thing is deliberately **not** automatic: nothing authored by
 `dependabot[bot]` triggers its own release. Dependency PRs are opened, approved

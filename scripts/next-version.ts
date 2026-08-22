@@ -1,10 +1,12 @@
 /**
  * Derives the next release version from conventional commits since the last
  * release tag, so a chore/docs/fix merge ships a patch, a feat merge ships a
- * minor, and a breaking change ships a major — once the package is past 1.0.
- * Before 1.0, a breaking change still only reaches minor (there is no major
- * tier to reach yet): semver leaves 0.x compatibility undefined, so bumping
- * minor is already the strongest signal available.
+ * minor, and a breaking change ships a major.
+ * The major tier is gated on the version being bumped from, which the workflow
+ * takes from the latest release tag rather than from package.json. While that
+ * version is still 0.x a breaking change caps at minor: semver leaves 0.x
+ * compatibility undefined, so minor is already the strongest signal available
+ * there. This repo is version-agnostic on purpose and keeps both branches.
  * Breaking changes are read from a `!` before the `:` (`feat!:`, `fix(api)!:`)
  * or a `BREAKING CHANGE:` / `BREAKING-CHANGE:` footer in the commit body.
  */

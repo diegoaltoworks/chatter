@@ -282,9 +282,10 @@ CI on it. The bump type carries signal instead of always being a minor:
 `scripts/next-version.ts` scans every commit since the last tag and ships a
 minor if any of them is a `feat`, a patch otherwise (`fix`, `chore`, `docs`,
 ...), and a major if any of them is breaking (a `!` before the colon, or a
-`BREAKING CHANGE:` / `BREAKING-CHANGE:` footer) - but only once the package is
-past 1.0. Before 1.0 a breaking commit still only reaches minor, the strongest
-tier semver defines for 0.x. A husky `commit-msg` hook runs `commitlint`
+`BREAKING CHANGE:` / `BREAKING-CHANGE:` footer). That major tier is gated on the
+version being bumped from, which is the latest release tag, not package.json:
+while the tag is still 0.x a breaking commit caps at minor, the strongest tier
+semver defines for 0.x. A husky `commit-msg` hook runs `commitlint`
 against `commitlint.config.js` locally, but the commits `next-version.ts`
 actually scans are the squash-merge commits on `main`, whose subjects are
 human-written PR titles - composed on GitHub, never passed through the hook.
