@@ -81,11 +81,13 @@ export interface FallbackContext {
   /** Caller identity, where the surface has one. Absent on anonymous surfaces. */
   sender?: string;
   /**
-   * What `store.query` returned, before `rerankContext` ran: always
-   * non-empty when this is empty because `rerankContext` filtered
-   * everything out, and always empty when the store itself found nothing.
-   * A hook can use this to tell "some low-confidence signal existed" apart
-   * from "nothing matched at all".
+   * What `store.query` returned for this turn, before `rerankContext` ran.
+   * `fallbackFn` runs only when the post-rerank context is empty, so this
+   * array is non-empty exactly when `rerankContext` filtered every retrieved
+   * chunk out, and empty exactly when the store itself found nothing. A hook
+   * can use that to tell "some low-confidence signal existed" apart from
+   * "nothing matched at all". It is a copy, so mutating it in place cannot
+   * change the context the turn goes on to answer with.
    */
   retrievedChunks: string[];
 }
@@ -216,7 +218,12 @@ export async function prepareChat({
         mode,
         buckets: resolvedBuckets,
         sender,
-        retrievedChunks,
+        // A copy for the same reason the reranker gets one. Whenever `ctx` is
+        // still the array the store returned (no reranker, or one that threw
+        // or returned a non-array), the two are the same object, so whatever a
+        // hook pushed onto its argument would land in the context assembled
+        // below.
+        retrievedChunks: [...retrievedChunks],
       });
       if (typeof guidance === "string" && guidance.trim()) fallback = guidance.trim();
     } catch (error) {

@@ -6,7 +6,7 @@ import { ChatBot } from "../src/index";
 
 async function main() {
   const bot = new ChatBot({
-    host: "bot.diegoalto.app",
+    host: "chat.example.com",
     mode: "public",
     apiKey: "your-api-key-here",
   });
@@ -23,7 +23,7 @@ async function main() {
   try {
     const messages = [
       { role: "user" as const, content: "What is your name?" },
-      { role: "assistant" as const, content: "I am DiegoBot, an AI assistant." },
+      { role: "assistant" as const, content: "I am an AI assistant." },
       { role: "user" as const, content: "What can you help me with?" },
     ];
     const reply = await bot.sendConversation(messages);

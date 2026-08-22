@@ -425,9 +425,17 @@ DEBUG=* bun test src/auth/apikeys.test.ts
 
 Tests run automatically on:
 
-- **Pre-commit** - Fast unit tests via lint-staged
 - **Pull Requests** - Full suite via GitHub Actions
-- **Pre-publish** - Verification before NPM release
+- **Pre-publish** - `prepublishOnly` runs lint, typecheck, the suite, the
+  security audit and a build on the release commit, before npm sees it. That
+  is the `check` gates minus `typecheck:api-surface`, which CI runs.
+
+The pre-commit hook does not run tests. lint-staged runs biome `check --write`
+over the staged files, so formatting is rewritten rather than merely checked,
+and `tsc --noEmit --skipLibCheck` over the whole project (the `bash -c`
+wrapper keeps the staged filenames out of the `tsc` invocation deliberately,
+since typechecking a subset of files is meaningless). Behaviour is checked by
+the suite in CI.
 
 ### GitHub Actions Workflow
 

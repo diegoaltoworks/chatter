@@ -5,7 +5,7 @@
 export type ChatMode = "public" | "private";
 
 export interface ChatBotConfig {
-  /** Host of the DiegoBot API (e.g., 'api.example.com' - protocol will be added automatically) */
+  /** Host of the Chatter server (e.g., 'api.example.com' - protocol will be added automatically) */
   host: string;
   /** Either 'public' or 'private' */
   mode: ChatMode;

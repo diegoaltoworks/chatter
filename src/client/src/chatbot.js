@@ -1,12 +1,12 @@
 /**
- * DiegoBot Client Library
- * A JavaScript client for consuming the DiegoBot API remotely
+ * Chatter Client Library
+ * A JavaScript client for consuming a Chatter server's API remotely
  */
 
 class ChatBot {
   /**
    * @param {Object} config
-   * @param {string} config.host - Host of the DiegoBot API (e.g., 'api.example.com' or 'example.com')
+   * @param {string} config.host - Host of the Chatter server (e.g., 'api.example.com' or 'example.com')
    * @param {string} config.mode - Either 'public' or 'staff'
    * @param {string} config.apiKey - API key for authentication
    * @param {string} [config.token] - Access token (required only for 'staff' mode)

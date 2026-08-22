@@ -381,7 +381,7 @@ export async function createMCPServer(config: MCPServerOptions) {
   ].filter(Boolean);
 
   if (enabledTools.length === 0) {
-    log.warn("⚠️  Warning: No MCP tools enabled");
+    log.warn("No MCP tools enabled");
   }
 
   log.info(

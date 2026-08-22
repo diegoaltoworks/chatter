@@ -1,6 +1,6 @@
 /**
  * ChatBot API Client
- * A TypeScript client for consuming the DiegoBot API
+ * A TypeScript client for consuming a Chatter server's API
  */
 
 import type { ChatBotConfig, ChatMessage, ChatResponse, StreamCallbacks } from "./types";
