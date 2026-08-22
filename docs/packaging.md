@@ -179,6 +179,19 @@ naming this exact repository and `npm-publish.yml` as an authorized
 publisher - done once, out of band, not something this workflow can verify
 about itself.
 
+That link can also lapse after having worked, which looks nothing like a
+missing one. The symptom is a publish step that signs its provenance
+attestation to the transparency log and only then fails with `E404 PUT
+https://registry.npmjs.org/<package>`: the OIDC exchange got far enough to
+sign, and the credential it came back with carried no publish rights for this
+package. It is not a 404 about the package existing, and no change in this
+repository causes or fixes it - the same workflow file published the version
+before it. Only the package owner can inspect or restore the authorization on
+npmjs.com. The version bump is already merged to `main` when this happens, so
+nothing needs re-cutting once the link is back: dispatching **Publish to NPM**
+resumes that stranded release, from the `chore(release): v...` commit sitting
+on `main`, rather than computing a new bump on top of it.
+
 The publish workflow never pushes to `main` directly - the release PR's merge
 is the only thing that lands a release commit there. That was built so this
 stays compatible with a `required_status_checks` rule on `main-protection`,
@@ -310,6 +323,11 @@ keeps it from wedging the release train against itself:
 The earlier version of this guard failed on any dependabot-authored commit at
 all, and only a successful publish moves the tag the scan starts from, so a
 single routine bump stopped every subsequent release until someone noticed.
+
+A block shows up as a failed **Publish to NPM** run on an ordinary merge, and
+it keeps failing on every merge after it: only a publish moves the tag the scan
+starts from, so the blocking commit stays in range until someone clears it.
+Reading the failing step names the commit and what it touched.
 
 A block is skipped for `workflow_dispatch`, which is the point: a maintainer
 reviewing the change and running **Publish to NPM** from the Actions tab *is*
