@@ -649,6 +649,19 @@ implementation of the `BuildLock` interface (default: `createTursoBuildLock`
 against the store's own client), and `instanceId` names this process in the
 lock row (default: a random id per store).
 
+**Health checks.** Right after `build()` returns (whether it ran or was
+skipped because another instance held the lock), and again every
+`intervalMs` after that, the server logs chunk/embedding counts by bucket and
+escalates to a warning when `totalChunks` is `0` (an empty knowledge base
+where one previously existed - the signature of a lost build) or when it
+finds embeddings rows with no matching chunk. Configure this with
+`config.knowledgeHealthCheck: { enabled?, intervalMs?, autoCleanOrphanedEmbeddings? }`
+(defaults: enabled, every 30 minutes, orphan cleanup off). Cleanup, when
+opted in, only deletes orphaned rows while holding the same build lock
+described above, and skips (logging why) rather than racing an in-progress
+build. Only applies to the default `VectorStore` - a custom `config.retriever`
+owns its own consistency story.
+
 ### System Prompts
 
 Create a `prompts/` directory with text files:

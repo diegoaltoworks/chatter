@@ -6,10 +6,12 @@
  * VS Code extensions, and other MCP-compatible clients.
  */
 
+import type { Client as LibsqlClient } from "@libsql/client";
 import OpenAI from "openai";
 import type { z as ZodNamespace } from "zod";
 import { answerOnce, applyTransformReply } from "./core/answer";
 import { resolveBuckets } from "./core/buckets";
+import type { KnowledgeHealthScheduler } from "./core/knowledgeHealth";
 import { DEFAULT_MODEL } from "./core/llm";
 import { resolveLogger } from "./core/logger";
 import { lastUserMessage } from "./core/messages";
@@ -108,6 +110,7 @@ export async function createMCPServer(config: MCPServerOptions) {
   // default path, so a host supplying `config.retriever` with no
   // `config.database` never needs it installed.
   let store: Retriever;
+  let db: LibsqlClient | undefined;
   if (config.retriever) {
     store = config.retriever;
   } else {
@@ -116,7 +119,7 @@ export async function createMCPServer(config: MCPServerOptions) {
     }
     const { DEFAULT_KNOWLEDGE_DIR, VectorStore, createOpenAIEmbedder, openLibsqlClient } =
       await import("./core/retrieval");
-    const db = await openLibsqlClient(config.database);
+    db = await openLibsqlClient(config.database);
     store = new VectorStore(createOpenAIEmbedder(client), {
       databaseClient: db,
       knowledgeDir: config.knowledgeDir || DEFAULT_KNOWLEDGE_DIR,
@@ -125,6 +128,19 @@ export async function createMCPServer(config: MCPServerOptions) {
   }
   await store.build?.();
   log.info("✅ Knowledge base ready");
+
+  // Health checks query the `chunks`/`embeddings` schema `VectorStore` owns,
+  // so they only make sense for the default store, not a caller-supplied
+  // `config.retriever`.
+  let knowledgeHealth: KnowledgeHealthScheduler | undefined;
+  if (db) {
+    const { scheduleKnowledgeHealthChecks } = await import("./core/knowledgeHealth");
+    knowledgeHealth = await scheduleKnowledgeHealthChecks({
+      db,
+      config: config.knowledgeHealthCheck,
+      logger: log,
+    });
+  }
 
   const prompts = new PromptLoader(promptsDir, config.bot);
 
@@ -372,5 +388,11 @@ export async function createMCPServer(config: MCPServerOptions) {
     `✅ ${config.bot.name} MCP Server ready (transport: ${transportMode}, tools: ${enabledTools.join(", ") || "none"})`,
   );
 
-  return server;
+  // Scoped to this call's own scheduler, not global - two servers in one
+  // process each stop only their own. The timer is unref'd either way, so a
+  // caller that never calls this only leaves an idle, harmless-to-exit
+  // interval running, not a leak that blocks shutdown.
+  return Object.assign(server, {
+    stopKnowledgeHealthChecks: (): void => knowledgeHealth?.stop(),
+  });
 }

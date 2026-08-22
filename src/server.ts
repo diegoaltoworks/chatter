@@ -11,6 +11,7 @@ import OpenAI from "openai";
 import { ApiKeyManager } from "./auth/apikeys";
 import type { Channel } from "./channels";
 import { createSenderRegistry } from "./channels";
+import type { KnowledgeHealthScheduler } from "./core/knowledgeHealth";
 import { resolveLogger } from "./core/logger";
 import { DEFAULT_PROMPTS_DIR, PromptLoader } from "./core/prompts";
 import { DATABASE_CONFIG_REQUIRED_MESSAGE, type Retriever } from "./core/retrieval";
@@ -102,6 +103,19 @@ export async function createServer(config: ChatterConfig): Promise<ChatterApp> {
   }
   await store.build?.();
   logger.info("✅ Knowledge base ready");
+
+  // Health checks query the `chunks`/`embeddings` schema `VectorStore` owns,
+  // so they only make sense for the default store, not a caller-supplied
+  // `config.retriever`.
+  let knowledgeHealth: KnowledgeHealthScheduler | undefined;
+  if (db && !config.retriever) {
+    const { scheduleKnowledgeHealthChecks } = await import("./core/knowledgeHealth");
+    knowledgeHealth = await scheduleKnowledgeHealthChecks({
+      db,
+      config: config.knowledgeHealthCheck,
+      logger,
+    });
+  }
 
   // Create prompt loader
   const prompts = new PromptLoader(promptsDir, config.bot);
@@ -278,6 +292,7 @@ export async function createServer(config: ChatterConfig): Promise<ChatterApp> {
     // (sync or async) is caught per-channel so one misbehaving channel can't
     // stop the rest from cleaning up.
     stopChannels: async (): Promise<void> => {
+      knowledgeHealth?.stop();
       await Promise.allSettled(
         started.map(async (channel) => {
           try {
