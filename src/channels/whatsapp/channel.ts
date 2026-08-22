@@ -212,21 +212,57 @@ export async function acquireSessionLease(
     return;
   }
 
+  // Only re-check if this call is what actually gave the session up: a
+  // connect attempt that threw at the same moment already owns the
+  // recovery, and a second retry chain for one session is exactly what
+  // the lease exists to prevent. Teardown finishes before the re-check
+  // is scheduled because the socket here is a live one - it has to be
+  // off the wire before anything reconnects.
+  const demoteSelf = () => {
+    void loseSession(sessionId, sessions).then((lost) => {
+      if (lost) retry();
+    });
+  };
+
+  // Tracks the last heartbeat that actually confirmed the lease, whether by
+  // acquiring it just above or by a later renewal - so a heartbeat CALL that
+  // rejects, or never settles at all (an unreachable Turso with no request
+  // timeout can hang a `tryAcquire` indefinitely), can be distinguished from
+  // one that resolves false. Only `tryAcquire` resolving false means another
+  // instance holds the row; not hearing back at all means this instance
+  // doesn't know who holds it, and staying quiet about that for longer than
+  // `staleMs` is exactly the window in which the row goes stale and a
+  // takeover can happen unnoticed. Checked at the top of every tick - not
+  // just when a call rejects - so a hung call that never rejects still gets
+  // caught by the next tick's check instead of stalling detection forever.
+  let lastHeartbeatSuccessAt = now();
+
   const heartbeat = setInterval(() => {
+    if (isStopped()) return;
+    const attemptAt = now();
+    const failingForMs = attemptAt - lastHeartbeatSuccessAt;
+    if (failingForMs >= staleMs) {
+      logger.error(
+        `WhatsApp[${sessionId}]: lease heartbeats have been failing for ${failingForMs}ms, treating the lease as lost`,
+      );
+      demoteSelf();
+      return;
+    }
     void leaseStore
-      .tryAcquire(sessionId, instanceId, now(), staleMs)
+      .tryAcquire(sessionId, instanceId, attemptAt, staleMs)
       .then((stillHeld) => {
-        if (stillHeld || isStopped()) return;
-        logger.error(`WhatsApp[${sessionId}]: lost the lease to another instance — disconnecting`);
-        // Only re-check if this call is what actually gave the session up: a
-        // connect attempt that threw at the same moment already owns the
-        // recovery, and a second retry chain for one session is exactly what
-        // the lease exists to prevent. Teardown finishes before the re-check
-        // is scheduled because the socket here is a live one - it has to be
-        // off the wire before anything reconnects.
-        void loseSession(sessionId, sessions).then((lost) => {
-          if (lost) retry();
-        });
+        if (isStopped()) return;
+        if (!stillHeld) {
+          logger.error(`WhatsApp[${sessionId}]: lost the lease to another instance, disconnecting`);
+          demoteSelf();
+          return;
+        }
+        // The row is stamped with `attemptAt` (see `tryAcquire`'s SQL), not
+        // whenever this promise happens to resolve - a slow-but-successful
+        // renewal must not read as fresher than the row actually is.
+        // `Math.max` guards against an earlier tick's call resolving after a
+        // later one already recorded a more recent success.
+        lastHeartbeatSuccessAt = Math.max(lastHeartbeatSuccessAt, attemptAt);
       })
       .catch((error) => logger.warn(`WhatsApp[${sessionId}]: lease heartbeat failed:`, error));
   }, heartbeatMs);

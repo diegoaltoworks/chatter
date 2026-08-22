@@ -371,6 +371,94 @@ describe("acquireSessionLease", () => {
     // falls into schedule() rather than reconnecting.
     expect(schedule).toHaveBeenCalled();
   });
+
+  // The gap the takeover test above doesn't cover: tryAcquire can also
+  // reject (a database blip), not just resolve false. Before this test
+  // existed, a rejecting heartbeat was only ever warned and retried forever
+  // - so if Turso stayed unreachable long enough for the lease row to go
+  // stale, another instance could legitimately steal it while this one kept
+  // believing it was still connected.
+  test("heartbeats that keep rejecting for >= staleMs tear the session down and re-enter the wait loop", async () => {
+    let acquireCount = 0;
+    const leaseStore: WaLeaseStore = {
+      tryAcquire: mock(async () => {
+        acquireCount += 1;
+        if (acquireCount === 1) return true; // the initial acquire before connecting
+        throw new Error("turso unreachable");
+      }),
+      release: mock(async () => undefined),
+    };
+    const sessions = new Map<string, WaSessionHandle>();
+    const connect = mock(async () => undefined);
+    const schedule = mock(() => undefined);
+    const errors: unknown[][] = [];
+    const logger: Logger = {
+      debug: () => undefined,
+      info: () => undefined,
+      warn: () => undefined,
+      error: (...args) => errors.push(args),
+    };
+
+    await acquireSessionLease("default", {
+      leaseStore,
+      instanceId: "i1",
+      sessions,
+      isStopped: () => false,
+      connect,
+      schedule,
+      logger,
+      heartbeatMs: 10,
+      staleMs: 50,
+    });
+
+    const handle = sessions.get("default");
+    expect(handle).toBeDefined();
+    const end = mock(() => undefined);
+    if (handle) handle.sock = { end };
+
+    await new Promise((resolve) => setTimeout(resolve, 300));
+
+    expect(sessions.has("default")).toBe(false);
+    expect(end).toHaveBeenCalledTimes(1);
+    expect(schedule).toHaveBeenCalled();
+    const message = errors
+      .map((args) => String(args[0]))
+      .find((text) => text.includes("failing for"));
+    expect(message).toBeDefined();
+    expect(message).toContain("WhatsApp[default]");
+  });
+
+  test("a single transient heartbeat rejection followed by a success does not tear down the session", async () => {
+    let acquireCount = 0;
+    const leaseStore: WaLeaseStore = {
+      tryAcquire: mock(async () => {
+        acquireCount += 1;
+        if (acquireCount === 2) throw new Error("turso blip"); // one heartbeat tick fails
+        return true;
+      }),
+      release: mock(async () => undefined),
+    };
+    const sessions = new Map<string, WaSessionHandle>();
+    const connect = mock(async () => undefined);
+    const schedule = mock(() => undefined);
+
+    await acquireSessionLease("default", {
+      leaseStore,
+      instanceId: "i1",
+      sessions,
+      isStopped: () => false,
+      connect,
+      schedule,
+      heartbeatMs: 10,
+      staleMs: 200,
+    });
+
+    await new Promise((resolve) => setTimeout(resolve, 300));
+
+    expect(sessions.has("default")).toBe(true);
+    expect(schedule).not.toHaveBeenCalled();
+    sessions.get("default")?.stopHeartbeat();
+  });
 });
 
 // --- createWhatsAppChannel: end-to-end against a fake Baileys module ---
