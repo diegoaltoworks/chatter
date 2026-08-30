@@ -261,4 +261,126 @@ describe("createPersonaResolver", () => {
     expect(result.system).toContain("You are Chatter, speaking as Alt.");
     expect(result.system).not.toContain("the mode's own persona");
   });
+  describe("endpoint-keyed resolution", () => {
+    const endpointRegistry = (): PersonaRegistry => ({
+      ...baseRegistry(),
+      endpoints: {
+        "wa-support": { persona: "support" },
+      },
+      personas: {
+        ...baseRegistry().personas,
+        support: { name: "Support", prompt: writePrompt("support.txt", "You are Support.") },
+      },
+    });
+
+    test("an endpoint key resolves a persona with no contact entry for the sender", () => {
+      const resolver = createPersonaResolver({ registry: endpointRegistry(), promptsDir: dir });
+      expect(resolver.rollPersonaId({ endpointId: "wa-support" })).toBe("support");
+    });
+
+    test("an unknown sender on a known endpoint resolves to that endpoint's persona", () => {
+      const resolver = createPersonaResolver({ registry: endpointRegistry(), promptsDir: dir });
+      expect(resolver.rollPersonaId({ contactId: "stranger", endpointId: "wa-support" })).toBe(
+        "support",
+      );
+      expect(
+        resolver.resolvePersonaLayer({ contactId: "stranger", endpointId: "wa-support" }),
+      ).toBe("You are Support.");
+    });
+
+    test("the endpoint takes precedence when both it and the contact resolve", () => {
+      const resolver = createPersonaResolver({
+        registry: endpointRegistry(),
+        promptsDir: dir,
+        random: () => 0, // alice would win her roll for "alt"
+      });
+      expect(resolver.rollPersonaId({ contactId: "alice", endpointId: "wa-support" })).toBe(
+        "support",
+      );
+    });
+
+    test("endpoint resolution is deterministic: no roll, and no window to expire", () => {
+      let time = 0;
+      const resolver = createPersonaResolver({
+        registry: endpointRegistry(),
+        promptsDir: dir,
+        random: () => {
+          throw new Error("the endpoint path must not roll");
+        },
+        now: () => time,
+      });
+      const key = { contactId: "alice", endpointId: "wa-support" };
+      expect(resolver.rollPersonaId(key)).toBe("support");
+      time = 60 * 60 * 1000; // well past any window
+      expect(resolver.rollPersonaId(key)).toBe("support");
+    });
+
+    test("an endpoint hit leaves the contact's window untouched", () => {
+      let rolls = 0;
+      const resolver = createPersonaResolver({
+        registry: endpointRegistry(),
+        promptsDir: dir,
+        random: () => {
+          rolls += 1;
+          return 0;
+        },
+      });
+      expect(resolver.rollPersonaId({ contactId: "alice", endpointId: "wa-support" })).toBe(
+        "support",
+      );
+      expect(rolls).toBe(0);
+      expect(resolver.rollPersonaId("alice")).toBe("alt");
+      expect(rolls).toBe(1);
+    });
+
+    test("an unmapped endpoint falls through to the contact path, roll and window intact", () => {
+      let time = 0;
+      let rolls = 0;
+      const resolver = createPersonaResolver({
+        registry: endpointRegistry(),
+        promptsDir: dir,
+        random: () => {
+          rolls += 1;
+          return 0;
+        },
+        now: () => time,
+      });
+      const key = { contactId: "alice", endpointId: "wa-unmapped" };
+      expect(resolver.rollPersonaId(key)).toBe("alt");
+      time = 60 * 1000;
+      expect(resolver.rollPersonaId(key)).toBe("alt");
+      expect(rolls).toBe(1); // held by the window, exactly as the contact path does today
+    });
+
+    test("a contact-only key behaves identically whether passed as a string or an object", () => {
+      const asString = createPersonaResolver({
+        registry: endpointRegistry(),
+        promptsDir: dir,
+        random: () => 0,
+      });
+      const asObject = createPersonaResolver({
+        registry: endpointRegistry(),
+        promptsDir: dir,
+        random: () => 0,
+      });
+      expect(asObject.rollPersonaId({ contactId: "alice" })).toBe(asString.rollPersonaId("alice"));
+      expect(asObject.rollPersonaId({ contactId: "stranger" })).toBe(
+        asString.rollPersonaId("stranger"),
+      );
+    });
+
+    test("a registry with no endpoints resolves an endpoint key to the default", () => {
+      const resolver = createPersonaResolver({ registry: baseRegistry(), promptsDir: dir });
+      expect(resolver.rollPersonaId({ endpointId: "wa-support" })).toBeNull();
+      expect(resolver.resolvePersonaLayer({ endpointId: "wa-support" })).toBe(
+        "You are the default assistant.",
+      );
+    });
+
+    test("an endpoint key on a broken registry degrades to null, never throws", () => {
+      const resolver = createPersonaResolver({ registryPath: "/nonexistent/personas.json" });
+      expect(resolver.rollPersonaId({ endpointId: "wa-support" })).toBeNull();
+      expect(resolver.resolvePersonaLayer({ endpointId: "wa-support" })).toBeNull();
+    });
+  });
 });

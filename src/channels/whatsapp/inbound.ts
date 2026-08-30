@@ -347,6 +347,8 @@ export interface WhatsAppInboundConfig extends BrainHooks {
   personaResolver?: (ctx: {
     senderPhone: string;
     text: string;
+    /** Which of this process's sessions received the message - see `ChannelMessage.endpointId`. Unset unless the channel runs more than one. */
+    endpointId?: string;
   }) => string | undefined | Promise<string | undefined>;
   /**
    * Optional image-request routing (see `./images`). Consulted right before
@@ -414,7 +416,8 @@ export function createWhatsAppInboundHandler(
       model: config.model,
       channelHint: config.channelHint ?? "Channel: WhatsApp.",
       personaResolver: personaResolver
-        ? ({ sender, text }) => personaResolver({ senderPhone: sender, text })
+        ? ({ sender, text, endpointId }) =>
+            personaResolver({ senderPhone: sender, text, endpointId })
         : undefined,
       history: config.history,
       allowedChats,

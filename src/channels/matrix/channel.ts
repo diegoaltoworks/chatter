@@ -38,6 +38,8 @@ export interface MatrixChannelConfig extends PollingChannelConfig {
   personaResolver?: (ctx: {
     sender: string;
     text: string;
+    /** Which of this process's endpoints received the message - see `ChannelMessage.endpointId`. Unset unless the channel runs more than one. */
+    endpointId?: string;
   }) => string | undefined | Promise<string | undefined>;
   /** Auto-accept room invites, so the bot can actually receive messages in a room a user just invited it to. @default true */
   autoJoin?: boolean;

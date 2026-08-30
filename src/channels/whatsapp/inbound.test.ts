@@ -1092,6 +1092,21 @@ describe("createWhatsAppInboundHandler", () => {
     }
   });
 
+  test("a personaResolver is handed the session that received the message", async () => {
+    const seen: Array<string | undefined> = [];
+    const { handler, sock } = createHarness({
+      personaResolver: ({ endpointId }) => {
+        seen.push(endpointId);
+        return undefined;
+      },
+    });
+
+    await handler({ ...waEvent(sock), endpointId: "sim-b" });
+    await handler(waEvent(sock));
+
+    expect(seen).toEqual(["sim-b", undefined]);
+  });
+
   test("a throwing personaResolver degrades to no persona instead of failing the reply", async () => {
     const { handler, sock, answerCalls } = createHarness({
       personaResolver: async () => {

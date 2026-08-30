@@ -26,6 +26,15 @@ export interface PersonaContact {
   probability?: number;
 }
 
+/**
+ * A persona bound to one of the bot's own endpoints - which of its numbers,
+ * tokens or rooms the message arrived on, rather than who sent it.
+ */
+export interface PersonaEndpoint {
+  /** Persona id this endpoint always answers as. */
+  persona: string;
+}
+
 export interface PersonaRegistry {
   /** Persona id used when a contact is unmapped or its roll doesn't land. */
   defaultPersona: string;
@@ -34,8 +43,21 @@ export interface PersonaRegistry {
   /** Minutes a roll is held before the next message re-rolls it. Default 10. */
   personaWindowMinutes?: number;
   contacts?: Record<string, PersonaContact>;
+  /**
+   * Personas keyed on the endpoint that received the message
+   * (`ChannelMessage.endpointId`), for a bot whose voice is decided by which
+   * of its own identities was reached rather than by who reached it.
+   */
+  endpoints?: Record<string, PersonaEndpoint>;
   personas: Record<string, PersonaDefinition>;
 }
+
+/**
+ * Who a persona is resolved for. A bare string is the contact id, which is
+ * every call that predates endpoint keying; the object form adds the endpoint
+ * the message arrived on, and either half may be omitted.
+ */
+export type PersonaKey = string | { contactId?: string; endpointId?: string };
 
 export interface PersonaResolverOptions {
   /** Inline registry — takes priority over `registryPath` when both are set. */
@@ -56,17 +78,21 @@ export interface PersonaResolverOptions {
 
 export interface PersonaResolver {
   /**
-   * The persona id in effect for a contact right now: rolled at
-   * `personaProbability` once per window, held for `personaWindowMinutes`.
-   * `null` means "use the default persona" (unmapped contact or a lost roll).
+   * The persona id in effect right now. A key naming an endpoint that the
+   * registry binds resolves to that persona deterministically - no roll, no
+   * window - because an endpoint-bound voice is a property of the identity
+   * reached, not something that varies over a conversation. Otherwise the
+   * contact is rolled at `personaProbability` once per window and held for
+   * `personaWindowMinutes`. `null` means "use the default persona" (no key,
+   * an unmapped contact, or a lost roll).
    */
-  rollPersonaId(contactId: string): string | null;
+  rollPersonaId(key: PersonaKey): string | null;
   /**
-   * The interpolated prompt layer for the contact's currently-held persona,
-   * falling back to the default persona's layer. Feeds `prepareChat`'s
-   * `personaLayer` directly.
+   * The interpolated prompt layer for the persona {@link rollPersonaId}
+   * yields, falling back to the default persona's layer. Feeds
+   * `prepareChat`'s `personaLayer` directly.
    */
-  resolvePersonaLayer(contactId: string): string | null;
+  resolvePersonaLayer(key: PersonaKey): string | null;
   /** Deterministic layer for an explicit persona id (no dice roll), or null. */
   personaLayerFor(personaId: string | null): string | null;
   /** Registry contact record, or undefined. */
@@ -137,7 +163,26 @@ export function createPersonaResolver(options: PersonaResolverOptions = {}): Per
     }
   }
 
-  function rollPersonaId(contactId: string): string | null {
+  /**
+   * The persona bound to an endpoint, if the registry binds one. Read
+   * straight off the registry: no roll and no window entry, so two messages
+   * reaching the same endpoint always answer in the same voice.
+   */
+  function endpointPersonaId(endpointId: string | undefined): string | null {
+    if (!endpointId) return null;
+    try {
+      return loadRegistry().endpoints?.[endpointId]?.persona ?? null;
+    } catch {
+      return null;
+    }
+  }
+
+  function rollPersonaId(key: PersonaKey): string | null {
+    const { contactId, endpointId }: { contactId?: string; endpointId?: string } =
+      typeof key === "string" ? { contactId: key } : key;
+    const boundToEndpoint = endpointPersonaId(endpointId);
+    if (boundToEndpoint) return boundToEndpoint;
+    if (contactId === undefined) return null;
     try {
       const reg = loadRegistry();
       const nowMs = now();
@@ -147,8 +192,8 @@ export function createPersonaResolver(options: PersonaResolverOptions = {}): Per
       }
       // Evict expired holds on every fresh roll so the map stays bounded by
       // contacts active within the last window, not all contacts ever seen.
-      for (const [key, value] of window) {
-        if (value.expiresAt <= nowMs) window.delete(key);
+      for (const [held, value] of window) {
+        if (value.expiresAt <= nowMs) window.delete(held);
       }
 
       const contact = reg.contacts?.[contactId];
@@ -202,8 +247,8 @@ export function createPersonaResolver(options: PersonaResolverOptions = {}): Per
     }
   }
 
-  function resolvePersonaLayer(contactId: string): string | null {
-    return personaLayerFor(rollPersonaId(contactId)) ?? personaLayerFor(defaultPersonaId());
+  function resolvePersonaLayer(key: PersonaKey): string | null {
+    return personaLayerFor(rollPersonaId(key)) ?? personaLayerFor(defaultPersonaId());
   }
 
   return {

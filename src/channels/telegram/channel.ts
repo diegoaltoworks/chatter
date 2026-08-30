@@ -44,6 +44,8 @@ export interface TelegramChannelConfig extends PollingChannelConfig {
   personaResolver?: (ctx: {
     sender: string;
     text: string;
+    /** Which of this process's endpoints received the message - see `ChannelMessage.endpointId`. Unset unless the channel runs more than one. */
+    endpointId?: string;
   }) => string | undefined | Promise<string | undefined>;
   /** @default 30 */
   pollTimeoutSeconds?: number;

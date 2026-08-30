@@ -75,10 +75,16 @@ export interface InboundPipelineConfig extends BrainHooks {
   model?: string;
   /** Extra system-prompt section describing the delivery channel; passed through to `prepareChat`. */
   channelHint?: string;
-  /** A throw/rejection is treated as "no persona" for that turn rather than failing the whole reply. */
+  /**
+   * A throw/rejection is treated as "no persona" for that turn rather than
+   * failing the whole reply. `endpointId` is `ChannelMessage.endpointId`, so a
+   * resolver can key on which of the process's own endpoints was reached; it
+   * is unset for a channel running a single endpoint.
+   */
   personaResolver?: (ctx: {
     sender: string;
     text: string;
+    endpointId?: string;
   }) => string | undefined | Promise<string | undefined>;
   /** Off by default — a channel stays single-turn until a store is configured. */
   history?: {
@@ -189,7 +195,7 @@ const DEFAULT_DM_RATE_LIMIT = { max: 20, windowMs: 60 * 60 * 1000 };
 
 async function resolvePersonaLayer(
   config: InboundPipelineConfig,
-  ctx: { sender: string; text: string },
+  ctx: { sender: string; text: string; endpointId?: string },
 ): Promise<string | undefined> {
   if (!config.personaResolver) return undefined;
   try {
@@ -272,7 +278,11 @@ export function createInboundPipeline(
       return { action: "intercepted" };
     }
 
-    const personaLayer = await resolvePersonaLayer(config, { sender, text: msg.text });
+    const personaLayer = await resolvePersonaLayer(config, {
+      sender,
+      text: msg.text,
+      endpointId: msg.endpointId,
+    });
     const buckets = await resolveBuckets({ mode, sender, bucketsFor: config.bucketsFor });
 
     const historyEnabled = config.history ? await isHistoryEnabled(config, sender) : false;
