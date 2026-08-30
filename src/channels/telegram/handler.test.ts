@@ -1,6 +1,6 @@
 import { describe, expect, mock, test } from "bun:test";
 import type { Logger } from "../../core/logger";
-import type { InboundPipeline } from "../pipeline";
+import { conversationKeyFor, type InboundPipeline } from "../pipeline";
 import type { TelegramApi, TelegramUpdate } from "./api";
 import { createTelegramUpdateHandler } from "./handler";
 import type { TelegramBotIdentity } from "./updates";
@@ -45,5 +45,26 @@ describe("createTelegramUpdateHandler", () => {
 
     expect(pipeline).toHaveBeenCalledTimes(1);
     expect(pipeline.mock.calls[0]?.[0]?.endpointId).toBe("telegram:support");
+  });
+
+  test("a default channel's conversation key is the bare chat id - no history migration", async () => {
+    const pipeline = mock<InboundPipeline>(async () => ({ action: "ignore" }));
+
+    const handleUpdate = createTelegramUpdateHandler({
+      api: {} as unknown as TelegramApi,
+      me: ME,
+      pipeline,
+      allowedChats: [],
+      logger: noopLogger,
+      label: "Telegram[MyBot]",
+    });
+
+    await handleUpdate(update());
+
+    const [msg, turn] = pipeline.mock.calls[0] ?? [];
+    // Left unset so the pipeline's own rule applies; pinning it here would
+    // make endpoint-keyed history unreachable on this transport.
+    expect(turn?.conversationId).toBeUndefined();
+    expect(conversationKeyFor(msg?.chatId ?? "", msg?.endpointId)).toBe("200");
   });
 });

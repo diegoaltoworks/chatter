@@ -44,6 +44,7 @@ import {
 } from "../src";
 import {
   type ChannelMessage,
+  conversationKeyFor,
   createInboundPipeline,
   createSenderRegistry,
   type InboundReplySender,
@@ -351,6 +352,15 @@ describe("API surface", () => {
     expect(resolved.answerFn).toBe(config.answerFn);
     expect(resolved.bucketsFor).toBe(serverConfig.bucketsFor);
     expect(resolved.rewriteQuery).toBeUndefined();
+  });
+
+  // Locks docs/history.md's "The conversation key": a channel author keying
+  // its own threads must reach the same rule the pipeline defaults to,
+  // without reimplementing the escaping.
+  test("a channel keys its own threads through conversationKeyFor", () => {
+    expect(conversationKeyFor("chat-1")).toBe("chat-1");
+    expect(conversationKeyFor("chat-1", "sim-a")).toBe("chat-1#sim-a");
+    expect(conversationKeyFor("chat-1", "sim-a")).not.toBe(conversationKeyFor("chat-1", "sim-b"));
   });
 
   test("the sender registry sends by channel name without importing the transport", async () => {

@@ -175,7 +175,6 @@ export function createTelegramChannel(
               sendGateReply: (id, text) => client.sendMessage(id, text),
             },
             sender: `tg:${raw.from.id}`,
-            conversationId: chatId,
           });
         } catch (error) {
           console.warn(`Telegram: inbound message handling failed:`, error);
@@ -256,9 +255,12 @@ const handle = createInboundPipeline(deps, {
 });
 ```
 
-History is keyed by `conversationId` (defaulting to `msg.chatId`) - pass an
-explicit one per call if a channel's thread identity differs from its chat
-id.
+History is keyed by `conversationId`, which defaults to
+`conversationKeyFor(msg.chatId, msg.endpointId)` - see "The conversation key"
+in [history.md](./history.md). Leave it unset unless your channel's thread
+identity genuinely differs from its chat id (a ticket id, say): passing
+`msg.chatId` explicitly looks harmless but pins the key, so a channel that
+later runs several endpoints keeps sharing one thread between them.
 
 ## Observability: a rejected group is easy to miss
 

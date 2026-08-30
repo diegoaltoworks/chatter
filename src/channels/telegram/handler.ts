@@ -65,7 +65,6 @@ export function createTelegramUpdateHandler(
 
     await pipeline(msg, {
       reply,
-      conversationId: msg.chatId,
       sender: telegramSenderKey(msg.senderId),
     });
   };

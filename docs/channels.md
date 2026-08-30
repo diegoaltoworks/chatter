@@ -240,7 +240,9 @@ Opting a previously single-endpoint channel into a second one is a one-way
 door for anything keyed on `endpointId` (conversation history, persona
 resolution): the first endpoint's messages stop being unkeyed and start
 carrying an `endpointId` of their own, which a caller composing a history or
-persona key from it will read as a new key, not the old unkeyed one.
+persona key from it will read as a new key, not the old unkeyed one. Chatter's
+own conversation history is keyed this way - see "The conversation key" in
+[history.md](./history.md).
 
 ## Image requests
 

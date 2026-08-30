@@ -189,7 +189,6 @@ export function createMatrixSyncHandler(
         try {
           await pipeline(msg, {
             reply,
-            conversationId: msg.chatId,
             sender: matrixSenderKey(msg.senderId),
           });
         } catch (error) {

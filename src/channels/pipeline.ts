@@ -126,7 +126,7 @@ export interface InboundTurn {
    * Omitted -> `msg.senderId`.
    */
   sender?: string | (() => string | Promise<string>);
-  /** Thread key for history/`answerFn`. Omitted -> `msg.chatId`. */
+  /** Thread key for history/`answerFn`. Omitted -> {@link conversationKeyFor}`(msg.chatId, msg.endpointId)`. */
   conversationId?: string;
   /**
    * Consulted after gates and rate-limiting pass, before persona/buckets/
@@ -147,6 +147,37 @@ export type InboundPipeline = (
   msg: ChannelMessage,
   turn: InboundTurn,
 ) => Promise<InboundPipelineOutcome>;
+
+/** Escapes `#` (and the `%` that escape needs) so an escaped part contains no bare separator. Reversible, so escaping is injective. */
+function escapeKeyPart(part: string): string {
+  return part.replaceAll("%", "%25").replaceAll("#", "%23");
+}
+
+/**
+ * The default thread key for a message: `chatId` alone, or `chatId` paired
+ * with the endpoint that received it once one is set.
+ *
+ * `chatId` alone is not a thread. One guest reaching two of a process's own
+ * personas produces the same `chatId` on both, so a single key would hand
+ * each persona the other's turns. `ChannelMessage.endpointId` is only ever
+ * set by a channel genuinely running more than one endpoint, which is
+ * exactly when that collision is possible, so a single-endpoint host's key
+ * stays `chatId` and its stored history keeps reading back.
+ *
+ * Both halves are host-chosen strings that may contain anything, `#`
+ * included, so the pair is what has to stay unambiguous rather than either
+ * side: escaping both leaves exactly one bare `#`, and splitting there
+ * recovers the pair, so no two distinct pairs share a key.
+ *
+ * That guarantee covers pairs, not the two shapes: the single-endpoint key is
+ * left unescaped so it stays byte-identical to what a host already stored, so
+ * a bare `chatId` containing a `#` can coincide with some other pair's
+ * composed key. Marking it would close that and re-key every existing host.
+ */
+export function conversationKeyFor(chatId: string, endpointId?: string): string {
+  if (!endpointId) return chatId;
+  return `${escapeKeyPart(chatId)}#${escapeKeyPart(endpointId)}`;
+}
 
 const DEFAULT_HISTORY_LIMIT = 20;
 
@@ -235,7 +266,7 @@ export function createInboundPipeline(
 
     const sender =
       typeof turn.sender === "function" ? await turn.sender() : (turn.sender ?? msg.senderId);
-    const conversationId = turn.conversationId ?? msg.chatId;
+    const conversationId = turn.conversationId ?? conversationKeyFor(msg.chatId, msg.endpointId);
 
     if (turn.intercept && (await turn.intercept(sender))) {
       return { action: "intercepted" };
