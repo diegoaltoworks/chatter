@@ -8,7 +8,7 @@
 import type { Client as LibsqlClient } from "@libsql/client";
 import type { Hono } from "hono";
 import type OpenAI from "openai";
-import type { Channel, ChannelSenderRegistry } from "./channels";
+import type { Channel, ChannelSenderRegistry, SessionIdentityRegistry } from "./channels";
 import type { AnswerFn, TransformReply } from "./core/answer";
 import type { BucketsFor } from "./core/buckets";
 import type { KnowledgeHealthCheckConfig } from "./core/knowledgeHealth";
@@ -458,6 +458,21 @@ export interface ServerDependencies {
    * channel name without importing the transport.
    */
   senders: ChannelSenderRegistry;
+  /**
+   * The one {@link SessionIdentityRegistry} for this `createServer` call:
+   * every identity any of its channels knows itself by, keyed by the endpoint
+   * that owns it. Channels register their own identities here on start and
+   * resolve `fromBot` against the whole map (`isEffectivelyFromSelf`), so a
+   * message from ANOTHER of this process's identities is recognised as "us"
+   * rather than answered as a stranger - the loop two of your own bots
+   * would otherwise fall into, answering each other until someone notices.
+   *
+   * Owned by `createServer` so the protection is the default rather than
+   * something each host remembers to wire, and scoped to that call the way
+   * `stopChannels` is: two servers in one process each protect their own. A host running its own inbound
+   * handler (WhatsApp's, say) passes this same map rather than a fresh one.
+   */
+  identities: SessionIdentityRegistry;
   /** Resolved logger — `config.logger`, or the default console logger. */
   logger: Logger;
 }

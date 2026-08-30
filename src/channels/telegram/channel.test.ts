@@ -88,6 +88,7 @@ function fakeDeps(
       ...configOverrides,
     } as unknown as ServerDependencies["config"],
     senders: createSenderRegistry(logger),
+    identities: new Map<string, string[]>(),
     logger,
   };
 }
@@ -211,6 +212,42 @@ describe("createTelegramChannel", () => {
     });
 
     expect(seen).toEqual(["tg:200"]);
+  });
+
+  test("registers its own identity in the process registry, so a sibling channel sees it", async () => {
+    const { deps } = await runChannel([]);
+    expect(deps.identities.get("telegram")).toEqual(["100"]);
+  });
+
+  test("a channel-supplied identity registry is used instead of the server's", async () => {
+    const own = new Map<string, string[]>();
+    const { deps } = await runChannel([], { identities: own, name: "telegram:support" });
+
+    expect(own.get("telegram:support")).toEqual(["100"]);
+    expect(deps.identities.size).toBe(0);
+  });
+
+  test("a message from another endpoint of this process is ignored, not answered", async () => {
+    const logger = silentLogger();
+    const deps = fakeDeps(logger);
+    // The sibling registered first, exactly as a channel started earlier in
+    // the same createServer call would have.
+    deps.identities.set("telegram:support", ["900"]);
+
+    const api = fakeApi([[{ update_id: 1, message: message({ from: { id: 900 } }) }]]);
+    const channel = createTelegramChannel({
+      botToken: "test-token",
+      api,
+      sleep: async () => undefined,
+      logger,
+    });
+
+    await channel.start(deps);
+    await settle();
+    await channel.stop?.();
+
+    expect(deps.answered).toEqual([]);
+    expect(api.sent).toEqual([]);
   });
 
   test("registers a sender supporting text, media and reactions", async () => {

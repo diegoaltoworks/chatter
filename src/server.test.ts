@@ -11,8 +11,8 @@ import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { ApiKeyManager } from "./auth/apikeys";
-import type { Channel } from "./channels";
-import { createSenderRegistry } from "./channels";
+import type { Channel, SessionIdentityRegistry } from "./channels";
+import { createSenderRegistry, isEffectivelyFromSelf } from "./channels";
 import { createConsoleLogger } from "./core/logger";
 import { createServer } from "./server";
 import type { ChatterConfig, CustomRoutes } from "./types";
@@ -148,6 +148,54 @@ describe("createServer channels", () => {
     expect(receivedDb).toBeDefined();
   });
 
+  test("every channel gets the one identity registry the server owns", async () => {
+    // Loop protection only works if it is the SAME map: a channel that
+    // registers its identity into a private one is invisible to the next
+    // channel, which then answers it as a stranger - and is answered back.
+    const seen: SessionIdentityRegistry[] = [];
+    const alpha: Channel = {
+      name: "alpha",
+      start: async (deps) => {
+        seen.push(deps.identities);
+        deps.identities.set("alpha", ["alpha-id"]);
+      },
+    };
+    const beta: Channel = {
+      name: "beta",
+      start: async (deps) => {
+        seen.push(deps.identities);
+      },
+    };
+
+    await createServer({ ...baseConfig(), channels: [alpha, beta] });
+
+    expect(seen).toHaveLength(2);
+    expect(seen[1]).toBe(seen[0] as SessionIdentityRegistry);
+    expect(
+      isEffectivelyFromSelf(
+        { fromBot: false, senderId: "alpha-id" },
+        seen[1] as Map<string, string[]>,
+      ),
+    ).toBe(true);
+  });
+
+  test("two servers in one process do not share an identity registry", async () => {
+    // Scoped like stopChannels: each createServer call protects its own
+    // channels, and neither can mistake the other's bot for one of its own.
+    const seen: SessionIdentityRegistry[] = [];
+    const probe = (name: string): Channel => ({
+      name,
+      start: async (deps) => {
+        seen.push(deps.identities);
+      },
+    });
+
+    await createServer({ ...baseConfig(), channels: [probe("one")] });
+    await createServer({ ...baseConfig(), channels: [probe("two")] });
+
+    expect(seen[0]).not.toBe(seen[1]);
+  });
+
   test("a throwing channel is logged and does not crash the server", async () => {
     const boom = new Error("connect failed");
     const badChannel: Channel = {
@@ -188,6 +236,7 @@ describe("createServer channels", () => {
       config: baseConfig(),
       prompts: {} as never,
       senders: createSenderRegistry(),
+      identities: new Map(),
       logger: createConsoleLogger(),
     });
 

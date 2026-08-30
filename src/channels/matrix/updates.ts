@@ -12,8 +12,11 @@
  * those booleans (`decideChannelAction`) is identical for every channel.
  */
 
-import type { ChannelMessage } from "../gates";
+import { type ChannelMessage, isEffectivelyFromSelf, type SessionIdentityRegistry } from "../gates";
 import type { MatrixAccountDataEvent, MatrixEvent, MatrixInvitedRoom } from "./api";
+
+/** Shared so the common no-registry call does not allocate a Map per message. */
+const NO_IDENTITIES: SessionIdentityRegistry = new Map();
 
 /** The bot's own identity, as `whoami` reports it. */
 export interface MatrixIdentity {
@@ -203,6 +206,7 @@ export function toChannelMessage(
   me: MatrixIdentity,
   directRooms: ReadonlySet<string>,
   sentEventIds: ReadonlySet<string>,
+  identities: SessionIdentityRegistry = NO_IDENTITIES,
 ): ChannelMessage | undefined {
   if (event.type !== "m.room.message") return undefined;
   const content = event.content as MatrixMessageContent;
@@ -222,9 +226,26 @@ export function toChannelMessage(
     isDirectMessage: directRooms.has(roomId),
     mentionsBot: mentionsBot(content, me),
     isReplyToBot: isReplyToBot(content, sentEventIds),
-    fromBot: event.sender === me.userId,
+    // One access token is one user, but one process is not: a second bot
+    // account mounted alongside this one is a stranger to `me` and would be
+    // answered, and would answer back, forever. `identities` is what makes
+    // the other endpoint's user id "us" too - an empty one degenerates to
+    // the equality check.
+    fromBot: isEffectivelyFromSelf(
+      { fromBot: event.sender === me.userId, senderId: event.sender },
+      identities,
+    ),
     messageRef: event.event_id,
   };
+}
+
+/**
+ * What this bot answers to on the wire, for a {@link SessionIdentityRegistry}.
+ * A Matrix user id is already globally unique (`@user:server.tld`), so it
+ * needs no namespacing to sit safely beside another transport's identities.
+ */
+export function matrixOwnIdentities(me: MatrixIdentity): string[] {
+  return [me.userId];
 }
 
 /**

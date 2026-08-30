@@ -47,7 +47,9 @@ import {
   createInboundPipeline,
   createSenderRegistry,
   type InboundReplySender,
+  isEffectivelyFromSelf,
   resolveBrainHooks,
+  type SessionIdentityRegistry,
 } from "../src/channels";
 import type { MatrixChannelConfig } from "../src/channels/matrix";
 import {
@@ -75,6 +77,7 @@ function fakeDeps(): ServerDependencies {
     config: {} as ServerDependencies["config"],
     prompts: {} as ServerDependencies["prompts"],
     senders: createSenderRegistry(),
+    identities: new Map(),
     logger: createConsoleLogger(),
   };
 }
@@ -84,6 +87,14 @@ describe("API surface", () => {
     const deps = fakeDeps();
     expect(deps.senders.available("anything")).toBe(false);
     expect(deps.db).toBeDefined();
+  });
+
+  test("ServerDependencies.identities is a SessionIdentityRegistry the loop-guard predicate accepts", () => {
+    const identities: SessionIdentityRegistry = new Map([["telegram", ["100"]]]);
+    const deps: ServerDependencies = { ...fakeDeps(), identities };
+
+    expect(isEffectivelyFromSelf({ fromBot: false, senderId: "100" }, deps.identities)).toBe(true);
+    expect(isEffectivelyFromSelf({ fromBot: false, senderId: "200" }, deps.identities)).toBe(false);
   });
 
   test("ServerDependencies.store is the Retriever interface, satisfiable by a plain object literal", () => {

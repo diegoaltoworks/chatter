@@ -26,9 +26,11 @@ import type { HistoryCompactionOptions } from "../../history/compaction";
 import type { HistoryStore } from "../../history/types";
 import { chatBodyLimit } from "../../middleware/bodyLimit";
 import type { BrainHooks, CustomRoutes } from "../../types";
+import type { SessionIdentityRegistry } from "../gates";
 import { createInboundPipeline, resolveBrainHooks } from "../pipeline";
 import { createTelegramApi, type TelegramApi, type TelegramUpdate } from "./api";
 import { createTelegramSender, createTelegramUpdateHandler } from "./handler";
+import { telegramOwnIdentities } from "./updates";
 
 /** Header Telegram echoes back on every webhook POST, carrying whatever `secretToken` was passed to `setWebhook`. */
 const SECRET_TOKEN_HEADER = "x-telegram-bot-api-secret-token";
@@ -50,6 +52,13 @@ export interface TelegramWebhookConfig extends BrainHooks {
   name?: string;
   /** Group chats eligible for a reply. Empty (default) = every group. Has no effect on DMs, which always reply. */
   allowedChats?: string[];
+  /**
+   * Every identity this process answers to, keyed by endpoint - what `fromBot`
+   * is resolved against, so one of your own bots is never answered as a
+   * stranger. @default `deps.identities`, the one registry `createServer`
+   * owns and shares with every channel.
+   */
+  identities?: SessionIdentityRegistry;
   model?: string;
   /** Extra system-prompt section describing the delivery channel; passed through to `prepareChat`. @default "Channel: Telegram." */
   channelHint?: string;
@@ -140,6 +149,11 @@ export function createTelegramWebhookRoute(config: TelegramWebhookConfig): Custo
     const me = await api.getMe();
     const label = `Telegram[${me.username ?? me.id}] (webhook)`;
 
+    // Registered before the route is mounted, so the first POST already
+    // resolves against a complete view of this process's own identities.
+    const identities = config.identities ?? deps.identities;
+    identities.set(channelName, telegramOwnIdentities(me));
+
     deps.senders.register(channelName, createTelegramSender(api));
 
     const pipeline = createInboundPipeline(
@@ -166,6 +180,7 @@ export function createTelegramWebhookRoute(config: TelegramWebhookConfig): Custo
     const handleUpdate = createTelegramUpdateHandler({
       api,
       me,
+      identities,
       pipeline,
       allowedChats,
       logger: log,

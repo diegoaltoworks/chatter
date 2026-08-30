@@ -20,7 +20,7 @@ import { defaultSleep, type PollingChannelConfig } from "../polling";
 import { createMatrixApi, type MatrixApi } from "./api";
 import { createMatrixSender, createMatrixSyncHandler } from "./handler";
 import { runMatrixSyncLoop } from "./sync";
-import { type MatrixDirectMapping, toDirectMapping } from "./updates";
+import { type MatrixDirectMapping, matrixOwnIdentities, toDirectMapping } from "./updates";
 
 /** Long-poll hold time. The homeserver holds the request open this long when nothing new happened, so a sync is one request per 30s idle — not a busy loop. */
 const DEFAULT_SYNC_TIMEOUT_MS = 30_000;
@@ -92,6 +92,12 @@ export function createMatrixChannel(config: MatrixChannelConfig): Channel {
       const me = await api.whoami();
       const label = `Matrix[${me.userId}]`;
 
+      // Registered before the first sync, so this channel's very first
+      // inbound resolves against a complete view of the server's identities.
+      // Never removed - see SessionIdentityRegistry.
+      const identities = config.identities ?? deps.identities;
+      identities.set(channelName, matrixOwnIdentities(me));
+
       // Seeds direct-message detection from the account state as it stands
       // right now, rather than waiting for `m.direct` to show up in a future
       // `/sync` response — an incremental sync (resuming from
@@ -140,6 +146,7 @@ export function createMatrixChannel(config: MatrixChannelConfig): Channel {
       const handleSync = createMatrixSyncHandler({
         api,
         me,
+        identities,
         pipeline,
         allowedChats,
         sentEventIds,

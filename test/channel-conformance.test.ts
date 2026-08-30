@@ -55,8 +55,18 @@ interface ConformanceAdapter {
   name: string;
   /** The `channelHint` default this channel falls back to when a scenario doesn't set one. */
   defaultChannelHint: string;
-  /** Delivers one addressed message and returns what happened. `group: false` -> a DM (always eligible); `group: true` -> a group message addressed to the bot, subject to `allowedChats`. */
-  deliver(scenario: Scenario, text: string, opts?: { group?: boolean }): Promise<ScenarioResult>;
+  /**
+   * Delivers one addressed message and returns what happened. `group: false`
+   * -> a DM (always eligible); `group: true` -> a group message addressed to
+   * the bot, subject to `allowedChats`. `fromSibling: true` -> the same
+   * addressed message, but sent by ANOTHER endpoint of this process, whose
+   * identity is registered in the shared `identities` registry.
+   */
+  deliver(
+    scenario: Scenario,
+    text: string,
+    opts?: { group?: boolean; fromSibling?: boolean },
+  ): Promise<ScenarioResult>;
   /** Registers a sender on start and unregisters it on stop: the lifecycle every `Channel` owns directly, outside the pipeline. */
   senderLifecycle(): Promise<{ registeredWhileRunning: boolean; registeredAfterStop: boolean }>;
 }
@@ -92,15 +102,23 @@ function pipelineChannelAdapter<Api extends { sent: string[] }>(opts: {
   makeChannel: (api: Api, scenario: Scenario) => Channel;
   /** The wire-shaped event(s) for one addressed message, in this transport's own update/batch shape. */
   seedFor: (text: string, group: boolean) => unknown[];
+  /** What a SECOND endpoint of this process answers to on the wire, as it would appear in the shared identity registry. */
+  siblingIdentity: string[];
+  /** The same addressed message as `seedFor(text, true)`, but sent by the endpoint `siblingIdentity` describes. */
+  seedFromSibling: (text: string) => unknown[];
 }): ConformanceAdapter {
   async function deliver(
     scenario: Scenario,
     text: string,
-    deliverOpts: { group?: boolean } = {},
+    deliverOpts: { group?: boolean; fromSibling?: boolean } = {},
   ): Promise<ScenarioResult> {
     const answered: AnswerFnInput[] = [];
     const queries: string[] = [];
-    const api = opts.makeApi(opts.seedFor(text, deliverOpts.group ?? false));
+    const api = opts.makeApi(
+      deliverOpts.fromSibling
+        ? opts.seedFromSibling(text)
+        : opts.seedFor(text, deliverOpts.group ?? false),
+    );
     const store = {
       query: async (q: string) => {
         queries.push(q);
@@ -121,6 +139,10 @@ function pipelineChannelAdapter<Api extends { sent: string[] }>(opts: {
         },
       } as unknown as ChatterConfig,
       senders: createSenderRegistry(silentLogger()),
+      // The registry `createServer` owns, already carrying the other endpoint
+      // this process runs - what tells this channel that a message from it is
+      // "us" rather than a stranger to answer.
+      identities: new Map<string, string[]>([["sibling", opts.siblingIdentity]]),
       logger: silentLogger(),
     } as ServerDependencies;
 
@@ -140,6 +162,7 @@ function pipelineChannelAdapter<Api extends { sent: string[] }>(opts: {
       prompts: fakePrompts(),
       config: {} as ChatterConfig,
       senders: createSenderRegistry(silentLogger()),
+      identities: new Map<string, string[]>(),
       logger: silentLogger(),
     } as ServerDependencies;
     const channel = opts.makeChannel(api, {});
@@ -205,6 +228,12 @@ function telegramAdapter(): ConformanceAdapter {
     defaultChannelHint: "Channel: Telegram.",
     makeApi: (seed) => fakeApi(seed as TelegramUpdate[]),
     seedFor: (text, group) => [{ update_id: 1, message: message(text, group) }],
+    // A second bot token in the same process: a stranger to this channel's
+    // own `getMe`, which is exactly why the registry has to be consulted.
+    siblingIdentity: ["900"],
+    seedFromSibling: (text) => [
+      { update_id: 1, message: { ...message(text, true), from: { id: 900 } } },
+    ],
     makeChannel: (api, scenario) =>
       createTelegramChannel({
         botToken: "test-token",
@@ -277,6 +306,10 @@ function matrixAdapter(): ConformanceAdapter {
     // Matrix rooms are always this fixture's addressed-group shape; DM
     // behaviour (is_direct invites, m.direct) is covered in matrix/channel.test.ts.
     seedFor: (text) => [event(text)],
+    // A second bot account in the same process: a stranger to this channel's
+    // own `whoami`, which is exactly why the registry has to be consulted.
+    siblingIdentity: ["@support:example.org"],
+    seedFromSibling: (text) => [{ ...event(text), sender: "@support:example.org" } as MatrixEvent],
     makeChannel: (api, scenario) =>
       createMatrixChannel({
         homeserverUrl: "https://example.org",
@@ -305,7 +338,11 @@ function matrixAdapter(): ConformanceAdapter {
 // theirs.
 
 function whatsappAdapter(): ConformanceAdapter {
-  function waEvent(text: string, group: boolean): WhatsAppMessageEvent {
+  // A second linked number in the same process: a stranger to this session's
+  // own `sock.user`, which is exactly why the registry has to be consulted.
+  const SIBLING_JID = "447700900555@s.whatsapp.net";
+
+  function waEvent(text: string, group: boolean, sender?: string): WhatsAppMessageEvent {
     const chatId = group ? "group@g.us" : "447700900123@s.whatsapp.net";
     return {
       sessionId: "default",
@@ -316,7 +353,7 @@ function whatsappAdapter(): ConformanceAdapter {
       message: {
         key: {
           remoteJid: chatId,
-          participant: group ? "447700900999@s.whatsapp.net" : undefined,
+          participant: group ? (sender ?? "447700900999@s.whatsapp.net") : undefined,
           fromMe: false,
         },
         message: group
@@ -334,7 +371,7 @@ function whatsappAdapter(): ConformanceAdapter {
   async function deliver(
     scenario: Scenario,
     text: string,
-    opts: { group?: boolean } = {},
+    opts: { group?: boolean; fromSibling?: boolean } = {},
   ): Promise<ScenarioResult> {
     const answered: AnswerFnInput[] = [];
     const queries: string[] = [];
@@ -346,7 +383,11 @@ function whatsappAdapter(): ConformanceAdapter {
       },
     } satisfies Retriever;
 
-    const event = waEvent(text, opts.group ?? false);
+    const event = waEvent(
+      text,
+      opts.fromSibling ? true : (opts.group ?? false),
+      opts.fromSibling ? SIBLING_JID : undefined,
+    );
     (event.sock as unknown as { sendMessage: (...a: unknown[]) => Promise<void> }).sendMessage =
       async (_chatId: unknown, content: unknown) => {
         const body = content as { text?: string };
@@ -357,7 +398,10 @@ function whatsappAdapter(): ConformanceAdapter {
       client: {} as unknown as ServerDependencies["client"],
       store,
       prompts: fakePrompts(),
-      registry: new Map(),
+      // The registry `createServer` owns, already carrying the other endpoint
+      // this process runs - what tells this handler that a message from it is
+      // "us" rather than a stranger to answer.
+      registry: new Map([["sibling", [SIBLING_JID]]]),
       allowedChats: scenario.allowedChats,
       channelHint: scenario.channelHint,
       transformReply: scenario.transformReply,
@@ -457,6 +501,18 @@ for (const adapter of adapters) {
       const result = await adapter.deliver({}, "hello", { group: true });
       expect(result.answered).toHaveLength(1);
       expect(result.answered[0]?.system).toContain(adapter.defaultChannelHint);
+    });
+
+    test("a message from another endpoint of this process is ignored, not answered", async () => {
+      // The loop this closes: two of the host's own identities in one
+      // process, each a stranger to the other's own-identity check, answering
+      // each other's answers until someone kills the process. Every transport
+      // resolves it the same way - through the shared identity registry -
+      // rather than each one comparing against its own single identity.
+      const result = await adapter.deliver({}, "hello", { group: true, fromSibling: true });
+
+      expect(result.answered).toEqual([]);
+      expect(result.replies).toEqual([]);
     });
 
     test("a configured channelHint overrides the default", async () => {
