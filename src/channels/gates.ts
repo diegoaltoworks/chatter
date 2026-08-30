@@ -30,6 +30,17 @@ export interface ChannelMessage {
    * messages a transport can't target individually) simply have none.
    */
   messageRef?: unknown;
+  /**
+   * Which of the bot's own endpoints received this message - the
+   * host-chosen key it was configured with (a WhatsApp `sessionId`, a
+   * Telegram/Matrix channel `name`), NOT a wire identity. It is stable
+   * across a token or SIM change and is already the key of
+   * {@link SessionIdentityRegistry}, so a caller binding behaviour to "which
+   * endpoint was reached" and the loop guard share one map rather than
+   * running two parallel mechanisms. A transport hosting only one endpoint,
+   * or one that hasn't chosen to populate it, leaves it unset.
+   */
+  endpointId?: string;
 }
 
 export type ChannelAction = "reply" | "ignore" | "mute" | "unmute";

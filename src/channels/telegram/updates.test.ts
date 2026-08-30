@@ -186,6 +186,13 @@ describe("toChannelMessage", () => {
     expect(telegramOwnIdentities(ME)).toEqual(["100"]);
   });
 
+  test("endpointId is the configured channel name, unset when none is passed", () => {
+    expect(toChannelMessage(update({ text: "hi" }), ME)?.endpointId).toBeUndefined();
+    expect(
+      toChannelMessage(update({ text: "hi" }), ME, undefined, "telegram:support")?.endpointId,
+    ).toBe("telegram:support");
+  });
+
   test("a non-message update and a channel post (no `from`) map to nothing", () => {
     expect(toChannelMessage({ update_id: 9 }, ME)).toBeUndefined();
     expect(

@@ -28,6 +28,8 @@ export interface TelegramUpdateHandlerDeps {
   logger: Logger;
   /** Log-line prefix, e.g. `Telegram[mybot]`. */
   label: string;
+  /** This channel's configured name - populates `ChannelMessage.endpointId`. Omitted: `endpointId` is left unset. */
+  channelName?: string;
 }
 
 /**
@@ -38,12 +40,12 @@ export interface TelegramUpdateHandlerDeps {
 export function createTelegramUpdateHandler(
   deps: TelegramUpdateHandlerDeps,
 ): (update: TelegramUpdate) => Promise<void> {
-  const { api, me, pipeline, identities, allowedChats, logger, label } = deps;
+  const { api, me, pipeline, identities, allowedChats, logger, label, channelName } = deps;
   const loggedUnallowedChats = new Set<string>();
 
   return async function handleUpdate(update: TelegramUpdate): Promise<void> {
     const message = update.message;
-    const msg = toChannelMessage(update, me, identities);
+    const msg = toChannelMessage(update, me, identities, channelName);
     if (!msg || !message) return;
 
     if (isBlockedByAllowlist(msg, { allowedChats })) {

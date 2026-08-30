@@ -221,6 +221,17 @@ A message from another of this server's own identities is never answered. A
 deployment that wants one of its bots to answer another needs them in
 separate processes, or behind separate `createServer` calls.
 
+### The endpoint that received a message
+
+`ChannelMessage.endpointId` carries the same key: the WhatsApp handler sets
+it to the session id, and Telegram and Matrix set it to the channel `name` -
+whichever key that endpoint already registers into `SessionIdentityRegistry`
+above. It answers a different question than `fromBot` does, though: not
+"is this us?" but "which of *our* endpoints was this sent to?", for a host
+running several endpoints behind one process that wants to bind persona or
+history to the one that was reached rather than only to the sender. It is
+optional and unset on any endpoint that hasn't populated it.
+
 ## Image requests
 
 `createWhatsAppImageHandler` (see `./whatsapp`) plugs `./images` into the

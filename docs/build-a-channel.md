@@ -37,6 +37,7 @@ A transport is responsible for exactly three things:
      isReplyToBot: boolean;
      fromBot: boolean;
      messageRef?: unknown; // opaque per-message handle, if the wire format has one
+     endpointId?: string; // which of the bot's own endpoints received this
    }
    ```
 
@@ -45,6 +46,14 @@ A transport is responsible for exactly three things:
    Baileys message key) so a caller can later target it, e.g. via
    `ChannelSenderRegistry.sendReaction(name, chatId, messageRef, emoji)`. A
    transport with nothing to put there just omits it.
+
+   `endpointId` is the host-chosen key the transport was configured with - a
+   WhatsApp `sessionId`, a Telegram/Matrix channel `name` - not a wire
+   identity, and already the key of `SessionIdentityRegistry` (see
+   [Loop protection across identities](./channels.md#loop-protection-across-identities)),
+   so a caller binding behaviour to "which endpoint was reached" and the loop
+   guard share one map. A transport hosting only one endpoint, or one that
+   hasn't chosen to populate it, leaves it unset.
 
 2. **Delivering a reply through an `InboundReplySender`** - two methods, one
    for the eventual chat answer and one for a mute/unmute acknowledgement.

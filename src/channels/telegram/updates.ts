@@ -74,6 +74,11 @@ export function toChannelMessage(
   update: TelegramUpdate,
   me: TelegramBotIdentity,
   identities: SessionIdentityRegistry = NO_IDENTITIES,
+  // The channel `name` this bot was configured with - the same host-chosen
+  // key already written into `identities` on start (see `./channel` and
+  // `./webhook`). Optional so a caller resolving a `ChannelMessage` outside
+  // a running channel (a test, a one-off script) need not invent one.
+  channelName?: string,
 ): ChannelMessage | undefined {
   const message = update.message;
   if (!message?.from) return undefined;
@@ -94,6 +99,7 @@ export function toChannelMessage(
     fromBot: isEffectivelyFromSelf({ fromBot: message.from.id === me.id, senderId }, identities),
     // What `setMessageReaction` targets — see `ChannelSenderRegistry.sendReaction`.
     messageRef: message.message_id,
+    endpointId: channelName,
   };
 }
 

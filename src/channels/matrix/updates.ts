@@ -207,6 +207,11 @@ export function toChannelMessage(
   directRooms: ReadonlySet<string>,
   sentEventIds: ReadonlySet<string>,
   identities: SessionIdentityRegistry = NO_IDENTITIES,
+  // The channel `name` this bot was configured with - the same host-chosen
+  // key already written into `identities` on start (see `./channel`).
+  // Optional so a caller resolving a `ChannelMessage` outside a running
+  // channel (a test, a one-off script) need not invent one.
+  channelName?: string,
 ): ChannelMessage | undefined {
   if (event.type !== "m.room.message") return undefined;
   const content = event.content as MatrixMessageContent;
@@ -236,6 +241,7 @@ export function toChannelMessage(
       identities,
     ),
     messageRef: event.event_id,
+    endpointId: channelName,
   };
 }
 
