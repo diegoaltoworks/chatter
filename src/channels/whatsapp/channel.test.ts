@@ -847,6 +847,72 @@ describe("createWhatsAppChannel", () => {
     expect(received).toEqual([{ key: {}, id: "m1" }]);
   });
 
+  test("endpointId is unset for a default single-session channel", async () => {
+    const sockets: FakeSocket[] = [];
+    const received: Array<string | undefined> = [];
+    const channel = createWhatsAppChannel({
+      sessionSecret: "test-session-secret-value",
+      loadBaileys: async () => fakeBaileysModule({ registered: true, sockets }),
+      schedule: () => undefined,
+      onMessage: (event) => {
+        received.push(event.endpointId);
+      },
+    });
+    const { deps } = testDeps();
+
+    await channel.start(deps);
+    await flush();
+    sockets[0]?.ev.emit("messages.upsert", { type: "notify", messages: [{ key: {}, id: "m1" }] });
+    await flush();
+
+    expect(received).toEqual([undefined]);
+  });
+
+  test("endpointId is the session id once more than one session is configured", async () => {
+    const sockets: FakeSocket[] = [];
+    const received: Array<string | undefined> = [];
+    const channel = createWhatsAppChannel({
+      sessionSecret: "test-session-secret-value",
+      sessionIds: ["default", "second"],
+      loadBaileys: async () => fakeBaileysModule({ registered: true, sockets }),
+      schedule: () => undefined,
+      onMessage: (event) => {
+        received.push(event.endpointId);
+      },
+    });
+    const { deps } = testDeps();
+
+    await channel.start(deps);
+    await flush();
+    sockets[0]?.ev.emit("messages.upsert", { type: "notify", messages: [{ key: {}, id: "m1" }] });
+    sockets[1]?.ev.emit("messages.upsert", { type: "notify", messages: [{ key: {}, id: "m2" }] });
+    await flush();
+
+    expect(received).toEqual(["default", "second"]);
+  });
+
+  test("endpointId is the session id when a custom name is set, even for a single session", async () => {
+    const sockets: FakeSocket[] = [];
+    const received: Array<string | undefined> = [];
+    const channel = createWhatsAppChannel({
+      sessionSecret: "test-session-secret-value",
+      name: "support",
+      loadBaileys: async () => fakeBaileysModule({ registered: true, sockets }),
+      schedule: () => undefined,
+      onMessage: (event) => {
+        received.push(event.endpointId);
+      },
+    });
+    const { deps } = testDeps();
+
+    await channel.start(deps);
+    await flush();
+    sockets[0]?.ev.emit("messages.upsert", { type: "notify", messages: [{ key: {}, id: "m1" }] });
+    await flush();
+
+    expect(received).toEqual(["default"]);
+  });
+
   test("a throwing onMessage handler is caught and logged, not left to crash the socket", async () => {
     const sockets: FakeSocket[] = [];
     const channel = createWhatsAppChannel({

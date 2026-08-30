@@ -53,7 +53,10 @@ A transport is responsible for exactly three things:
    [Loop protection across identities](./channels.md#loop-protection-across-identities)),
    so a caller binding behaviour to "which endpoint was reached" and the loop
    guard share one map. A transport hosting only one endpoint, or one that
-   hasn't chosen to populate it, leaves it unset.
+   hasn't chosen to populate it, leaves it unset - the shipped WhatsApp,
+   Telegram and Matrix channels all follow this rule themselves, populating
+   it only once a host actually configures more than one endpoint (see
+   [The endpoint that received a message](./channels.md#the-endpoint-that-received-a-message)).
 
 2. **Delivering a reply through an `InboundReplySender`** - two methods, one
    for the eventual chat answer and one for a mute/unmute acknowledgement.
