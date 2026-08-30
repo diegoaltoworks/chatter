@@ -962,6 +962,24 @@ describe("createWhatsAppInboundHandler", () => {
     expect(capturedInput?.conversationId).toBe("447700900123@s.whatsapp.net");
   });
 
+  test("a multi-session channel's endpointId splits one chat JID into a thread per session", async () => {
+    const seen: (string | undefined)[] = [];
+    const { handler, sock } = createHarness({
+      answerFn: async (input) => {
+        seen.push(input.conversationId);
+        return "ok";
+      },
+    });
+
+    await handler({ ...waEvent(sock), endpointId: "sim-a" });
+    await handler({ ...waEvent(sock), endpointId: "sim-b" });
+
+    expect(seen).toEqual([
+      "447700900123@s.whatsapp.net#sim-a",
+      "447700900123@s.whatsapp.net#sim-b",
+    ]);
+  });
+
   test("rewriteQuery reshapes the retrieval query and sees the resolved sender", async () => {
     const queries: string[] = [];
     const store = {

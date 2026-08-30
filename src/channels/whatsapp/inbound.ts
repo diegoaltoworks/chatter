@@ -464,7 +464,6 @@ export function createWhatsAppInboundHandler(
 
       await pipeline(msg, {
         reply,
-        conversationId: chatId,
         sender: () => senderPhoneFor(sock, message, chatId),
         intercept: images
           ? (senderPhone) =>
