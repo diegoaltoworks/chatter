@@ -9,12 +9,15 @@ export async function completeOnce({
   messages,
   temperature = 0.2,
   model = DEFAULT_MODEL,
+  refusal,
 }: {
   client: OpenAI;
   system: string;
   messages: { role: "user" | "assistant"; content: string }[];
   temperature?: number;
   model?: string;
+  /** Wording for the guardrail refusal; falls back to `DEFAULT_REFUSAL`. */
+  refusal?: string;
 }) {
   const res = await client.chat.completions.create({
     model,
@@ -23,7 +26,7 @@ export async function completeOnce({
   });
   const text = res.choices[0]?.message?.content ?? "";
   return {
-    content: guardOutput(text),
+    content: guardOutput(text, refusal),
     usage: res.usage || { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0 },
   };
 }

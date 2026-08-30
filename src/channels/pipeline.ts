@@ -34,11 +34,12 @@ import {
 
 /**
  * Resolves the brain hooks (`answerFn`, `bucketsFor`, `rewriteQuery`,
- * `rerankContext`, `fallbackFn`, `transformReply`) for one channel: each
+ * `rerankContext`, `fallbackFn`, `transformReply`, `refusal`) for one
+ * channel: each
  * field from `config` wins when set, falling back to the matching field on
  * `fallback` (typically `deps.config`, the server-level `ChatterConfig`).
  * Every channel that layers its own hooks over the server's uses this
- * instead of hand-rolling the same six `??` lines: see `../telegram`,
+ * instead of hand-rolling the same `??` lines: see `../telegram`,
  * `../matrix` and `../whatsapp/inbound`.
  */
 export function resolveBrainHooks(config: BrainHooks, fallback?: BrainHooks): BrainHooks {
@@ -49,6 +50,7 @@ export function resolveBrainHooks(config: BrainHooks, fallback?: BrainHooks): Br
     rerankContext: config.rerankContext ?? fallback?.rerankContext,
     fallbackFn: config.fallbackFn ?? fallback?.fallbackFn,
     transformReply: config.transformReply ?? fallback?.transformReply,
+    refusal: config.refusal ?? fallback?.refusal,
   };
 }
 
@@ -327,6 +329,7 @@ export function createInboundPipeline(
       sender,
       conversationId,
       model: config.model,
+      refusal: config.refusal,
     });
 
     const content = await applyTransformReply(

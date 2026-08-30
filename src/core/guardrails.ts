@@ -16,15 +16,26 @@ export function scrubOutput(text: string): string {
 }
 
 /**
+ * The refusal sent when leaked instructions are detected and no host has
+ * supplied its own wording.
+ */
+export const DEFAULT_REFUSAL = "Sorry, I can't share internal instructions. How else can I help?";
+
+/**
  * Apply the full output guardrails to a complete answer: refuse leaked
  * instructions outright, then scrub credentials from whatever remains.
  *
  * Used for every non-streamed answer, whoever produced it — the built-in
  * completion or a caller-supplied brain (`answerFn`).
+ *
+ * `refusal` only replaces the wording of the refusal. Detection and scrubbing
+ * are not configurable, so a host can voice the guard but never weaken it; a
+ * blank or non-string `refusal` falls back to `DEFAULT_REFUSAL` rather than
+ * letting a host silence the refusal by supplying an empty line.
  */
-export function guardOutput(text: string): string {
+export function guardOutput(text: string, refusal?: string): string {
   if (detectLeakage(text)) {
-    return "Sorry, I can't share internal instructions. How else can I help?";
+    return typeof refusal === "string" && refusal.trim() ? refusal : DEFAULT_REFUSAL;
   }
   return scrubOutput(text);
 }

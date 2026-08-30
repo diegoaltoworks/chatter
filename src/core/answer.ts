@@ -67,6 +67,13 @@ export interface AnswerOptions {
   conversationId?: string;
   temperature?: number;
   model?: string;
+  /**
+   * Wording for the guardrail refusal, for a surface that has already
+   * resolved whose voice this answer speaks in. Falls back to the
+   * server/channel-level `BrainHooks.refusal` the call site passes, and then
+   * to `DEFAULT_REFUSAL`. Detection and scrubbing stay Chatter's either way.
+   */
+  refusal?: string;
 }
 
 /**
@@ -78,12 +85,13 @@ export interface AnswerOptions {
 async function runAnswerFn(
   answerFn: AnswerFn,
   { system, messages, mode, sender, conversationId }: AnswerFnInput,
+  refusal?: string,
 ): Promise<{ content: string; usage: AnswerUsage }> {
   const result = await answerFn({ system, messages, mode, sender, conversationId });
   const raw = typeof result === "string" ? result : result?.content;
   const usage = typeof result === "string" ? undefined : result?.usage;
   return {
-    content: guardOutput(typeof raw === "string" ? raw : ""),
+    content: guardOutput(typeof raw === "string" ? raw : "", refusal),
     usage: usage ?? noUsage(),
   };
 }
@@ -101,11 +109,12 @@ export async function answerOnce({
   conversationId,
   temperature,
   model,
+  refusal,
 }: AnswerOptions): Promise<{ content: string; usage: AnswerUsage }> {
   if (answerFn) {
-    return runAnswerFn(answerFn, { system, messages, mode, sender, conversationId });
+    return runAnswerFn(answerFn, { system, messages, mode, sender, conversationId }, refusal);
   }
-  return completeOnce({ client, system, messages, temperature, model });
+  return completeOnce({ client, system, messages, temperature, model, refusal });
 }
 
 /** What a `transformReply` hook receives: the produced answer plus who/where it's going. */
@@ -184,15 +193,14 @@ export async function* answerStream({
   conversationId,
   temperature,
   model,
+  refusal,
 }: AnswerOptions): AsyncGenerator<string> {
   if (answerFn) {
-    const { content } = await runAnswerFn(answerFn, {
-      system,
-      messages,
-      mode,
-      sender,
-      conversationId,
-    });
+    const { content } = await runAnswerFn(
+      answerFn,
+      { system, messages, mode, sender, conversationId },
+      refusal,
+    );
     if (content) yield content;
     return;
   }

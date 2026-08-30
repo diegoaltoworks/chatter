@@ -326,6 +326,29 @@ streaming reply has no final answer to transform. See
 [integrations.md](./integrations.md) for the full per-surface `channel`
 identifiers.
 
+### Guardrail Refusal Copy
+
+Chatter's output guardrails replace a reply that leaks its own instructions
+with a refusal, and that refusal is the only user-facing line the framework
+speaks. Give it your bot's voice:
+
+```typescript
+{
+  refusal: "That stays behind the curtain - ask me something else.",
+}
+```
+
+Copy only. Leakage detection and credential scrubbing are not configurable, so
+this voices the guard and never weakens it, and a blank string is treated as
+unset. Honoured by the channel pipeline and every HTTP chat surface, on both
+`answerFn` answers and built-in completions. A channel config can override the
+server-level line for its own traffic, like any other brain hook.
+
+A surface that has already resolved which persona is speaking - a multi-persona
+host, say - can override it for a single turn by passing `refusal` to
+`answerOnce`/`answerStream` (or `completeOnce`) directly, without re-wrapping
+`answerFn`. Omit it everywhere and the built-in wording applies, unchanged.
+
 ### Logging
 
 Every library log call - startup banners, channel lifecycle, auth/session
