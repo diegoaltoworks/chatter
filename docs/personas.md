@@ -14,7 +14,8 @@ supplied by the caller.
 
 ## Registry
 
-A registry maps contacts to personas and personas to prompt files:
+A registry maps contacts and endpoints to personas, and personas to prompt
+files:
 
 ```json
 {
@@ -23,6 +24,9 @@ A registry maps contacts to personas and personas to prompt files:
   "personaWindowMinutes": 10,
   "contacts": {
     "+15551234567": { "name": "Sam", "role": "admin", "persona": "formal", "probability": 1 }
+  },
+  "endpoints": {
+    "support-sim": { "persona": "formal" }
   },
   "personas": {
     "assistant": { "name": "Assistant", "prompt": "prompts/assistant.md" },
@@ -41,6 +45,11 @@ A registry maps contacts to personas and personas to prompt files:
 - Contact keys are opaque caller-supplied ids (a channel sender id, an E.164
   number already normalized by the caller). This module does not parse or
   normalize them.
+- `endpoints` binds a persona to one of the bot's own endpoints rather than to
+  a sender - see [Resolving on the endpoint that was
+  reached](#resolving-on-the-endpoint-that-was-reached). Its keys are
+  `ChannelMessage.endpointId` values: the host-chosen name a channel was
+  configured with, not a wire identity.
 - `prompt` paths resolve relative to `promptsDir` (or `registryPath`'s
   directory when not set).
 
@@ -73,7 +82,7 @@ persona".
 Lower-level pieces are exposed for callers that need to share a roll across
 features (e.g. a greeting that must agree with the chat that follows):
 
-- `rollPersonaId(contactId)` - the persona id in effect right now, or `null`
+- `rollPersonaId(key)` - the persona id in effect right now, or `null`
   for "use the default".
 - `personaLayerFor(personaId)` - deterministic layer for an explicit id, no
   dice roll.
@@ -101,6 +110,59 @@ overrides are deterministic in tests:
 ```ts
 createPersonaResolver({ registry, random: () => 0, now: () => fixedClock });
 ```
+
+## Resolving on the endpoint that was reached
+
+A bot running several identities in one process - two WhatsApp SIMs, two
+Telegram tokens - may want the voice decided by **which** of them was reached
+rather than by who reached it. Register those under `endpoints` and pass the
+endpoint alongside the contact:
+
+```ts
+resolver.resolvePersonaLayer({ contactId: senderId, endpointId });
+```
+
+Both halves are optional, and a bare string stays the contact id, so
+`resolvePersonaLayer(senderId)` keeps meaning exactly what it did.
+
+The endpoint key is not a second flavour of the contact key:
+
+- **It wins when both resolve.** A contact mapping still applies on endpoints
+  the registry does not bind, so per-sender voices and per-endpoint voices
+  compose rather than compete.
+- **It needs no contact entry.** A stranger messaging a bound endpoint gets
+  that endpoint's persona - the case the contact key cannot express, since an
+  unknown sender has no registry entry to map.
+- **It is deterministic.** No probability roll and no persona window: the
+  probability machinery exists to vary a voice over time, and the identity a
+  guest chose to write to is not something to vary. Only the contact path
+  rolls, and an endpoint hit leaves the contact's window untouched.
+- **An unbound endpoint changes nothing.** Resolution falls through to the
+  contact path, roll and window included.
+
+Channels hand `endpointId` to `personaResolver` for you, so a host wires the
+two keys together once:
+
+```ts
+createWhatsAppInboundHandler({
+  // ...
+  personaResolver: ({ senderPhone, endpointId }) =>
+    resolver.resolvePersonaLayer({ contactId: senderPhone, endpointId }) ?? undefined,
+});
+```
+
+Telegram and Matrix pass the same `endpointId` next to their own `sender` key.
+
+`endpointId` is only set by a channel genuinely running more than one endpoint
+(see [Channels](./channels.md)), so a single-endpoint host sees `undefined` and
+resolves on the contact exactly as before.
+
+**This is scoped to the channel pipeline.** The HTTP chat routes
+(`/api/chat`, see [Server](./server.md)) do not resolve an endpoint and are not
+going to: a caller mounting those already knows which of its surfaces was hit -
+it is the request's own origin or route - and can pass the persona layer it
+wants directly. The endpoint key exists for callers that let chatter resolve
+the persona for them.
 
 ## Named greetings
 

@@ -25,6 +25,8 @@ export interface PollingChannelConfig extends BrainHooks {
   personaResolver?: (ctx: {
     sender: string;
     text: string;
+    /** Which of this process's endpoints received the message - see `ChannelMessage.endpointId`. Unset unless the channel runs more than one. */
+    endpointId?: string;
   }) => string | undefined | Promise<string | undefined>;
   /** Off by default — the channel stays single-turn until a store is configured. */
   history?: {

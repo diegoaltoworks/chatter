@@ -12,6 +12,8 @@ export { createGreeter } from "./greeter";
 export type {
   PersonaContact,
   PersonaDefinition,
+  PersonaEndpoint,
+  PersonaKey,
   PersonaRegistry,
   PersonaResolver,
   PersonaResolverOptions,

@@ -367,6 +367,21 @@ describe("createInboundPipeline", () => {
     expect(capturedSystem).toContain("you are a pirate");
   });
 
+  test("a personaResolver is handed the endpoint that received the message", async () => {
+    const seen: Array<string | undefined> = [];
+    const { handle, reply } = harness({
+      personaResolver: ({ endpointId }) => {
+        seen.push(endpointId);
+        return undefined;
+      },
+    });
+
+    await handle(msg({ endpointId: "wa-support" }), { reply });
+    await handle(msg(), { reply });
+
+    expect(seen).toEqual(["wa-support", undefined]);
+  });
+
   test("a throwing personaResolver degrades to no persona instead of failing the reply", async () => {
     const { handle, reply, answers } = harness({
       personaResolver: async () => {
