@@ -55,6 +55,7 @@ export {
   messageText,
   nextOffset,
   type TelegramBotIdentity,
+  telegramOwnIdentities,
   telegramSenderKey,
   toChannelMessage,
 } from "./updates";

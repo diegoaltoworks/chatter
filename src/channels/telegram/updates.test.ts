@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { decideChannelAction } from "../gates";
+import { decideChannelAction, type SessionIdentityRegistry } from "../gates";
 import type { TelegramMessage, TelegramUpdate } from "./api";
 import {
   mentionsBot,
@@ -7,6 +7,7 @@ import {
   messageText,
   nextOffset,
   type TelegramBotIdentity,
+  telegramOwnIdentities,
   telegramSenderKey,
   toChannelMessage,
 } from "./updates";
@@ -152,6 +153,37 @@ describe("toChannelMessage", () => {
   test("the bot's own message is flagged fromBot (loop guard)", () => {
     const msg = toChannelMessage(update({ text: "my own answer", from: { id: 100 } }), ME);
     expect(msg?.fromBot).toBe(true);
+  });
+
+  test("a sibling bot in the same process is fromBot, not a stranger", () => {
+    // The loop this prevents: two bot tokens mounted in one process, each a
+    // stranger to the other's `me`, answering each other's answers forever.
+    const identities: SessionIdentityRegistry = new Map([
+      ["telegram", telegramOwnIdentities(ME)],
+      ["telegram:support", telegramOwnIdentities({ id: 900, username: "SupportBot" })],
+    ]);
+
+    const msg = toChannelMessage(
+      update({ text: "the other persona's answer", from: { id: 900 } }),
+      ME,
+      identities,
+    );
+
+    expect(msg?.fromBot).toBe(true);
+  });
+
+  test("a stranger is still a stranger with the registry populated", () => {
+    const identities: SessionIdentityRegistry = new Map([
+      ["telegram:support", telegramOwnIdentities({ id: 900 })],
+    ]);
+
+    const msg = toChannelMessage(update({ text: "hello?", from: { id: 200 } }), ME, identities);
+
+    expect(msg?.fromBot).toBe(false);
+  });
+
+  test("only the numeric id is registered: senderId is never the @username", () => {
+    expect(telegramOwnIdentities(ME)).toEqual(["100"]);
   });
 
   test("a non-message update and a channel post (no `from`) map to nothing", () => {

@@ -111,6 +111,7 @@ function fakeDeps(
       ...configOverrides,
     } as unknown as ServerDependencies["config"],
     senders: createSenderRegistry(logger),
+    identities: new Map<string, string[]>(),
     logger,
   };
 }
@@ -485,6 +486,45 @@ describe("createMatrixChannel", () => {
     });
 
     expect(seen).toEqual(["mx:@alice:example.org"]);
+  });
+
+  test("registers its own identity in the process registry, so a sibling channel sees it", async () => {
+    const { deps } = await runChannel([]);
+    expect(deps.identities.get("matrix")).toEqual([ME]);
+  });
+
+  test("a channel-supplied identity registry is used instead of the server's", async () => {
+    const own = new Map<string, string[]>();
+    const { deps } = await runChannel([], { identities: own, name: "matrix:support" });
+
+    expect(own.get("matrix:support")).toEqual([ME]);
+    expect(deps.identities.size).toBe(0);
+  });
+
+  test("a message from another endpoint of this process is ignored, not answered", async () => {
+    const api = fakeApi([
+      syncWithRoomMessages("!room:example.org", [roomEvent({ sender: "@support:example.org" })]),
+    ]);
+    const logger = silentLogger();
+    const deps = fakeDeps(logger);
+    // The sibling registered first, exactly as a channel started earlier in
+    // the same createServer call would have.
+    deps.identities.set("matrix:support", ["@support:example.org"]);
+
+    const channel = createMatrixChannel({
+      homeserverUrl: "https://example.org",
+      accessToken: "test-token",
+      api,
+      sleep: async () => undefined,
+      logger,
+    });
+
+    await channel.start(deps);
+    await settle();
+    await channel.stop?.();
+
+    expect(deps.answered).toEqual([]);
+    expect(api.sent).toEqual([]);
   });
 
   test("registers a sender supporting text, media and reactions", async () => {

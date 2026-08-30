@@ -11,6 +11,7 @@ import type { Logger } from "../core/logger";
 import type { HistoryCompactionOptions } from "../history/compaction";
 import type { HistoryStore } from "../history/types";
 import type { BrainHooks } from "../types";
+import type { SessionIdentityRegistry } from "./gates";
 
 export interface PollingChannelConfig extends BrainHooks {
   /** Channel and sender-registry name. Override to run more than one bot in one process. */
@@ -50,6 +51,14 @@ export interface PollingChannelConfig extends BrainHooks {
   unmuteReply?: string;
   dmRateLimit?: { max: number; windowMs: number };
   groupRateLimit?: { max: number; windowMs: number };
+  /**
+   * Every identity this process answers to, keyed by endpoint - what `fromBot`
+   * is resolved against, so one of your own bots is never answered as a
+   * stranger. @default `deps.identities`, the one registry `createServer`
+   * owns and shares with every channel; set this only to scope a channel to a
+   * registry of your own.
+   */
+  identities?: SessionIdentityRegistry;
   /** Overridable for tests and for hosts routing through a proxy; defaults to `globalThis.fetch`. */
   fetch?: typeof fetch;
   /** Overridable for tests; defaults to a `setTimeout`-based sleep. */

@@ -151,6 +151,8 @@ export function createTelegramChannel(
           isDirectMessage: raw.chat.type === "private",
           mentionsBot: mentioned,
           isReplyToBot: raw.reply_to_message?.from?.id === me.id,
+          // One identity only - see "Loop guards across multiple bot
+          // identities" below for what a real channel does here.
           fromBot: raw.from.id === me.id,
         };
 
@@ -268,12 +270,34 @@ logged, for exactly that reason.
 
 ## Loop guards across multiple bot identities
 
-If your transport can run multiple identities in one process the way the
-WhatsApp channel can (several linked numbers sharing one deployment), reuse
-`SessionIdentityRegistry`/`isEffectivelyFromSelf` from `./channels` so one
-identity's own traffic is never mistaken for a stranger's by another. A
-single-bot-token channel like the Telegram example above has no such case -
-`fromBot` is a plain equality check against the one bot id it knows about.
+Register what your channel answers to as soon as you know it, and resolve
+`fromBot` through `isEffectivelyFromSelf` from `./channels` rather than
+against your own identity alone:
+
+```ts
+// In start(deps), once the transport has told you who you are:
+deps.identities.set(channelName, [String(me.id)]);
+
+// Per message:
+fromBot: isEffectivelyFromSelf(
+  { fromBot: raw.from.id === me.id, senderId: String(raw.from.id) },
+  deps.identities,
+),
+```
+
+The plain equality check the sketch above uses is only right for a process
+running one identity. Your transport does not have to be the one running
+several: a second bot token, a second Matrix account or a second linked
+WhatsApp number mounted alongside yours is a stranger to your `me`, so you
+answer it, it answers you, and the two burn model budget on each other until
+someone notices.
+
+`deps.identities` is the registry `createServer` shares with every channel
+(see [docs/channels.md](channels.md#loop-protection-across-identities)). Key
+your entry by something unique across the whole server - your channel name
+does that, and the WhatsApp handler's session ids share the same key space -
+re-register whenever your identity changes, and never delete an entry when an
+endpoint disconnects: it is still "us" while it reconnects.
 
 ## From sketch to shipped channel
 

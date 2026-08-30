@@ -28,7 +28,7 @@ import { defaultSleep, type PollingChannelConfig } from "../polling";
 import { createTelegramApi, type TelegramApi } from "./api";
 import { createTelegramSender, createTelegramUpdateHandler } from "./handler";
 import { runLongPoll } from "./poll";
-import type { TelegramBotIdentity } from "./updates";
+import { type TelegramBotIdentity, telegramOwnIdentities } from "./updates";
 
 /** Long-poll hold time. Telegram holds the request open this long when no update arrives, so a poll is one request per 30s idle — not a busy loop. */
 const DEFAULT_POLL_TIMEOUT_SECONDS = 30;
@@ -92,6 +92,12 @@ export function createTelegramChannel(config: TelegramChannelConfig): Channel {
       const me: TelegramBotIdentity = await api.getMe();
       const label = `Telegram[${me.username ?? me.id}]`;
 
+      // Registered before the first poll, so this channel's very first
+      // inbound resolves against a complete view of the server's identities.
+      // Never removed - see SessionIdentityRegistry.
+      const identities = config.identities ?? deps.identities;
+      identities.set(channelName, telegramOwnIdentities(me));
+
       deps.senders.register(channelName, createTelegramSender(api));
       senders = deps.senders;
       registered = true;
@@ -122,6 +128,7 @@ export function createTelegramChannel(config: TelegramChannelConfig): Channel {
       const handleUpdate = createTelegramUpdateHandler({
         api,
         me,
+        identities,
         pipeline,
         allowedChats,
         logger: log,

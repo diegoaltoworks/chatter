@@ -115,6 +115,12 @@ same gates:
   you cannot guess in advance - that log line is how you learn what to add).
 - **Mute/unmute apply to groups only**, and only when you configure the
   patterns.
+- **Another of your own bots is never answered.** A second bot token in the
+  same server is registered in `deps.identities` and recognised as "us", not
+  as a stranger. The Bot API already declines to deliver one bot's messages
+  to another, so on Telegram this is a second line rather than the only one -
+  see [Loop protection across
+  identities](./channels.md#loop-protection-across-identities).
 
 Answers are threaded onto the message that prompted them (`reply_parameters`),
 so a busy group can tell what the bot is answering. Mute/unmute acknowledgements

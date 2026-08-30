@@ -395,6 +395,9 @@ Custom routes receive the same dependencies the built-in route factories use:
     // deps.prompts        PromptLoader
     // deps.apiKeyManager  API key manager, when configured
     // deps.senders        ChannelSenderRegistry channels register into
+    // deps.identities     SessionIdentityRegistry every channel resolves
+    //                     `fromBot` against, so one of your own bots is
+    //                     never answered as a stranger
 
     app.get("/my-route", async (c) => {
       const rows = await deps.db.execute("SELECT count(*) AS n FROM chunks");
@@ -467,7 +470,9 @@ pipeline:
 A channel is anything matching the `Channel` SPI - `{ name, start(deps), stop?() }`.
 `createServer` starts every configured channel after routes (and
 `customRoutes`) are mounted, with the same `deps` custom routes receive
-(including `deps.senders`, below), so a channel can call
+(including `deps.senders`, below, and `deps.identities` - the one registry
+that stops two of your own bots answering each other, see
+[docs/channels.md](channels.md#loop-protection-across-identities)), so a channel can call
 `prepareChat`/`answerFn`, share `deps.db`, etc. A channel that throws on
 `start` is logged and skipped; the server and the other channels keep
 running. `start(deps)` also works when called directly, without

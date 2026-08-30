@@ -7,7 +7,7 @@
  */
 
 import type { Logger } from "../../core/logger";
-import { isBlockedByAllowlist } from "../gates";
+import { isBlockedByAllowlist, type SessionIdentityRegistry } from "../gates";
 import type { InboundPipeline, InboundReplySender } from "../pipeline";
 import type { ChannelSender } from "../senders";
 import type { TelegramApi, TelegramUpdate } from "./api";
@@ -17,6 +17,12 @@ export interface TelegramUpdateHandlerDeps {
   api: TelegramApi;
   me: TelegramBotIdentity;
   pipeline: InboundPipeline;
+  /**
+   * Every identity this process answers to, across all its channels - what
+   * `fromBot` is resolved against, so another endpoint of the same process is
+   * recognised as "us". Omitted: `me` alone, which cannot see a second bot.
+   */
+  identities?: SessionIdentityRegistry;
   /** Group chats eligible for a reply. Empty = every group. */
   allowedChats: string[];
   logger: Logger;
@@ -32,12 +38,12 @@ export interface TelegramUpdateHandlerDeps {
 export function createTelegramUpdateHandler(
   deps: TelegramUpdateHandlerDeps,
 ): (update: TelegramUpdate) => Promise<void> {
-  const { api, me, pipeline, allowedChats, logger, label } = deps;
+  const { api, me, pipeline, identities, allowedChats, logger, label } = deps;
   const loggedUnallowedChats = new Set<string>();
 
   return async function handleUpdate(update: TelegramUpdate): Promise<void> {
     const message = update.message;
-    const msg = toChannelMessage(update, me);
+    const msg = toChannelMessage(update, me, identities);
     if (!msg || !message) return;
 
     if (isBlockedByAllowlist(msg, { allowedChats })) {

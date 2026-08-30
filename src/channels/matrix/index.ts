@@ -63,6 +63,7 @@ export {
   MAX_TRACKED_SENT_EVENTS,
   type MatrixDirectMapping,
   type MatrixIdentity,
+  matrixOwnIdentities,
   matrixSenderKey,
   mentionsBot,
   messageText,

@@ -182,6 +182,13 @@ export function underReplyRateLimit(
  * session's own identity is still "us" while it reconnects, and losing that
  * during exactly the disconnect/reconnect window this guard exists for
  * would defeat it.
+ *
+ * One key space, shared by every endpoint writing into the same registry -
+ * `createServer` gives all its channels one (`ServerDependencies.identities`),
+ * where the built-ins key by WhatsApp session id and by channel name
+ * respectively. Two endpoints choosing the same key overwrite each other's
+ * identities silently, so a key must be unique across everything the server
+ * runs, not just within one transport.
  */
 export type SessionIdentityRegistry = Map<string, string[]>;
 

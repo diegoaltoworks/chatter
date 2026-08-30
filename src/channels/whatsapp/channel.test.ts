@@ -540,6 +540,7 @@ function testDeps(db = createClient({ url: ":memory:" })) {
       config: {} as never,
       prompts: {} as never,
       senders,
+      identities: new Map<string, string[]>(),
       logger: silentLogger,
     },
     senders,
