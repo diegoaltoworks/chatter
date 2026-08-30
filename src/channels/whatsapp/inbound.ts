@@ -248,7 +248,7 @@ export function resolveWaMessage(
   event: WhatsAppMessageEvent,
   registry: SessionIdentityRegistry,
 ): ResolvedWaMessage {
-  const { sessionId, sock, message } = event;
+  const { sessionId, sock, message, endpointId } = event;
   const chatId = message.key.remoteJid ?? "";
   const rawText = extractText(message);
   const context = messageContext(message);
@@ -292,9 +292,11 @@ export function resolveWaMessage(
     // still react to it via `ChannelSenderRegistry.sendReaction`.
     messageRef: message.key,
     // The session id this channel instance was configured with, not a wire
-    // identity - stable across the number's own SIM or token changing, and
-    // present even for the single, unnamed "default" session.
-    endpointId: sessionId,
+    // identity - stable across the number's own SIM or token changing.
+    // Unset for a default single-session channel (see
+    // WhatsAppMessageEvent.endpointId) so a host that hasn't opted into
+    // multiple endpoints sees no change.
+    endpointId,
   };
 
   return { msg, ownIds };

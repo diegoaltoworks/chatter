@@ -395,32 +395,51 @@ function waEvent(sock: WASocket, overrides: Partial<WAMessage> = {}): WhatsAppMe
 }
 
 describe("resolveWaMessage", () => {
-  test("endpointId is the session id, not a wire identity", () => {
+  test("endpointId is unset when the event carries none - the default single-session channel case", () => {
     const registry: SessionIdentityRegistry = new Map();
     const { msg } = resolveWaMessage(waEvent(fakeSocket()), registry);
+
+    expect(msg.endpointId).toBeUndefined();
+  });
+
+  test("endpointId passes through the event's endpointId, not a wire identity", () => {
+    const registry: SessionIdentityRegistry = new Map();
+    const { msg } = resolveWaMessage({ ...waEvent(fakeSocket()), endpointId: "default" }, registry);
 
     expect(msg.endpointId).toBe("default");
   });
 
-  test("endpointId stays the session id even when the wire identity (sock.user.id) changes", () => {
+  test("endpointId stays stable even when the wire identity (sock.user.id) changes", () => {
     const registry: SessionIdentityRegistry = new Map();
     const firstSock = fakeSocket({ user: { id: "447700900000@s.whatsapp.net" } } as never);
-    const { msg: first } = resolveWaMessage(waEvent(firstSock), registry);
+    const { msg: first } = resolveWaMessage(
+      { ...waEvent(firstSock), endpointId: "default" },
+      registry,
+    );
 
     const secondSock = fakeSocket({ user: { id: "447700900999@s.whatsapp.net" } } as never);
-    const { msg: second } = resolveWaMessage(waEvent(secondSock), registry);
+    const { msg: second } = resolveWaMessage(
+      { ...waEvent(secondSock), endpointId: "default" },
+      registry,
+    );
 
     // The wire identity really did change, keyed on the same "default" session -
-    // otherwise this test would pass even if endpointId were a hardcoded literal.
+    // endpointId is a pure pass-through from the event, so this pins that a
+    // registry keyed on sessionId is unaffected by that churn.
     expect(registry.get("default")).toEqual(["447700900999@s.whatsapp.net"]);
     expect(first.endpointId).toBe("default");
     expect(second.endpointId).toBe("default");
   });
 
-  test("a non-default session's endpointId is its own session id", () => {
+  test("a non-default session's endpointId passes through as its own session id", () => {
     const registry: SessionIdentityRegistry = new Map();
     const { msg } = resolveWaMessage(
-      { sessionId: "other-session", sock: fakeSocket(), message: waEvent(fakeSocket()).message },
+      {
+        sessionId: "other-session",
+        sock: fakeSocket(),
+        message: waEvent(fakeSocket()).message,
+        endpointId: "other-session",
+      },
       registry,
     );
 

@@ -185,7 +185,10 @@ export function createTelegramWebhookRoute(config: TelegramWebhookConfig): Custo
       allowedChats,
       logger: log,
       label,
-      channelName,
+      // config.name, not the resolved channelName: endpointId opts in only
+      // when the host explicitly named this channel (running more than one
+      // bot in the process), not for a default single-token channel.
+      channelName: config.name,
     });
 
     app.post(

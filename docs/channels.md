@@ -223,14 +223,24 @@ separate processes, or behind separate `createServer` calls.
 
 ### The endpoint that received a message
 
-`ChannelMessage.endpointId` carries the same key: the WhatsApp handler sets
-it to the session id, and Telegram and Matrix set it to the channel `name` -
-whichever key that endpoint already registers into `SessionIdentityRegistry`
-above. It answers a different question than `fromBot` does, though: not
-"is this us?" but "which of *our* endpoints was this sent to?", for a host
-running several endpoints behind one process that wants to bind persona or
-history to the one that was reached rather than only to the sender. It is
-optional and unset on any endpoint that hasn't populated it.
+`ChannelMessage.endpointId` carries the same key, but only once a channel is
+actually running more than one endpoint: the WhatsApp handler sets it to the
+session id once more than one `sessionId` is configured or the channel has a
+custom `name`, and Telegram and Matrix set it to the channel `name` only once
+the host gives the channel a custom one - the same key that endpoint already
+registers into `SessionIdentityRegistry` above. A default, single-endpoint
+channel on any transport leaves it unset, so a host that hasn't opted into
+multiple endpoints sees no change. It answers a different question than
+`fromBot` does, though: not "is this us?" but "which of *our* endpoints was
+this sent to?", for a host running several endpoints behind one process that
+wants to bind persona or history to the one that was reached rather than only
+to the sender.
+
+Opting a previously single-endpoint channel into a second one is a one-way
+door for anything keyed on `endpointId` (conversation history, persona
+resolution): the first endpoint's messages stop being unkeyed and start
+carrying an `endpointId` of their own, which a caller composing a history or
+persona key from it will read as a new key, not the old unkeyed one.
 
 ## Image requests
 
