@@ -185,6 +185,7 @@ export function createTelegramWebhookRoute(config: TelegramWebhookConfig): Custo
       allowedChats,
       logger: log,
       label,
+      channelName,
     });
 
     app.post(

@@ -19,6 +19,7 @@ import {
   jidsMatch,
   jidToPhoneNumber,
   messageContext,
+  resolveWaMessage,
   senderPhoneFor,
   stripOwnMentions,
   type WhatsAppInboundConfig,
@@ -392,6 +393,40 @@ function waEvent(sock: WASocket, overrides: Partial<WAMessage> = {}): WhatsAppMe
     } as unknown as WAMessage,
   };
 }
+
+describe("resolveWaMessage", () => {
+  test("endpointId is the session id, not a wire identity", () => {
+    const registry: SessionIdentityRegistry = new Map();
+    const { msg } = resolveWaMessage(waEvent(fakeSocket()), registry);
+
+    expect(msg.endpointId).toBe("default");
+  });
+
+  test("endpointId stays the session id even when the wire identity (sock.user.id) changes", () => {
+    const registry: SessionIdentityRegistry = new Map();
+    const firstSock = fakeSocket({ user: { id: "447700900000@s.whatsapp.net" } } as never);
+    const { msg: first } = resolveWaMessage(waEvent(firstSock), registry);
+
+    const secondSock = fakeSocket({ user: { id: "447700900999@s.whatsapp.net" } } as never);
+    const { msg: second } = resolveWaMessage(waEvent(secondSock), registry);
+
+    // The wire identity really did change, keyed on the same "default" session -
+    // otherwise this test would pass even if endpointId were a hardcoded literal.
+    expect(registry.get("default")).toEqual(["447700900999@s.whatsapp.net"]);
+    expect(first.endpointId).toBe("default");
+    expect(second.endpointId).toBe("default");
+  });
+
+  test("a non-default session's endpointId is its own session id", () => {
+    const registry: SessionIdentityRegistry = new Map();
+    const { msg } = resolveWaMessage(
+      { sessionId: "other-session", sock: fakeSocket(), message: waEvent(fakeSocket()).message },
+      registry,
+    );
+
+    expect(msg.endpointId).toBe("other-session");
+  });
+});
 
 describe("createWhatsAppInboundHandler", () => {
   test("a DM is answered through prepareChat/answerFn and replied to, quoted", async () => {

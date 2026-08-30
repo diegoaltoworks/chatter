@@ -80,6 +80,8 @@ export interface MatrixSyncHandlerDeps {
   logger: Logger;
   /** Log-line prefix, e.g. `Matrix[@bot:example.org]`. */
   label: string;
+  /** This channel's configured name - populates `ChannelMessage.endpointId`. Omitted: `endpointId` is left unset. */
+  channelName?: string;
 }
 
 /**
@@ -92,7 +94,8 @@ export interface MatrixSyncHandlerDeps {
 export function createMatrixSyncHandler(
   deps: MatrixSyncHandlerDeps,
 ): (response: MatrixSyncResponse) => Promise<void> {
-  const { api, me, pipeline, identities, allowedChats, sentEventIds, logger, label } = deps;
+  const { api, me, pipeline, identities, allowedChats, sentEventIds, logger, label, channelName } =
+    deps;
   const autoJoin = deps.autoJoin ?? true;
   const loggedUnallowedChats = new Set<string>();
   const loggedDeclinedInvites = new Set<string>();
@@ -158,7 +161,15 @@ export function createMatrixSyncHandler(
 
     for (const [roomId, room] of Object.entries(response.rooms?.join ?? {})) {
       for (const event of room.timeline.events) {
-        const msg = toChannelMessage(roomId, event, me, directRooms, sentEventIds, identities);
+        const msg = toChannelMessage(
+          roomId,
+          event,
+          me,
+          directRooms,
+          sentEventIds,
+          identities,
+          channelName,
+        );
         if (!msg) continue;
 
         if (isBlockedByAllowlist(msg, { allowedChats })) {

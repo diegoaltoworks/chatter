@@ -133,6 +133,7 @@ export function createTelegramChannel(config: TelegramChannelConfig): Channel {
         allowedChats,
         logger: log,
         label,
+        channelName,
       });
 
       abort = new AbortController();

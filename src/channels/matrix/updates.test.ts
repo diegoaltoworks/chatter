@@ -361,6 +361,22 @@ describe("toChannelMessage", () => {
     expect(msg?.fromBot).toBe(false);
   });
 
+  test("endpointId is the configured channel name, unset when none is passed", () => {
+    const msg = toChannelMessage("!room:example.org", event({}), ME, new Set(), new Set());
+    expect(msg?.endpointId).toBeUndefined();
+
+    const named = toChannelMessage(
+      "!room:example.org",
+      event({}),
+      ME,
+      new Set(),
+      new Set(),
+      undefined,
+      "matrix:support",
+    );
+    expect(named?.endpointId).toBe("matrix:support");
+  });
+
   test("a non-message event maps to nothing", () => {
     expect(
       toChannelMessage(

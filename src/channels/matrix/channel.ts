@@ -154,6 +154,7 @@ export function createMatrixChannel(config: MatrixChannelConfig): Channel {
         initialDirect,
         logger: log,
         label,
+        channelName,
       });
 
       abort = new AbortController();

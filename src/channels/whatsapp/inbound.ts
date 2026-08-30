@@ -291,6 +291,10 @@ export function resolveWaMessage(
     // `createInboundPipeline` (not just the WhatsApp-specific router) can
     // still react to it via `ChannelSenderRegistry.sendReaction`.
     messageRef: message.key,
+    // The session id this channel instance was configured with, not a wire
+    // identity - stable across the number's own SIM or token changing, and
+    // present even for the single, unnamed "default" session.
+    endpointId: sessionId,
   };
 
   return { msg, ownIds };
