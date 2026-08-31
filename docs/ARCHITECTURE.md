@@ -8,8 +8,10 @@ says why it isn't (yet, or ever) a mechanical check.
 
 Read this before touching a seam (`answerFn`, `bucketsFor`, the Channel SPI),
 adding a subpath, or adding a store - [docs/patterns/](./patterns/) has the
-worked "how do I..." guides; this page is the "why does it have to work that
-way" reference they point back to.
+worked "how do I..." guides, and
+[patterns/extending-chatter.md](./patterns/extending-chatter.md) indexes
+every seam against what it is and is not for; this page is the "why does it
+have to work that way" reference they point back to.
 
 ## The invariants
 
