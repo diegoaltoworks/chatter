@@ -9,7 +9,7 @@
 # The build runs on Bun; the built package itself runs on Bun or Node >= 24
 # (see the runtime section of README.md).
 
-FROM oven/bun:1.4.0 AS build
+FROM oven/bun:1.3.14 AS build
 
 WORKDIR /app
 
@@ -29,7 +29,7 @@ COPY . .
 RUN bun run build
 
 # Production stage
-FROM oven/bun:1.4.0-slim
+FROM oven/bun:1.3.14-slim
 
 WORKDIR /app
 
