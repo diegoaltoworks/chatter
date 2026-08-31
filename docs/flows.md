@@ -11,8 +11,10 @@ import { createFlowEngine, createTursoFlowSessionStore } from "@diegoaltoworks/c
 
 Nothing in this module is chat-surface- or channel-specific, and it adds no
 required dependencies beyond the OpenAI client and libsql client chatter
-already expects. It ships **no flows** - a flows directory, its trigger
-keywords, its schema and its handler logic are always supplied by the caller.
+already expects. Like every seam in chatter, it ships no flows
+([ADR 0005](./decisions/0005-ships-no-content.md)) - a flows directory, its
+trigger keywords, its schema and its handler logic are always supplied by the
+caller.
 
 This is also the designated future home for graph-based flow orchestration -
 today's engine is intentionally the simplest thing that fills a schema over a

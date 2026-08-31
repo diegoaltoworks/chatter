@@ -18,7 +18,8 @@ Welcome to the Chatter documentation! This guide will help you set up and deploy
      [0001, brain and sockets split](./decisions/0001-brain-and-sockets-split.md),
      [0002, no LangChain in core](./decisions/0002-no-langchain-in-core.md),
      [0003, slot-filling is brain territory](./decisions/0003-slot-filling-is-brain-territory.md),
-     [0004, main-protection keeps only non-fast-forward and deletion protections](./decisions/0004-main-protection-stays-non-fast-forward-only.md)
+     [0004, main-protection keeps only non-fast-forward and deletion protections](./decisions/0004-main-protection-stays-non-fast-forward-only.md),
+     [0005, chatter ships no content](./decisions/0005-ships-no-content.md)
 
 2. **[Requirements](./requirements.md)** - What you need before starting
    - OpenAI API setup
