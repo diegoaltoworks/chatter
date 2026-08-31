@@ -59,17 +59,18 @@ entirely, which is how a channel that already knows its own thread key (a
 support ticket id, say) keeps using it.
 
 `chatId` alone is not a thread once a process runs more than one persona. One
-guest reaching two of them produces the same `chatId` on both, so a single key
+sender reaching two of them produces the same `chatId` on both, so a single key
 would hand each persona the other's turns. `endpointId` is only ever set by a
-channel genuinely running more than one endpoint (see
-[channels.md](./channels.md)), so a single-endpoint host's key stays the bare
-`chatId` and its stored history keeps reading back - there is nothing to
-migrate. The corollary is the one-way door that section describes: a channel
-that starts setting an `endpointId` keys its existing threads under new ids,
-and the turns recorded before that stay under the old ones. That covers a host
-adding a second endpoint, and also a host already running several - its
-endpoints were sharing one thread per chat, which is the bug this fixes, and
-they start separate threads from the upgrade on.
+channel genuinely running more than one endpoint, or given a custom name (see
+[channels.md](./channels.md)), so a default, unnamed single-endpoint host's
+key stays the bare `chatId` and its stored history keeps reading back - there
+is nothing to migrate. The corollary is the one-way door that section
+describes: a channel that starts setting an `endpointId` - by adding a second
+endpoint, or simply by being given a custom name - keys its existing threads
+under new ids, and the turns recorded before that stay under the old ones.
+That also covers a host already running several endpoints under one channel
+name - its endpoints were sharing one thread per chat, which is the bug this
+fixes, and they start separate threads from the upgrade on.
 
 Both halves are host-chosen strings that may contain the separator, so the
 composition escapes both rather than trusting either to avoid it: no two
@@ -228,6 +229,23 @@ could lose the turns being kept, an accepted tradeoff of a store contract with
 no transaction primitive. A failing or timed-out `summarize` never reaches
 that rewrite at all: history is left exactly as it was, and the turn's own
 reply still sends normally.
+
+Before that rewrite, compaction re-reads the conversation instead of reusing
+the turns it loaded before summarizing: `summarize` can take up to
+`timeoutMs`, long enough for another instance to append a fresh turn mid-call,
+and the re-read means only the turns actually covered by the summary get
+folded away - anything appended during the summarize call survives untouched
+in the kept tail.
+
+A narrower window remains even so, between that re-read and the `clear` that
+follows it: an append landing there is covered by neither the summary nor the
+kept tail, and is lost from stored history. This is bounded rather than fixed
+- compaction only fires once a conversation crosses the configured turn
+threshold, so hitting the window needs a second append arriving in that same
+instant on that same conversation, and the reply itself is unaffected since
+compaction runs after it is sent. Exposure grows on a deployment where a
+single conversation runs long and crosses the threshold often, so a busy,
+long-lived thread is where this is worth revisiting.
 
 ## Channels
 

@@ -2,8 +2,7 @@
  * Locks the downstream consumption patterns documented in docs/server.md,
  * docs/channels.md, docs/telegram.md, docs/personas.md, docs/flows.md,
  * docs/history.md, docs/build-a-channel.md and docs/integrations.md: the shape of
- * ServerDependencies (incl. the shared db handle), starting a Channel
- * standalone, personaResolver output feeding prepareChat's personaLayer, the
+ * ServerDependencies (incl. the shared db handle), personaResolver output feeding prepareChat's personaLayer, the
  * bucketsFor retrieval hook, the rewriteQuery/rerankContext retrieval seams,
  * prepareChat's channel-facing params, the answerFn brain hook, the
  * transformReply outbound hook, sending through the
@@ -142,20 +141,6 @@ describe("API surface", () => {
     const deps2: ServerDependencies = { ...deps, logger: custom };
     deps2.logger.info("hello");
     expect(calls).toEqual(["hello"]);
-  });
-
-  test("a Channel starts standalone with only ServerDependencies", async () => {
-    const seenSenders: unknown[] = [];
-    const channel: Channel = {
-      name: "example",
-      start: async (deps) => {
-        seenSenders.push(deps.senders);
-      },
-    };
-
-    const deps = fakeDeps();
-    await channel.start(deps);
-    expect(seenSenders).toEqual([deps.senders]);
   });
 
   // The built-in second transport, and the proof that the SPI above is

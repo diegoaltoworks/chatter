@@ -56,7 +56,7 @@ Honest limits of the bot model, none of which chatter can work around:
 | `answerFn` / `bucketsFor` / `rewriteQuery` / `rerankContext` / `fallbackFn` / `transformReply` | `deps.config.*` | The brain, retrieval-scope, retrieval-shaping and outbound-reply hooks; fall back to the server's own. |
 | `model` | server default | Model override for this channel. |
 | `channelHint` | `"Channel: Telegram."` | Extra system-prompt section describing the delivery channel. |
-| `personaResolver` | none | Per-sender prompt layer; receives the `tg:<id>` sender key. |
+| `personaResolver` | none | Per-sender prompt layer; receives the `tg:<id>` sender key, plus `endpointId` when this channel runs more than one endpoint - see [Resolving on the endpoint that was reached](./personas.md#resolving-on-the-endpoint-that-was-reached). |
 | `history` | off | `{ store, limit?, historyEnabledFor? }` - any [`HistoryStore`](./history.md). Single-turn until set; `historyEnabledFor` opts specific senders out - see "Privacy controls" in [history.md](./history.md). |
 | `muteRegex` / `unmuteRegex` | none | Group mute switch. Inert unless set - this package ships no bot personality. |
 | `muteReply` / `unmuteReply` | none | Acknowledgements. Unset = silent. |

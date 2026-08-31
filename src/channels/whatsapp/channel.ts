@@ -469,10 +469,10 @@ export function createWhatsAppChannel(config: WhatsAppChannelConfig): WhatsAppCh
       senders = deps.senders;
       // Resolve the optional peer dependency eagerly, before returning: a
       // missing package then fails THIS start() call, which `createServer`
-      // (and any standalone caller) logs and isolates — instead of
-      // resolving successfully and only surfacing the failure later, deep
-      // inside a lease-gated retry loop that keeps firing after the server
-      // already reported this channel as started.
+      // logs and isolates — instead of resolving successfully and only
+      // surfacing the failure later, deep inside a lease-gated retry loop
+      // that keeps firing after the server already reported this channel as
+      // started.
       await loadBaileys();
 
       const leaseDeps: LeaseGatedConnectDeps = {

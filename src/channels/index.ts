@@ -4,8 +4,10 @@
  * configured channel with the same {@link ServerDependencies} route
  * factories and custom routes receive, so a channel can call
  * `prepareChat`/`answerOnce`, share `deps.db`, etc. without knowing how the
- * server was assembled — and `channel.start(deps)` works identically when
- * called directly, outside `createServer`, for standalone use.
+ * server was assembled. `ServerDependencies` is `createServer`'s to build -
+ * a host embedding chatter into its own server does so through
+ * `customRoutes` or by mounting the returned `ChatterApp`, not by calling
+ * `channel.start` directly with a hand-assembled `deps`.
  *
  * Published as the `@diegoaltoworks/chatter/channels` subpath alongside the
  * pure decision gates ({@link decideChannelAction} and friends) and the

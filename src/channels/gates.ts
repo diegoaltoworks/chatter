@@ -52,8 +52,9 @@ export interface ChannelGateConfig {
   mutedChats: Set<string>;
   /**
    * Caller-supplied trigger for "go quiet in this group chat". No default:
-   * this module ships no bot name or in-character phrasing, so mute/unmute
-   * are inert unless a host configures a pattern. Never applied to DMs.
+   * this module ships no content (see docs/decisions/0005-ships-no-content.md),
+   * so mute/unmute are inert unless a host configures a pattern. Never
+   * applied to DMs.
    */
   muteRegex?: RegExp;
   unmuteRegex?: RegExp;

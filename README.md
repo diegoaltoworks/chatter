@@ -116,11 +116,13 @@ Complete guides for setup, deployment, and integration - see
   [0001, brain and sockets split](./docs/decisions/0001-brain-and-sockets-split.md),
   [0002, no LangChain in core](./docs/decisions/0002-no-langchain-in-core.md),
   [0003, slot-filling is brain territory](./docs/decisions/0003-slot-filling-is-brain-territory.md),
-  [0004, main-protection keeps only non-fast-forward and deletion protections](./docs/decisions/0004-main-protection-stays-non-fast-forward-only.md)
+  [0004, main-protection keeps only non-fast-forward and deletion protections](./docs/decisions/0004-main-protection-stays-non-fast-forward-only.md),
+  [0005, chatter ships no content](./docs/decisions/0005-ships-no-content.md)
 - **Patterns** - Worked "how do I add X" guides:
   [adding a capability](./docs/patterns/adding-a-capability.md),
   [adding a store](./docs/patterns/adding-a-store.md),
   [adding a retriever](./docs/patterns/adding-a-retriever.md),
+  [extending chatter](./docs/patterns/extending-chatter.md),
   [exemplars](./docs/patterns/exemplars.md)
 
 ### Archive

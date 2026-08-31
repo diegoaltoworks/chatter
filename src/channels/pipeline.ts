@@ -165,12 +165,13 @@ function escapeKeyPart(part: string): string {
  * The default thread key for a message: `chatId` alone, or `chatId` paired
  * with the endpoint that received it once one is set.
  *
- * `chatId` alone is not a thread. One guest reaching two of a process's own
+ * `chatId` alone is not a thread. One sender reaching two of a process's own
  * personas produces the same `chatId` on both, so a single key would hand
  * each persona the other's turns. `ChannelMessage.endpointId` is only ever
- * set by a channel genuinely running more than one endpoint, which is
- * exactly when that collision is possible, so a single-endpoint host's key
- * stays `chatId` and its stored history keeps reading back.
+ * set by a channel genuinely running more than one endpoint, or given a
+ * custom name, which is exactly when that collision is possible, so a
+ * default single-endpoint host's key stays `chatId` and its stored history
+ * keeps reading back.
  *
  * Both halves are host-chosen strings that may contain anything, `#`
  * included, so the pair is what has to stay unambiguous rather than either

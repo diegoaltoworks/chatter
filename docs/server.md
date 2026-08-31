@@ -498,11 +498,21 @@ that stops two of your own bots answering each other, see
 [docs/channels.md](channels.md#loop-protection-across-identities)), so a channel can call
 `prepareChat`/`answerFn`, share `deps.db`, etc. A channel that throws on
 `start` is logged and skipped; the server and the other channels keep
-running. `start(deps)` also works when called directly, without
-`createServer`, for standalone use (a pairing script, a one-off worker) -
-just return once the transport is *initiated* (a socket opened), not once a
-slow handshake or pairing flow completes, since `createServer` awaits it
-before the app starts serving requests.
+running. `start` should return once the transport is *initiated* (a socket
+opened), not once a slow handshake or pairing flow completes, since
+`createServer` awaits it before the app starts serving requests.
+
+`createServer` is the only supported way to start a channel - it is the one
+place that assembles `ServerDependencies`. A host embedding chatter into an
+existing server calls `createServer` and mounts the `customRoutes` hook or
+the returned `ChatterApp`, rather than building a `ServerDependencies` by
+hand to call `channel.start` directly. `ChatterApp` is a Hono app, so a host
+that already runs its own server mounts it with `app.route()` the same way it
+would mount any other Hono sub-app - see
+[examples/embedded-in-existing-app.ts](../examples/embedded-in-existing-app.ts)
+for the full shape: the host's own app, its own retriever, a channel
+configured rather than started directly, and shutdown through
+`stopChannels()`.
 
 #### Shutdown
 
