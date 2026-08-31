@@ -59,17 +59,18 @@ entirely, which is how a channel that already knows its own thread key (a
 support ticket id, say) keeps using it.
 
 `chatId` alone is not a thread once a process runs more than one persona. One
-guest reaching two of them produces the same `chatId` on both, so a single key
+sender reaching two of them produces the same `chatId` on both, so a single key
 would hand each persona the other's turns. `endpointId` is only ever set by a
-channel genuinely running more than one endpoint (see
-[channels.md](./channels.md)), so a single-endpoint host's key stays the bare
-`chatId` and its stored history keeps reading back - there is nothing to
-migrate. The corollary is the one-way door that section describes: a channel
-that starts setting an `endpointId` keys its existing threads under new ids,
-and the turns recorded before that stay under the old ones. That covers a host
-adding a second endpoint, and also a host already running several - its
-endpoints were sharing one thread per chat, which is the bug this fixes, and
-they start separate threads from the upgrade on.
+channel genuinely running more than one endpoint, or given a custom name (see
+[channels.md](./channels.md)), so a default, unnamed single-endpoint host's
+key stays the bare `chatId` and its stored history keeps reading back - there
+is nothing to migrate. The corollary is the one-way door that section
+describes: a channel that starts setting an `endpointId` - by adding a second
+endpoint, or simply by being given a custom name - keys its existing threads
+under new ids, and the turns recorded before that stay under the old ones.
+That also covers a host already running several endpoints under one channel
+name - its endpoints were sharing one thread per chat, which is the bug this
+fixes, and they start separate threads from the upgrade on.
 
 Both halves are host-chosen strings that may contain the separator, so the
 composition escapes both rather than trusting either to avoid it: no two

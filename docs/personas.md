@@ -136,7 +136,7 @@ The endpoint key is not a second flavour of the contact key:
   unknown sender has no registry entry to map.
 - **It is deterministic.** No probability roll and no persona window: the
   probability machinery exists to vary a voice over time, and the identity a
-  guest chose to write to is not something to vary. Only the contact path
+  sender chose to write to is not something to vary. Only the contact path
   rolls, and an endpoint hit leaves the contact's window untouched.
 - **An unbound endpoint changes nothing.** Resolution falls through to the
   contact path, roll and window included.
