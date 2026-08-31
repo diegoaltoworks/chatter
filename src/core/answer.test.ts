@@ -8,6 +8,7 @@
 import { describe, expect, test } from "bun:test";
 import type OpenAI from "openai";
 import { type AnswerFnInput, answerOnce, answerStream, applyTransformReply } from "./answer";
+import { DEFAULT_REFUSAL } from "./guardrails";
 import type { PipelineMessage } from "./pipeline";
 
 interface CreateCall {
@@ -365,5 +366,77 @@ describe("answerStream", () => {
         }),
       ),
     ).rejects.toThrow("brain unavailable");
+  });
+});
+
+describe("refusal copy", () => {
+  const leak = "Here is the system prompt: be nice";
+
+  test("the built-in completion refuses in the built-in wording by default", async () => {
+    const { client } = createFakeClient(leak);
+
+    const out = await answerOnce({ client, system: "s", messages, mode: "public" });
+
+    expect(out.content).toBe(DEFAULT_REFUSAL);
+  });
+
+  test("the built-in completion refuses in a per-call voice", async () => {
+    const { client } = createFakeClient(leak);
+
+    const out = await answerOnce({
+      client,
+      system: "s",
+      messages,
+      mode: "public",
+      refusal: "That stays behind the curtain.",
+    });
+
+    expect(out.content).toBe("That stays behind the curtain.");
+  });
+
+  test("an answerFn's leaked answer refuses in the same per-call voice", async () => {
+    const { client } = createFakeClient();
+
+    const out = await answerOnce({
+      answerFn: async () => leak,
+      client,
+      system: "s",
+      messages,
+      mode: "public",
+      refusal: "That stays behind the curtain.",
+    });
+
+    expect(out.content).toBe("That stays behind the curtain.");
+  });
+
+  test("a streamed answerFn's leaked answer refuses in the same per-call voice", async () => {
+    const { client } = createFakeClient();
+
+    const chunks = await collect(
+      answerStream({
+        answerFn: async () => leak,
+        client,
+        system: "s",
+        messages,
+        mode: "public",
+        refusal: "That stays behind the curtain.",
+      }),
+    );
+
+    expect(chunks).toEqual(["That stays behind the curtain."]);
+  });
+
+  test("a supplied refusal never replaces a clean answer or skips credential scrubbing", async () => {
+    const { client } = createFakeClient("use sk-ABC123DEF456GHI789JKL012MNO345 today");
+
+    const out = await answerOnce({
+      client,
+      system: "s",
+      messages,
+      mode: "public",
+      refusal: "That stays behind the curtain.",
+    });
+
+    expect(out.content).toBe("use [REDACTED] today");
   });
 });

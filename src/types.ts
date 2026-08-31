@@ -166,6 +166,22 @@ export interface BrainHooks {
    * never consulted for them. Unset: replies pass through unchanged.
    */
   transformReply?: TransformReply;
+  /**
+   * The line sent instead of an answer when the output guardrails detect
+   * leaked instructions. Chatter otherwise ships no user-facing copy, and
+   * this is the one string it puts in a bot's mouth, so a host running a
+   * character can supply its own wording.
+   *
+   * Copy only: detection and credential scrubbing are not configurable, so
+   * this voices the guard and never weakens it. A blank string is treated as
+   * unset. A caller that has already resolved a persona can override it for
+   * one turn by passing `refusal` to `answerOnce`/`answerStream`.
+   *
+   * Honoured by the channel pipeline and every HTTP chat surface (widget and
+   * demo routes, OpenAI-compatible endpoints, MCP chat tools). Unset: the
+   * built-in wording applies.
+   */
+  refusal?: string;
 }
 
 /**

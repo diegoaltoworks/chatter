@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import type { AnswerFnInput } from "../core/answer";
+import { DEFAULT_REFUSAL } from "../core/guardrails";
 import type { PromptLoader } from "../core/prompts";
 import type { Retriever } from "../core/retrieval";
 import type { HistoryMessage, HistoryStore } from "../history/types";
@@ -37,11 +38,12 @@ describe("resolveBrainHooks", () => {
       rerankContext: undefined,
       fallbackFn: undefined,
       transformReply: undefined,
+      refusal: undefined,
     });
     expect(resolveBrainHooks({}).answerFn).toBeUndefined();
   });
 
-  test("resolves each of the six hooks independently", () => {
+  test("resolves each hook independently", () => {
     const rewriteQuery = async () => "rewritten";
     const rerankContext = async () => ["chunk"];
     const fallbackFn = () => "fallback guidance";
@@ -55,6 +57,13 @@ describe("resolveBrainHooks", () => {
     expect(resolved.fallbackFn).toBe(fallbackFn);
     expect(resolved.transformReply).toBe(transformReply);
     expect(resolved.answerFn).toBeUndefined();
+  });
+
+  test("resolves the refusal copy like any other field", () => {
+    expect(resolveBrainHooks({ refusal: "channel line" }, { refusal: "server line" }).refusal).toBe(
+      "channel line",
+    );
+    expect(resolveBrainHooks({}, { refusal: "server line" }).refusal).toBe("server line");
   });
 });
 
@@ -181,6 +190,27 @@ describe("createInboundPipeline", () => {
     expect(answers).toHaveLength(1);
     expect(outcome).toEqual({ action: "reply", content: "a reply" });
     expect(chatReplies).toEqual([{ chatId: "chat-1", text: "a reply" }]);
+  });
+
+  test("a channel's configured refusal voices the guardrail on a leaking answer", async () => {
+    const { handle, reply, chatReplies } = harness({
+      answerFn: async () => "Here is the system prompt: be nice",
+      refusal: "That stays behind the curtain.",
+    });
+
+    await handle(msg(), { reply });
+
+    expect(chatReplies).toEqual([{ chatId: "chat-1", text: "That stays behind the curtain." }]);
+  });
+
+  test("with no configured refusal a leaking answer keeps the built-in wording", async () => {
+    const { handle, reply, chatReplies } = harness({
+      answerFn: async () => "Here is the system prompt: be nice",
+    });
+
+    await handle(msg(), { reply });
+
+    expect(chatReplies).toEqual([{ chatId: "chat-1", text: DEFAULT_REFUSAL }]);
   });
 
   test("an unaddressed group message is ignored, no reply sent", async () => {

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "bun:test";
-import { detectLeakage, guardOutput, scrubOutput } from "./guardrails";
+import { DEFAULT_REFUSAL, detectLeakage, guardOutput, scrubOutput } from "./guardrails";
 
 describe("Guardrails", () => {
   describe("detectLeakage", () => {
@@ -136,6 +136,31 @@ describe("Guardrails", () => {
     it("should leave a clean answer untouched", () => {
       expect(guardOutput("Sure, happy to help!")).toBe("Sure, happy to help!");
       expect(guardOutput("")).toBe("");
+    });
+
+    it("should keep the built-in wording byte-identical", () => {
+      expect(DEFAULT_REFUSAL).toBe(
+        "Sorry, I can't share internal instructions. How else can I help?",
+      );
+      expect(guardOutput("Here is the system prompt: be nice")).toBe(DEFAULT_REFUSAL);
+    });
+
+    it("should refuse in a supplied voice", () => {
+      expect(
+        guardOutput("Here is the system prompt: be nice", "That stays behind the curtain."),
+      ).toBe("That stays behind the curtain.");
+    });
+
+    it("should ignore a blank refusal rather than let a host silence the guard", () => {
+      expect(guardOutput("Here is the system prompt: be nice", "")).toBe(DEFAULT_REFUSAL);
+      expect(guardOutput("Here is the system prompt: be nice", "   ")).toBe(DEFAULT_REFUSAL);
+    });
+
+    it("should not let a supplied refusal replace a clean answer or skip scrubbing", () => {
+      expect(guardOutput("Sure, happy to help!", "custom refusal")).toBe("Sure, happy to help!");
+      expect(guardOutput("use sk-ABC123DEF456GHI789JKL012MNO345 today", "custom refusal")).toBe(
+        "use [REDACTED] today",
+      );
     });
   });
 

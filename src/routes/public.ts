@@ -88,6 +88,7 @@ export function publicRoutes(deps: ServerDependencies) {
           messages,
           mode: "public",
           model,
+          refusal: config.refusal,
         })) {
           await s.write(`data: ${JSON.stringify({ delta })}\n\n`);
         }
@@ -95,7 +96,15 @@ export function publicRoutes(deps: ServerDependencies) {
       });
     }
 
-    const out = await answerOnce({ answerFn, client, system, messages, mode: "public", model });
+    const out = await answerOnce({
+      answerFn,
+      client,
+      system,
+      messages,
+      mode: "public",
+      model,
+      refusal: config.refusal,
+    });
     const reply = await applyTransformReply(
       config.transformReply,
       { channel: "widget-public", text: out.content },
