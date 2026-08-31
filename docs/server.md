@@ -498,11 +498,15 @@ that stops two of your own bots answering each other, see
 [docs/channels.md](channels.md#loop-protection-across-identities)), so a channel can call
 `prepareChat`/`answerFn`, share `deps.db`, etc. A channel that throws on
 `start` is logged and skipped; the server and the other channels keep
-running. `start(deps)` also works when called directly, without
-`createServer`, for standalone use (a pairing script, a one-off worker) -
-just return once the transport is *initiated* (a socket opened), not once a
-slow handshake or pairing flow completes, since `createServer` awaits it
-before the app starts serving requests.
+running. `start` should return once the transport is *initiated* (a socket
+opened), not once a slow handshake or pairing flow completes, since
+`createServer` awaits it before the app starts serving requests.
+
+`createServer` is the only supported way to start a channel - it is the one
+place that assembles `ServerDependencies`. A host embedding chatter into an
+existing server calls `createServer` and mounts the `customRoutes` hook or
+the returned `ChatterApp`, rather than building a `ServerDependencies` by
+hand to call `channel.start` directly.
 
 #### Shutdown
 
