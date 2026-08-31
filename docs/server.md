@@ -506,7 +506,13 @@ opened), not once a slow handshake or pairing flow completes, since
 place that assembles `ServerDependencies`. A host embedding chatter into an
 existing server calls `createServer` and mounts the `customRoutes` hook or
 the returned `ChatterApp`, rather than building a `ServerDependencies` by
-hand to call `channel.start` directly.
+hand to call `channel.start` directly. `ChatterApp` is a Hono app, so a host
+that already runs its own server mounts it with `app.route()` the same way it
+would mount any other Hono sub-app - see
+[examples/embedded-in-existing-app.ts](../examples/embedded-in-existing-app.ts)
+for the full shape: the host's own app, its own retriever, a channel
+configured rather than started directly, and shutdown through
+`stopChannels()`.
 
 #### Shutdown
 
