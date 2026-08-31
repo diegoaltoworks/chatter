@@ -27,11 +27,31 @@ body:
       required: true
 
   - type: textarea
-    id: alternatives
+    id: seam_tried
     attributes:
-      label: Alternatives considered
-      description: Describe alternatives you've considered
-      placeholder: I've thought about...
+      label: Seam tried
+      description: Which existing extension point did you try, and what exact error or failure did it produce?
+      placeholder: I tried X and got the following error...
+    validations:
+      required: true
+
+  - type: input
+    id: second_caller
+    attributes:
+      label: Second caller
+      description: Name a second caller who is not you and would also use this feature, or state that there is none.
+      placeholder: e.g., project Foo at path/to/usage.ts, or "None known"
+    validations:
+      required: true
+
+  - type: input
+    id: verified_against
+    attributes:
+      label: Verified against
+      description: The commit or version of main this evidence was verified against.
+      placeholder: e.g., abc1234, or the release tag you tested against
+    validations:
+      required: true
 
   - type: textarea
     id: additional
