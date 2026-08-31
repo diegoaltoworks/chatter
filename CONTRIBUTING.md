@@ -14,12 +14,7 @@ Before creating bug reports, please check existing issues. When creating a bug r
 
 ### Suggesting Enhancements
 
-Enhancement suggestions are tracked as GitHub issues. Create an issue using the feature request template and provide:
-
-- A clear and descriptive title
-- A detailed description of the proposed feature
-- Examples of how the feature would be used
-- Why this enhancement would be useful
+Enhancement suggestions are tracked as GitHub issues. Create an issue using the feature request template. Its required fields are the bar: a proposal that can't fill them isn't ready to file.
 
 ### Pull Requests
 
