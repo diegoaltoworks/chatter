@@ -11,6 +11,7 @@ Welcome to the Chatter documentation! This guide will help you set up and deploy
      [adding a capability](./patterns/adding-a-capability.md),
      [adding a store](./patterns/adding-a-store.md),
      [adding a retriever](./patterns/adding-a-retriever.md),
+     [extending chatter](./patterns/extending-chatter.md),
      [exemplars](./patterns/exemplars.md)
    - And [docs/decisions/](./decisions/) for the ADRs behind the shape of the
      codebase:
