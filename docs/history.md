@@ -229,6 +229,23 @@ no transaction primitive. A failing or timed-out `summarize` never reaches
 that rewrite at all: history is left exactly as it was, and the turn's own
 reply still sends normally.
 
+Before that rewrite, compaction re-reads the conversation instead of reusing
+the turns it loaded before summarizing: `summarize` can take up to
+`timeoutMs`, long enough for another instance to append a fresh turn mid-call,
+and the re-read means only the turns actually covered by the summary get
+folded away - anything appended during the summarize call survives untouched
+in the kept tail.
+
+A narrower window remains even so, between that re-read and the `clear` that
+follows it: an append landing there is covered by neither the summary nor the
+kept tail, and is lost from stored history. This is bounded rather than fixed
+- compaction only fires once a conversation crosses the configured turn
+threshold, so hitting the window needs a second append arriving in that same
+instant on that same conversation, and the reply itself is unaffected since
+compaction runs after it is sent. Exposure grows on a deployment where a
+single conversation runs long and crosses the threshold often, so a busy,
+long-lived thread is where this is worth revisiting.
+
 ## Channels
 
 Every built-in channel - WhatsApp, Telegram, Matrix - accepts the same
