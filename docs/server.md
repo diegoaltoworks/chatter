@@ -326,6 +326,29 @@ streaming reply has no final answer to transform. See
 [integrations.md](./integrations.md) for the full per-surface `channel`
 identifiers.
 
+### Guardrail Refusal Copy
+
+Chatter's output guardrails replace a reply that leaks its own instructions
+with a refusal, and that refusal is the only user-facing line the framework
+speaks. Give it your bot's voice:
+
+```typescript
+{
+  refusal: "That stays behind the curtain - ask me something else.",
+}
+```
+
+Copy only. Leakage detection and credential scrubbing are not configurable, so
+this voices the guard and never weakens it, and a blank string is treated as
+unset. Honoured by the channel pipeline and every HTTP chat surface, on both
+`answerFn` answers and built-in completions. A channel config can override the
+server-level line for its own traffic, like any other brain hook.
+
+A surface that has already resolved which persona is speaking - a multi-persona
+host, say - can override it for a single turn by passing `refusal` to
+`answerOnce`/`answerStream` (or `completeOnce`) directly, without re-wrapping
+`answerFn`. Omit it everywhere and the built-in wording applies, unchanged.
+
 ### Logging
 
 Every library log call - startup banners, channel lifecycle, auth/session
@@ -395,6 +418,9 @@ Custom routes receive the same dependencies the built-in route factories use:
     // deps.prompts        PromptLoader
     // deps.apiKeyManager  API key manager, when configured
     // deps.senders        ChannelSenderRegistry channels register into
+    // deps.identities     SessionIdentityRegistry every channel resolves
+    //                     `fromBot` against, so one of your own bots is
+    //                     never answered as a stranger
 
     app.get("/my-route", async (c) => {
       const rows = await deps.db.execute("SELECT count(*) AS n FROM chunks");
@@ -467,7 +493,9 @@ pipeline:
 A channel is anything matching the `Channel` SPI - `{ name, start(deps), stop?() }`.
 `createServer` starts every configured channel after routes (and
 `customRoutes`) are mounted, with the same `deps` custom routes receive
-(including `deps.senders`, below), so a channel can call
+(including `deps.senders`, below, and `deps.identities` - the one registry
+that stops two of your own bots answering each other, see
+[docs/channels.md](channels.md#loop-protection-across-identities)), so a channel can call
 `prepareChat`/`answerFn`, share `deps.db`, etc. A channel that throws on
 `start` is logged and skipped; the server and the other channels keep
 running. `start(deps)` also works when called directly, without

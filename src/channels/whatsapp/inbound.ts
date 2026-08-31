@@ -248,7 +248,7 @@ export function resolveWaMessage(
   event: WhatsAppMessageEvent,
   registry: SessionIdentityRegistry,
 ): ResolvedWaMessage {
-  const { sessionId, sock, message } = event;
+  const { sessionId, sock, message, endpointId } = event;
   const chatId = message.key.remoteJid ?? "";
   const rawText = extractText(message);
   const context = messageContext(message);
@@ -291,6 +291,12 @@ export function resolveWaMessage(
     // `createInboundPipeline` (not just the WhatsApp-specific router) can
     // still react to it via `ChannelSenderRegistry.sendReaction`.
     messageRef: message.key,
+    // The session id this channel instance was configured with, not a wire
+    // identity - stable across the number's own SIM or token changing.
+    // Unset for a default single-session channel (see
+    // WhatsAppMessageEvent.endpointId) so a host that hasn't opted into
+    // multiple endpoints sees no change.
+    endpointId,
   };
 
   return { msg, ownIds };
@@ -341,6 +347,8 @@ export interface WhatsAppInboundConfig extends BrainHooks {
   personaResolver?: (ctx: {
     senderPhone: string;
     text: string;
+    /** Which of this process's sessions received the message - see `ChannelMessage.endpointId`. Unset unless the channel runs more than one. */
+    endpointId?: string;
   }) => string | undefined | Promise<string | undefined>;
   /**
    * Optional image-request routing (see `./images`). Consulted right before
@@ -408,7 +416,8 @@ export function createWhatsAppInboundHandler(
       model: config.model,
       channelHint: config.channelHint ?? "Channel: WhatsApp.",
       personaResolver: personaResolver
-        ? ({ sender, text }) => personaResolver({ senderPhone: sender, text })
+        ? ({ sender, text, endpointId }) =>
+            personaResolver({ senderPhone: sender, text, endpointId })
         : undefined,
       history: config.history,
       allowedChats,
@@ -458,7 +467,6 @@ export function createWhatsAppInboundHandler(
 
       await pipeline(msg, {
         reply,
-        conversationId: chatId,
         sender: () => senderPhoneFor(sock, message, chatId),
         intercept: images
           ? (senderPhone) =>

@@ -44,10 +44,13 @@ import {
 } from "../src";
 import {
   type ChannelMessage,
+  conversationKeyFor,
   createInboundPipeline,
   createSenderRegistry,
   type InboundReplySender,
+  isEffectivelyFromSelf,
   resolveBrainHooks,
+  type SessionIdentityRegistry,
 } from "../src/channels";
 import type { MatrixChannelConfig } from "../src/channels/matrix";
 import {
@@ -75,6 +78,7 @@ function fakeDeps(): ServerDependencies {
     config: {} as ServerDependencies["config"],
     prompts: {} as ServerDependencies["prompts"],
     senders: createSenderRegistry(),
+    identities: new Map(),
     logger: createConsoleLogger(),
   };
 }
@@ -84,6 +88,14 @@ describe("API surface", () => {
     const deps = fakeDeps();
     expect(deps.senders.available("anything")).toBe(false);
     expect(deps.db).toBeDefined();
+  });
+
+  test("ServerDependencies.identities is a SessionIdentityRegistry the loop-guard predicate accepts", () => {
+    const identities: SessionIdentityRegistry = new Map([["telegram", ["100"]]]);
+    const deps: ServerDependencies = { ...fakeDeps(), identities };
+
+    expect(isEffectivelyFromSelf({ fromBot: false, senderId: "100" }, deps.identities)).toBe(true);
+    expect(isEffectivelyFromSelf({ fromBot: false, senderId: "200" }, deps.identities)).toBe(false);
   });
 
   test("ServerDependencies.store is the Retriever interface, satisfiable by a plain object literal", () => {
@@ -340,6 +352,15 @@ describe("API surface", () => {
     expect(resolved.answerFn).toBe(config.answerFn);
     expect(resolved.bucketsFor).toBe(serverConfig.bucketsFor);
     expect(resolved.rewriteQuery).toBeUndefined();
+  });
+
+  // Locks docs/history.md's "The conversation key": a channel author keying
+  // its own threads must reach the same rule the pipeline defaults to,
+  // without reimplementing the escaping.
+  test("a channel keys its own threads through conversationKeyFor", () => {
+    expect(conversationKeyFor("chat-1")).toBe("chat-1");
+    expect(conversationKeyFor("chat-1", "sim-a")).toBe("chat-1#sim-a");
+    expect(conversationKeyFor("chat-1", "sim-a")).not.toBe(conversationKeyFor("chat-1", "sim-b"));
   });
 
   test("the sender registry sends by channel name without importing the transport", async () => {

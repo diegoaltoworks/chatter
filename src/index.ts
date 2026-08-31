@@ -50,7 +50,7 @@ export {
   canAcquireBuildLock,
   createTursoBuildLock,
 } from "./core/buildLock";
-export { detectLeakage, guardOutput, scrubOutput } from "./core/guardrails";
+export { DEFAULT_REFUSAL, detectLeakage, guardOutput, scrubOutput } from "./core/guardrails";
 export { completeOnce, completeStream, DEFAULT_MODEL } from "./core/llm";
 export { loadKnowledge } from "./core/loaders";
 export type { Logger, LogLevel } from "./core/logger";

@@ -10,8 +10,11 @@
  * (`decideChannelAction`) is identical for both.
  */
 
-import type { ChannelMessage } from "../gates";
+import { type ChannelMessage, isEffectivelyFromSelf, type SessionIdentityRegistry } from "../gates";
 import type { TelegramMessage, TelegramMessageEntity, TelegramUpdate } from "./api";
+
+/** Shared so the common no-registry call does not allocate a Map per message. */
+const NO_IDENTITIES: SessionIdentityRegistry = new Map();
 
 /** The bot's own identity, as `getMe` reports it. */
 export interface TelegramBotIdentity {
@@ -70,23 +73,43 @@ export function mentionsBot(message: TelegramMessage, me: TelegramBotIdentity): 
 export function toChannelMessage(
   update: TelegramUpdate,
   me: TelegramBotIdentity,
+  identities: SessionIdentityRegistry = NO_IDENTITIES,
+  // The channel `name` this bot was configured with - the same host-chosen
+  // key already written into `identities` on start (see `./channel` and
+  // `./webhook`). Optional so a caller resolving a `ChannelMessage` outside
+  // a running channel (a test, a one-off script) need not invent one.
+  channelName?: string,
 ): ChannelMessage | undefined {
   const message = update.message;
   if (!message?.from) return undefined;
 
+  const senderId = String(message.from.id);
+
   return {
     chatId: String(message.chat.id),
-    senderId: String(message.from.id),
+    senderId,
     text: messageText(message),
     isDirectMessage: message.chat.type === "private",
     mentionsBot: mentionsBot(message, me),
     isReplyToBot: message.reply_to_message?.from?.id === me.id,
-    // A single bot token is a single identity, so unlike WhatsApp's
-    // multi-session loop guard this is a plain equality check.
-    fromBot: message.from.id === me.id,
+    // One bot token is one identity, but one process is not: a second token
+    // mounted alongside this one is a stranger to `me` and would be answered,
+    // and would answer back, forever. `identities` is what makes the other
+    // endpoint's id "us" too - an empty one degenerates to the equality check.
+    fromBot: isEffectivelyFromSelf({ fromBot: message.from.id === me.id, senderId }, identities),
     // What `setMessageReaction` targets — see `ChannelSenderRegistry.sendReaction`.
     messageRef: message.message_id,
+    endpointId: channelName,
   };
+}
+
+/**
+ * What this bot answers to on the wire, for a {@link SessionIdentityRegistry}.
+ * The numeric id only: `senderId` on an inbound message is `from.id`, never
+ * the `@username`, so registering the handle would match nothing.
+ */
+export function telegramOwnIdentities(me: TelegramBotIdentity): string[] {
+  return [String(me.id)];
 }
 
 /**

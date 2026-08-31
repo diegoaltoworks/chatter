@@ -7,7 +7,7 @@
  */
 
 import type { Logger } from "../../core/logger";
-import { isBlockedByAllowlist } from "../gates";
+import { isBlockedByAllowlist, type SessionIdentityRegistry } from "../gates";
 import type { InboundPipeline, InboundReplySender } from "../pipeline";
 import type { ChannelSender } from "../senders";
 import type { MatrixApi, MatrixSyncResponse } from "./api";
@@ -44,6 +44,12 @@ export interface MatrixSyncHandlerDeps {
   api: MatrixApi;
   me: MatrixIdentity;
   pipeline: InboundPipeline;
+  /**
+   * Every identity this process answers to, across all its channels - what
+   * `fromBot` is resolved against, so another endpoint of the same process is
+   * recognised as "us". Omitted: `me` alone, which cannot see a second bot.
+   */
+  identities?: SessionIdentityRegistry;
   /** Group rooms eligible for a reply. Empty = every room. */
   allowedChats: string[];
   /**
@@ -74,6 +80,8 @@ export interface MatrixSyncHandlerDeps {
   logger: Logger;
   /** Log-line prefix, e.g. `Matrix[@bot:example.org]`. */
   label: string;
+  /** This channel's configured name - populates `ChannelMessage.endpointId`. Omitted: `endpointId` is left unset. */
+  channelName?: string;
 }
 
 /**
@@ -86,7 +94,8 @@ export interface MatrixSyncHandlerDeps {
 export function createMatrixSyncHandler(
   deps: MatrixSyncHandlerDeps,
 ): (response: MatrixSyncResponse) => Promise<void> {
-  const { api, me, pipeline, allowedChats, sentEventIds, logger, label } = deps;
+  const { api, me, pipeline, identities, allowedChats, sentEventIds, logger, label, channelName } =
+    deps;
   const autoJoin = deps.autoJoin ?? true;
   const loggedUnallowedChats = new Set<string>();
   const loggedDeclinedInvites = new Set<string>();
@@ -152,7 +161,15 @@ export function createMatrixSyncHandler(
 
     for (const [roomId, room] of Object.entries(response.rooms?.join ?? {})) {
       for (const event of room.timeline.events) {
-        const msg = toChannelMessage(roomId, event, me, directRooms, sentEventIds);
+        const msg = toChannelMessage(
+          roomId,
+          event,
+          me,
+          directRooms,
+          sentEventIds,
+          identities,
+          channelName,
+        );
         if (!msg) continue;
 
         if (isBlockedByAllowlist(msg, { allowedChats })) {
@@ -172,7 +189,6 @@ export function createMatrixSyncHandler(
         try {
           await pipeline(msg, {
             reply,
-            conversationId: msg.chatId,
             sender: matrixSenderKey(msg.senderId),
           });
         } catch (error) {

@@ -9,7 +9,7 @@ import type { Client as LibsqlClient } from "@libsql/client";
 import { Hono } from "hono";
 import OpenAI from "openai";
 import { ApiKeyManager } from "./auth/apikeys";
-import type { Channel } from "./channels";
+import type { Channel, SessionIdentityRegistry } from "./channels";
 import { createSenderRegistry } from "./channels";
 import type { KnowledgeHealthScheduler } from "./core/knowledgeHealth";
 import { resolveLogger } from "./core/logger";
@@ -230,6 +230,11 @@ export async function createServer(config: ChatterConfig): Promise<ChatterApp> {
   // register into and brain-side features (a scheduler, the flows engine)
   // send through by channel name, without importing a transport.
   const senders = createSenderRegistry(logger);
+  // One registry for this call's channels, not one per channel: it is only by
+  // sharing it that channel B recognises channel A's identity as "us". Scoped
+  // like stopChannels - two servers in one process each protect their own.
+  // Never cleared - see SessionIdentityRegistry.
+  const identities: SessionIdentityRegistry = new Map();
   const deps: ServerDependencies = {
     client,
     store,
@@ -241,6 +246,7 @@ export async function createServer(config: ChatterConfig): Promise<ChatterApp> {
     prompts,
     apiKeyManager,
     senders,
+    identities,
     logger,
   };
 

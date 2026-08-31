@@ -8,7 +8,7 @@
 import type { Client as LibsqlClient } from "@libsql/client";
 import type { Hono } from "hono";
 import type OpenAI from "openai";
-import type { Channel, ChannelSenderRegistry } from "./channels";
+import type { Channel, ChannelSenderRegistry, SessionIdentityRegistry } from "./channels";
 import type { AnswerFn, TransformReply } from "./core/answer";
 import type { BucketsFor } from "./core/buckets";
 import type { KnowledgeHealthCheckConfig } from "./core/knowledgeHealth";
@@ -166,6 +166,22 @@ export interface BrainHooks {
    * never consulted for them. Unset: replies pass through unchanged.
    */
   transformReply?: TransformReply;
+  /**
+   * The line sent instead of an answer when the output guardrails detect
+   * leaked instructions. Chatter otherwise ships no user-facing copy, and
+   * this is the one string it puts in a bot's mouth, so a host running a
+   * character can supply its own wording.
+   *
+   * Copy only: detection and credential scrubbing are not configurable, so
+   * this voices the guard and never weakens it. A blank string is treated as
+   * unset. A caller that has already resolved a persona can override it for
+   * one turn by passing `refusal` to `answerOnce`/`answerStream`.
+   *
+   * Honoured by the channel pipeline and every HTTP chat surface (widget and
+   * demo routes, OpenAI-compatible endpoints, MCP chat tools). Unset: the
+   * built-in wording applies.
+   */
+  refusal?: string;
 }
 
 /**
@@ -458,6 +474,21 @@ export interface ServerDependencies {
    * channel name without importing the transport.
    */
   senders: ChannelSenderRegistry;
+  /**
+   * The one {@link SessionIdentityRegistry} for this `createServer` call:
+   * every identity any of its channels knows itself by, keyed by the endpoint
+   * that owns it. Channels register their own identities here on start and
+   * resolve `fromBot` against the whole map (`isEffectivelyFromSelf`), so a
+   * message from ANOTHER of this process's identities is recognised as "us"
+   * rather than answered as a stranger - the loop two of your own bots
+   * would otherwise fall into, answering each other until someone notices.
+   *
+   * Owned by `createServer` so the protection is the default rather than
+   * something each host remembers to wire, and scoped to that call the way
+   * `stopChannels` is: two servers in one process each protect their own. A host running its own inbound
+   * handler (WhatsApp's, say) passes this same map rather than a fresh one.
+   */
+  identities: SessionIdentityRegistry;
   /** Resolved logger — `config.logger`, or the default console logger. */
   logger: Logger;
 }

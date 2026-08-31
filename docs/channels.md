@@ -120,10 +120,10 @@ await createServer({
       // `./matrix` apply internally.
       serverConfig: deps.config,
       logger: deps.logger,
-      // Share ONE registry across every WhatsApp channel instance in this
-      // process - it's how the loop guard recognises another linked
-      // number's own traffic as "us" rather than a stranger.
-      registry: new Map(),
+      // The process-wide registry createServer owns. Passing this one (rather
+      // than a fresh Map) is what lets the loop guard recognise another
+      // linked number's - or another channel's - own traffic as "us".
+      registry: deps.identities,
       allowedChats: (process.env.WA_CHAT_ALLOWLIST ?? "").split(",").filter(Boolean),
     });
   },
@@ -133,9 +133,11 @@ await createServer({
 Configuration:
 
 - **`registry`** - a `SessionIdentityRegistry` (see `./channels`), shared
-  across every session this handler serves. Populated automatically from
-  each message's `sock.user`; never cleared, so a reconnecting session is
-  still recognised as itself.
+  across every session this handler serves. Pass `deps.identities` so it is
+  shared with every other channel in the process too - see [Loop protection
+  across identities](#loop-protection-across-identities). Populated
+  automatically from each message's `sock.user`; never cleared, so a
+  reconnecting session is still recognised as itself.
 - **`serverConfig`** - fallback source for `answerFn`/`bucketsFor`/
   `rewriteQuery`/`rerankContext`/`fallbackFn`/`transformReply`, each
   consulted only when this handler's own field of the same name is unset.
@@ -181,6 +183,66 @@ Two consequences worth knowing when you configure the handler:
 - A mention-only message (`@bot` and nothing else) keeps its original text.
   Emptying it would make the reply gates read it as blank and drop it, and
   going silent on being addressed is the worse failure.
+
+## Loop protection across identities
+
+A server running more than one bot identity can talk to itself. Each
+identity's own-identity check only knows its own id, so the other one looks
+like a stranger: it gets answered, sees that answer as a new stranger
+message, answers back, and the two spend model budget on each other until
+someone notices. Two linked WhatsApp numbers do it, and so do two Matrix
+accounts. (Telegram's Bot API does not deliver one bot's messages to another
+bot, so there this is belt-and-braces rather than the live case - the guard
+is the same in every transport so that a host does not have to know which
+platform happens to protect it.)
+
+`createServer` owns one `SessionIdentityRegistry` for the whole server and
+hands it to every channel as `deps.identities`. Each channel registers what
+it answers to on start and resolves `fromBot` through `isEffectivelyFromSelf`
+against the whole map, so an identity registered by ANY channel is recognised
+by all of them. Two `createServer` calls in one process keep separate
+registries, the same way `stopChannels()` is scoped to its own call's
+channels. Keys share one space: the WhatsApp handler keys by session id and
+the other channels by channel name, and two endpoints picking the same key
+overwrite each other silently.
+
+Nothing to wire: `./telegram` and `./matrix` use `deps.identities` by
+default. The WhatsApp handler takes its registry as configuration (see
+`registry` above) because it is constructed by the host in `customRoutes` -
+pass `deps.identities` there rather than a fresh `Map`. A channel that wants
+its own scope passes an `identities` map of its own instead.
+
+Matching is by wire identity, so it fires wherever two endpoints share an id
+space - two bot tokens, two Matrix accounts, two linked numbers. Endpoints on
+transports whose id spaces cannot overlap are registered side by side and
+simply never match each other.
+
+A message from another of this server's own identities is never answered. A
+deployment that wants one of its bots to answer another needs them in
+separate processes, or behind separate `createServer` calls.
+
+### The endpoint that received a message
+
+`ChannelMessage.endpointId` carries the same key, but only once a channel is
+actually running more than one endpoint: the WhatsApp handler sets it to the
+session id once more than one `sessionId` is configured or the channel has a
+custom `name`, and Telegram and Matrix set it to the channel `name` only once
+the host gives the channel a custom one - the same key that endpoint already
+registers into `SessionIdentityRegistry` above. A default, single-endpoint
+channel on any transport leaves it unset, so a host that hasn't opted into
+multiple endpoints sees no change. It answers a different question than
+`fromBot` does, though: not "is this us?" but "which of *our* endpoints was
+this sent to?", for a host running several endpoints behind one process that
+wants to bind persona or history to the one that was reached rather than only
+to the sender.
+
+Opting a previously single-endpoint channel into a second one is a one-way
+door for anything keyed on `endpointId` (conversation history, persona
+resolution): the first endpoint's messages stop being unkeyed and start
+carrying an `endpointId` of their own, which a caller composing a history or
+persona key from it will read as a new key, not the old unkeyed one. Chatter's
+own conversation history is keyed this way - see "The conversation key" in
+[history.md](./history.md).
 
 ## Image requests
 

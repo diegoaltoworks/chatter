@@ -48,6 +48,38 @@ message sent to the model on every reply, on top of retrieved context. Pick it
 with the same care as a bucket or persona choice, not as an afterthought - see
 [usage.md](./usage.md) if that cost needs a cap.
 
+## The conversation key
+
+A channel's turn resolves its `conversationId` from the inbound message: the
+`chatId` on its own, or the `chatId` paired with the endpoint that received it
+once `ChannelMessage.endpointId` is set. `conversationKeyFor(chatId,
+endpointId)` is that rule, exported so a channel of your own keys threads the
+same way. Passing an explicit `conversationId` on the turn overrides it
+entirely, which is how a channel that already knows its own thread key (a
+support ticket id, say) keeps using it.
+
+`chatId` alone is not a thread once a process runs more than one persona. One
+guest reaching two of them produces the same `chatId` on both, so a single key
+would hand each persona the other's turns. `endpointId` is only ever set by a
+channel genuinely running more than one endpoint (see
+[channels.md](./channels.md)), so a single-endpoint host's key stays the bare
+`chatId` and its stored history keeps reading back - there is nothing to
+migrate. The corollary is the one-way door that section describes: a channel
+that starts setting an `endpointId` keys its existing threads under new ids,
+and the turns recorded before that stay under the old ones. That covers a host
+adding a second endpoint, and also a host already running several - its
+endpoints were sharing one thread per chat, which is the bug this fixes, and
+they start separate threads from the upgrade on.
+
+Both halves are host-chosen strings that may contain the separator, so the
+composition escapes both rather than trusting either to avoid it: no two
+distinct `chatId`/`endpointId` pairs produce the same key. That guarantee is
+about pairs, and does not stretch across the two shapes - a bare `chatId` that
+itself contains a `#` can coincide with some other pair's composed key, the
+price of leaving the single-endpoint key byte-identical to what is already
+stored. Treat the result as opaque: it is a key to store under, not a value to
+parse.
+
 ## Storage
 
 `createTursoHistoryStore(client, tableName, maxPerConversation, options?)` is

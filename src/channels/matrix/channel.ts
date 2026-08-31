@@ -20,7 +20,7 @@ import { defaultSleep, type PollingChannelConfig } from "../polling";
 import { createMatrixApi, type MatrixApi } from "./api";
 import { createMatrixSender, createMatrixSyncHandler } from "./handler";
 import { runMatrixSyncLoop } from "./sync";
-import { type MatrixDirectMapping, toDirectMapping } from "./updates";
+import { type MatrixDirectMapping, matrixOwnIdentities, toDirectMapping } from "./updates";
 
 /** Long-poll hold time. The homeserver holds the request open this long when nothing new happened, so a sync is one request per 30s idle — not a busy loop. */
 const DEFAULT_SYNC_TIMEOUT_MS = 30_000;
@@ -38,6 +38,8 @@ export interface MatrixChannelConfig extends PollingChannelConfig {
   personaResolver?: (ctx: {
     sender: string;
     text: string;
+    /** Which of this process's endpoints received the message - see `ChannelMessage.endpointId`. Unset unless the channel runs more than one. */
+    endpointId?: string;
   }) => string | undefined | Promise<string | undefined>;
   /** Auto-accept room invites, so the bot can actually receive messages in a room a user just invited it to. @default true */
   autoJoin?: boolean;
@@ -92,6 +94,12 @@ export function createMatrixChannel(config: MatrixChannelConfig): Channel {
       const me = await api.whoami();
       const label = `Matrix[${me.userId}]`;
 
+      // Registered before the first sync, so this channel's very first
+      // inbound resolves against a complete view of the server's identities.
+      // Never removed - see SessionIdentityRegistry.
+      const identities = config.identities ?? deps.identities;
+      identities.set(channelName, matrixOwnIdentities(me));
+
       // Seeds direct-message detection from the account state as it stands
       // right now, rather than waiting for `m.direct` to show up in a future
       // `/sync` response — an incremental sync (resuming from
@@ -140,6 +148,7 @@ export function createMatrixChannel(config: MatrixChannelConfig): Channel {
       const handleSync = createMatrixSyncHandler({
         api,
         me,
+        identities,
         pipeline,
         allowedChats,
         sentEventIds,
@@ -147,6 +156,10 @@ export function createMatrixChannel(config: MatrixChannelConfig): Channel {
         initialDirect,
         logger: log,
         label,
+        // config.name, not the resolved channelName: endpointId opts in only
+        // when the host explicitly named this channel (running more than
+        // one bot in the process), not for a default single-token channel.
+        channelName: config.name,
       });
 
       abort = new AbortController();

@@ -79,6 +79,7 @@ export function privateRoutes(deps: ServerDependencies) {
           mode: "private",
           sender,
           model,
+          refusal: config.refusal,
         })) {
           await s.write(`data: ${JSON.stringify({ delta })}\n\n`);
         }
@@ -94,6 +95,7 @@ export function privateRoutes(deps: ServerDependencies) {
       mode: "private",
       sender,
       model,
+      refusal: config.refusal,
     });
     const reply = await applyTransformReply(
       config.transformReply,

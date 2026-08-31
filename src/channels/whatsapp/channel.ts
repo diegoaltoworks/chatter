@@ -56,6 +56,14 @@ export interface WhatsAppMessageEvent {
   sessionId: string;
   sock: WASocket;
   message: WAMessage;
+  /**
+   * `sessionId`, but only when this channel is actually running more than
+   * one endpoint (a custom `name`, or more than one configured `sessionId`)
+   * - unset for a default single-session channel, so a host that hasn't
+   * opted into multiple endpoints stays byte-identical to before endpointId
+   * existed. See {@link ChannelMessage.endpointId}.
+   */
+  endpointId?: string;
 }
 
 /**
@@ -385,6 +393,9 @@ export function createWhatsAppChannel(config: WhatsAppChannelConfig): WhatsAppCh
   const channelName = config.name ?? "whatsapp";
   const sessionIds =
     config.sessionIds && config.sessionIds.length > 0 ? config.sessionIds : ["default"];
+  // A custom name or more than one session id is what "opting into multiple
+  // endpoints" looks like for this channel - see WhatsAppMessageEvent.endpointId.
+  const multiEndpoint = config.name !== undefined || sessionIds.length > 1;
   const now = config.now ?? Date.now;
   const schedule = config.schedule ?? ((fn: () => void, ms: number) => void setTimeout(fn, ms));
   const staleMs = config.staleMs ?? LEASE_STALE_MS;
@@ -683,7 +694,12 @@ export function createWhatsAppChannel(config: WhatsAppChannelConfig): WhatsAppCh
             if (type !== "notify") return;
             for (const message of messages) {
               try {
-                await config.onMessage?.({ sessionId, sock, message });
+                await config.onMessage?.({
+                  sessionId,
+                  sock,
+                  message,
+                  endpointId: multiEndpoint ? sessionId : undefined,
+                });
               } catch (error) {
                 log.warn(`WhatsApp[${sessionId}]: onMessage handler failed:`, error);
               }

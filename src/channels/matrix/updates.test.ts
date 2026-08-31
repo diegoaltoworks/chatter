@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { decideChannelAction } from "../gates";
+import { decideChannelAction, type SessionIdentityRegistry } from "../gates";
 import type { MatrixAccountDataEvent, MatrixEvent, MatrixInvitedRoom } from "./api";
 import {
   directInviteFrom,
@@ -8,6 +8,7 @@ import {
   directRoomIds,
   isReplyToBot,
   MAX_TRACKED_SENT_EVENTS,
+  matrixOwnIdentities,
   matrixSenderKey,
   mentionsBot,
   messageText,
@@ -321,6 +322,59 @@ describe("toChannelMessage", () => {
       new Set(),
     );
     expect(msg?.fromBot).toBe(true);
+  });
+
+  test("a sibling bot account in the same process is fromBot, not a stranger", () => {
+    // The loop this prevents: two bot accounts mounted in one process, each a
+    // stranger to the other's `me`, answering each other's answers forever.
+    const identities: SessionIdentityRegistry = new Map([
+      ["matrix", matrixOwnIdentities(ME)],
+      ["matrix:support", matrixOwnIdentities({ userId: "@support:example.org" })],
+    ]);
+
+    const msg = toChannelMessage(
+      "!room:example.org",
+      event({ sender: "@support:example.org" }),
+      ME,
+      new Set(),
+      new Set(),
+      identities,
+    );
+
+    expect(msg?.fromBot).toBe(true);
+  });
+
+  test("a stranger is still a stranger with the registry populated", () => {
+    const identities: SessionIdentityRegistry = new Map([
+      ["matrix:support", matrixOwnIdentities({ userId: "@support:example.org" })],
+    ]);
+
+    const msg = toChannelMessage(
+      "!room:example.org",
+      event({ sender: "@alice:example.org" }),
+      ME,
+      new Set(),
+      new Set(),
+      identities,
+    );
+
+    expect(msg?.fromBot).toBe(false);
+  });
+
+  test("endpointId is the configured channel name, unset when none is passed", () => {
+    const msg = toChannelMessage("!room:example.org", event({}), ME, new Set(), new Set());
+    expect(msg?.endpointId).toBeUndefined();
+
+    const named = toChannelMessage(
+      "!room:example.org",
+      event({}),
+      ME,
+      new Set(),
+      new Set(),
+      undefined,
+      "matrix:support",
+    );
+    expect(named?.endpointId).toBe("matrix:support");
   });
 
   test("a non-message event maps to nothing", () => {

@@ -1,10 +1,12 @@
 import { describe, expect, test } from "bun:test";
 import type { AnswerFnInput } from "../core/answer";
+import { DEFAULT_REFUSAL } from "../core/guardrails";
 import type { PromptLoader } from "../core/prompts";
 import type { Retriever } from "../core/retrieval";
 import type { HistoryMessage, HistoryStore } from "../history/types";
 import type { ChannelMessage } from "./gates";
 import {
+  conversationKeyFor,
   createInboundPipeline,
   type InboundPipelineConfig,
   type InboundReplySender,
@@ -36,11 +38,12 @@ describe("resolveBrainHooks", () => {
       rerankContext: undefined,
       fallbackFn: undefined,
       transformReply: undefined,
+      refusal: undefined,
     });
     expect(resolveBrainHooks({}).answerFn).toBeUndefined();
   });
 
-  test("resolves each of the six hooks independently", () => {
+  test("resolves each hook independently", () => {
     const rewriteQuery = async () => "rewritten";
     const rerankContext = async () => ["chunk"];
     const fallbackFn = () => "fallback guidance";
@@ -54,6 +57,13 @@ describe("resolveBrainHooks", () => {
     expect(resolved.fallbackFn).toBe(fallbackFn);
     expect(resolved.transformReply).toBe(transformReply);
     expect(resolved.answerFn).toBeUndefined();
+  });
+
+  test("resolves the refusal copy like any other field", () => {
+    expect(resolveBrainHooks({ refusal: "channel line" }, { refusal: "server line" }).refusal).toBe(
+      "channel line",
+    );
+    expect(resolveBrainHooks({}, { refusal: "server line" }).refusal).toBe("server line");
   });
 });
 
@@ -132,6 +142,45 @@ function fakeHistoryStore(): HistoryStore & { data: Map<string, HistoryMessage[]
   };
 }
 
+describe("conversationKeyFor", () => {
+  test("no endpointId: the key is the chatId, byte for byte", () => {
+    expect(conversationKeyFor("447700900123@s.whatsapp.net")).toBe("447700900123@s.whatsapp.net");
+    expect(conversationKeyFor("200")).toBe("200");
+    expect(conversationKeyFor("!room:example.org")).toBe("!room:example.org");
+  });
+
+  test("an empty endpointId is no endpointId - a blank string must not fork the thread", () => {
+    expect(conversationKeyFor("chat-1", "")).toBe("chat-1");
+  });
+
+  test("two endpoints reaching one chatId get two distinct keys", () => {
+    expect(conversationKeyFor("chat-1", "sim-a")).not.toBe(conversationKeyFor("chat-1", "sim-b"));
+  });
+
+  test("a separator inside either half cannot collide two distinct pairs", () => {
+    // Every pair below flattens to "a#b#c" under naive concatenation.
+    const keys = [
+      conversationKeyFor("a#b", "c"),
+      conversationKeyFor("a", "b#c"),
+      conversationKeyFor("a", "b"),
+      conversationKeyFor("a#b#c", "d"),
+    ];
+
+    expect(new Set(keys).size).toBe(keys.length);
+  });
+
+  test("a bare chatId is not escaped, so it can coincide with a composed key - the accepted cost", () => {
+    // Pinned, not desired: escaping the single-endpoint key would close this
+    // and re-key every conversation every existing host has stored.
+    expect(conversationKeyFor("a#b")).toBe(conversationKeyFor("a", "b"));
+  });
+
+  test("the escape itself cannot be forged: an endpointId spelling out an escape stays distinct", () => {
+    expect(conversationKeyFor("a", "b%23c")).not.toBe(conversationKeyFor("a", "b#c"));
+    expect(conversationKeyFor("a%23b", "c")).not.toBe(conversationKeyFor("a#b", "c"));
+  });
+});
+
 describe("createInboundPipeline", () => {
   test("a DM is answered through prepareChat/answerFn and delivered as an answer", async () => {
     const { handle, reply, answers, chatReplies } = harness();
@@ -141,6 +190,27 @@ describe("createInboundPipeline", () => {
     expect(answers).toHaveLength(1);
     expect(outcome).toEqual({ action: "reply", content: "a reply" });
     expect(chatReplies).toEqual([{ chatId: "chat-1", text: "a reply" }]);
+  });
+
+  test("a channel's configured refusal voices the guardrail on a leaking answer", async () => {
+    const { handle, reply, chatReplies } = harness({
+      answerFn: async () => "Here is the system prompt: be nice",
+      refusal: "That stays behind the curtain.",
+    });
+
+    await handle(msg(), { reply });
+
+    expect(chatReplies).toEqual([{ chatId: "chat-1", text: "That stays behind the curtain." }]);
+  });
+
+  test("with no configured refusal a leaking answer keeps the built-in wording", async () => {
+    const { handle, reply, chatReplies } = harness({
+      answerFn: async () => "Here is the system prompt: be nice",
+    });
+
+    await handle(msg(), { reply });
+
+    expect(chatReplies).toEqual([{ chatId: "chat-1", text: DEFAULT_REFUSAL }]);
   });
 
   test("an unaddressed group message is ignored, no reply sent", async () => {
@@ -327,6 +397,21 @@ describe("createInboundPipeline", () => {
     expect(capturedSystem).toContain("you are a pirate");
   });
 
+  test("a personaResolver is handed the endpoint that received the message", async () => {
+    const seen: Array<string | undefined> = [];
+    const { handle, reply } = harness({
+      personaResolver: ({ endpointId }) => {
+        seen.push(endpointId);
+        return undefined;
+      },
+    });
+
+    await handle(msg({ endpointId: "wa-support" }), { reply });
+    await handle(msg(), { reply });
+
+    expect(seen).toEqual(["wa-support", undefined]);
+  });
+
   test("a throwing personaResolver degrades to no persona instead of failing the reply", async () => {
     const { handle, reply, answers } = harness({
       personaResolver: async () => {
@@ -469,6 +554,44 @@ describe("createInboundPipeline", () => {
         { role: "assistant", content: "a reply" },
       ]);
       expect(store.data.has("chat-1")).toBe(false);
+    });
+
+    test("no endpointId: history is keyed on the bare chatId, so existing threads still read back", async () => {
+      const store = fakeHistoryStore();
+      store.data.set("chat-1", [{ role: "user", content: "said before the upgrade" }]);
+      const { handle, reply, answers } = harness({ history: { store } });
+
+      await handle(msg({ chatId: "chat-1", text: "hi" }), { reply });
+
+      expect((answers[0] as AnswerFnInput).messages[0]).toEqual({
+        role: "user",
+        content: "said before the upgrade",
+      });
+      expect([...store.data.keys()]).toEqual(["chat-1"]);
+    });
+
+    test("two endpoints reaching the same chatId keep separate threads", async () => {
+      const store = fakeHistoryStore();
+      const { handle, reply, answers } = harness({ history: { store } });
+
+      await handle(msg({ chatId: "chat-1", endpointId: "sim-a", text: "for a" }), { reply });
+      await handle(msg({ chatId: "chat-1", endpointId: "sim-b", text: "for b" }), { reply });
+
+      // The second endpoint's turn sees only its own history, not the first's.
+      expect((answers[1] as AnswerFnInput).messages).toEqual([{ role: "user", content: "for b" }]);
+      expect([...store.data.keys()]).toEqual(["chat-1#sim-a", "chat-1#sim-b"]);
+    });
+
+    test("an explicit conversationId still wins over the endpoint-composed key", async () => {
+      const store = fakeHistoryStore();
+      const { handle, reply } = harness({ history: { store } });
+
+      await handle(msg({ chatId: "chat-1", endpointId: "sim-a", text: "hi" }), {
+        reply,
+        conversationId: "conv-x",
+      });
+
+      expect([...store.data.keys()]).toEqual(["conv-x"]);
     });
 
     test("historyEnabledFor returning false: opted-out sender's turns are never written or read", async () => {

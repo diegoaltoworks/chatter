@@ -218,6 +218,7 @@ export async function createMCPServer(config: MCPServerOptions) {
           mode: "public",
           conversationId: convId,
           model,
+          refusal: config.refusal,
         });
 
         const replyText = await applyTransformReply(
@@ -329,6 +330,7 @@ export async function createMCPServer(config: MCPServerOptions) {
           mode: "private",
           conversationId: convId,
           model,
+          refusal: config.refusal,
         });
 
         const replyText = await applyTransformReply(

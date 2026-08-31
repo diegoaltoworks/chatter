@@ -217,6 +217,7 @@ export function openaiRoutes(deps: ServerDependencies) {
           conversationId,
           temperature,
           model: serverModel,
+          refusal: config.refusal,
         })) {
           await s.write(chunk({ content: delta }, null));
         }
@@ -235,6 +236,7 @@ export function openaiRoutes(deps: ServerDependencies) {
       conversationId,
       temperature,
       model: serverModel,
+      refusal: config.refusal,
     });
     const reply = await applyTransformReply(
       config.transformReply,

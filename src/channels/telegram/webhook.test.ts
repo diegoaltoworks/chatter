@@ -66,6 +66,7 @@ function fakeDeps(
       ...configOverrides,
     } as unknown as ServerDependencies["config"],
     senders: createSenderRegistry(logger),
+    identities: new Map<string, string[]>(),
     logger,
   };
 }
@@ -240,6 +241,38 @@ describe("createTelegramWebhookRoute", () => {
     const { deps } = await mountWebhook();
 
     expect(deps.senders.available("telegram")).toBe(true);
+  });
+
+  test("registers its own identity in the process registry", async () => {
+    const { deps } = await mountWebhook();
+
+    expect(deps.identities.get("telegram")).toEqual(["100"]);
+  });
+
+  test("a message from another endpoint of this server is ignored, not answered", async () => {
+    const api = fakeApi();
+    const logger = silentLogger();
+    const deps = fakeDeps(logger);
+    // The sibling registered first, exactly as a channel started earlier in
+    // the same createServer call would have.
+    deps.identities.set("telegram:support", ["900"]);
+    const app = new Hono();
+    await createTelegramWebhookRoute({
+      botToken: "test-token",
+      webhookSecret: SECRET,
+      api,
+      logger,
+    })(app, deps);
+
+    const res = await post(
+      app,
+      { update_id: 1, message: message({ from: { id: 900 } }) },
+      { "x-telegram-bot-api-secret-token": SECRET },
+    );
+
+    expect(res.status).toBe(200);
+    expect(deps.answered).toEqual([]);
+    expect(api.sent).toEqual([]);
   });
 
   test("a custom path is honoured", async () => {

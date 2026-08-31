@@ -34,11 +34,12 @@ import {
 
 /**
  * Resolves the brain hooks (`answerFn`, `bucketsFor`, `rewriteQuery`,
- * `rerankContext`, `fallbackFn`, `transformReply`) for one channel: each
+ * `rerankContext`, `fallbackFn`, `transformReply`, `refusal`) for one
+ * channel: each
  * field from `config` wins when set, falling back to the matching field on
  * `fallback` (typically `deps.config`, the server-level `ChatterConfig`).
  * Every channel that layers its own hooks over the server's uses this
- * instead of hand-rolling the same six `??` lines: see `../telegram`,
+ * instead of hand-rolling the same `??` lines: see `../telegram`,
  * `../matrix` and `../whatsapp/inbound`.
  */
 export function resolveBrainHooks(config: BrainHooks, fallback?: BrainHooks): BrainHooks {
@@ -49,6 +50,7 @@ export function resolveBrainHooks(config: BrainHooks, fallback?: BrainHooks): Br
     rerankContext: config.rerankContext ?? fallback?.rerankContext,
     fallbackFn: config.fallbackFn ?? fallback?.fallbackFn,
     transformReply: config.transformReply ?? fallback?.transformReply,
+    refusal: config.refusal ?? fallback?.refusal,
   };
 }
 
@@ -75,10 +77,16 @@ export interface InboundPipelineConfig extends BrainHooks {
   model?: string;
   /** Extra system-prompt section describing the delivery channel; passed through to `prepareChat`. */
   channelHint?: string;
-  /** A throw/rejection is treated as "no persona" for that turn rather than failing the whole reply. */
+  /**
+   * A throw/rejection is treated as "no persona" for that turn rather than
+   * failing the whole reply. `endpointId` is `ChannelMessage.endpointId`, so a
+   * resolver can key on which of the process's own endpoints was reached; it
+   * is unset for a channel running a single endpoint.
+   */
   personaResolver?: (ctx: {
     sender: string;
     text: string;
+    endpointId?: string;
   }) => string | undefined | Promise<string | undefined>;
   /** Off by default — a channel stays single-turn until a store is configured. */
   history?: {
@@ -126,7 +134,7 @@ export interface InboundTurn {
    * Omitted -> `msg.senderId`.
    */
   sender?: string | (() => string | Promise<string>);
-  /** Thread key for history/`answerFn`. Omitted -> `msg.chatId`. */
+  /** Thread key for history/`answerFn`. Omitted -> {@link conversationKeyFor}`(msg.chatId, msg.endpointId)`. */
   conversationId?: string;
   /**
    * Consulted after gates and rate-limiting pass, before persona/buckets/
@@ -148,6 +156,37 @@ export type InboundPipeline = (
   turn: InboundTurn,
 ) => Promise<InboundPipelineOutcome>;
 
+/** Escapes `#` (and the `%` that escape needs) so an escaped part contains no bare separator. Reversible, so escaping is injective. */
+function escapeKeyPart(part: string): string {
+  return part.replaceAll("%", "%25").replaceAll("#", "%23");
+}
+
+/**
+ * The default thread key for a message: `chatId` alone, or `chatId` paired
+ * with the endpoint that received it once one is set.
+ *
+ * `chatId` alone is not a thread. One guest reaching two of a process's own
+ * personas produces the same `chatId` on both, so a single key would hand
+ * each persona the other's turns. `ChannelMessage.endpointId` is only ever
+ * set by a channel genuinely running more than one endpoint, which is
+ * exactly when that collision is possible, so a single-endpoint host's key
+ * stays `chatId` and its stored history keeps reading back.
+ *
+ * Both halves are host-chosen strings that may contain anything, `#`
+ * included, so the pair is what has to stay unambiguous rather than either
+ * side: escaping both leaves exactly one bare `#`, and splitting there
+ * recovers the pair, so no two distinct pairs share a key.
+ *
+ * That guarantee covers pairs, not the two shapes: the single-endpoint key is
+ * left unescaped so it stays byte-identical to what a host already stored, so
+ * a bare `chatId` containing a `#` can coincide with some other pair's
+ * composed key. Marking it would close that and re-key every existing host.
+ */
+export function conversationKeyFor(chatId: string, endpointId?: string): string {
+  if (!endpointId) return chatId;
+  return `${escapeKeyPart(chatId)}#${escapeKeyPart(endpointId)}`;
+}
+
 const DEFAULT_HISTORY_LIMIT = 20;
 
 // Defence in depth, not a spend guard: unthrottled DMs let a single sender
@@ -158,7 +197,7 @@ const DEFAULT_DM_RATE_LIMIT = { max: 20, windowMs: 60 * 60 * 1000 };
 
 async function resolvePersonaLayer(
   config: InboundPipelineConfig,
-  ctx: { sender: string; text: string },
+  ctx: { sender: string; text: string; endpointId?: string },
 ): Promise<string | undefined> {
   if (!config.personaResolver) return undefined;
   try {
@@ -235,13 +274,17 @@ export function createInboundPipeline(
 
     const sender =
       typeof turn.sender === "function" ? await turn.sender() : (turn.sender ?? msg.senderId);
-    const conversationId = turn.conversationId ?? msg.chatId;
+    const conversationId = turn.conversationId ?? conversationKeyFor(msg.chatId, msg.endpointId);
 
     if (turn.intercept && (await turn.intercept(sender))) {
       return { action: "intercepted" };
     }
 
-    const personaLayer = await resolvePersonaLayer(config, { sender, text: msg.text });
+    const personaLayer = await resolvePersonaLayer(config, {
+      sender,
+      text: msg.text,
+      endpointId: msg.endpointId,
+    });
     const buckets = await resolveBuckets({ mode, sender, bucketsFor: config.bucketsFor });
 
     const historyEnabled = config.history ? await isHistoryEnabled(config, sender) : false;
@@ -286,6 +329,7 @@ export function createInboundPipeline(
       sender,
       conversationId,
       model: config.model,
+      refusal: config.refusal,
     });
 
     const content = await applyTransformReply(

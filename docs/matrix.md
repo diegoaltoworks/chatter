@@ -198,6 +198,10 @@ Identical policy to the [WhatsApp](./channels.md) and
   [The invite surface](#the-invite-surface).
 - **Mute/unmute apply to groups only**, and only when you configure the
   patterns.
+- **Another of your own bots is never answered.** A second bot account in the
+  same server is registered in `deps.identities` and recognised as "us", not
+  as a stranger - see [Loop protection across
+  identities](./channels.md#loop-protection-across-identities).
 
 Answers are threaded onto the message that prompted them
 (`m.relates_to`/`m.in_reply_to`), so a busy room can tell what the bot is

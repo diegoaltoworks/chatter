@@ -19,6 +19,7 @@ import {
   jidsMatch,
   jidToPhoneNumber,
   messageContext,
+  resolveWaMessage,
   senderPhoneFor,
   stripOwnMentions,
   type WhatsAppInboundConfig,
@@ -392,6 +393,59 @@ function waEvent(sock: WASocket, overrides: Partial<WAMessage> = {}): WhatsAppMe
     } as unknown as WAMessage,
   };
 }
+
+describe("resolveWaMessage", () => {
+  test("endpointId is unset when the event carries none - the default single-session channel case", () => {
+    const registry: SessionIdentityRegistry = new Map();
+    const { msg } = resolveWaMessage(waEvent(fakeSocket()), registry);
+
+    expect(msg.endpointId).toBeUndefined();
+  });
+
+  test("endpointId passes through the event's endpointId, not a wire identity", () => {
+    const registry: SessionIdentityRegistry = new Map();
+    const { msg } = resolveWaMessage({ ...waEvent(fakeSocket()), endpointId: "default" }, registry);
+
+    expect(msg.endpointId).toBe("default");
+  });
+
+  test("endpointId stays stable even when the wire identity (sock.user.id) changes", () => {
+    const registry: SessionIdentityRegistry = new Map();
+    const firstSock = fakeSocket({ user: { id: "447700900000@s.whatsapp.net" } } as never);
+    const { msg: first } = resolveWaMessage(
+      { ...waEvent(firstSock), endpointId: "default" },
+      registry,
+    );
+
+    const secondSock = fakeSocket({ user: { id: "447700900999@s.whatsapp.net" } } as never);
+    const { msg: second } = resolveWaMessage(
+      { ...waEvent(secondSock), endpointId: "default" },
+      registry,
+    );
+
+    // The wire identity really did change, keyed on the same "default" session -
+    // endpointId is a pure pass-through from the event, so this pins that a
+    // registry keyed on sessionId is unaffected by that churn.
+    expect(registry.get("default")).toEqual(["447700900999@s.whatsapp.net"]);
+    expect(first.endpointId).toBe("default");
+    expect(second.endpointId).toBe("default");
+  });
+
+  test("a non-default session's endpointId passes through as its own session id", () => {
+    const registry: SessionIdentityRegistry = new Map();
+    const { msg } = resolveWaMessage(
+      {
+        sessionId: "other-session",
+        sock: fakeSocket(),
+        message: waEvent(fakeSocket()).message,
+        endpointId: "other-session",
+      },
+      registry,
+    );
+
+    expect(msg.endpointId).toBe("other-session");
+  });
+});
 
 describe("createWhatsAppInboundHandler", () => {
   test("a DM is answered through prepareChat/answerFn and replied to, quoted", async () => {
@@ -908,6 +962,24 @@ describe("createWhatsAppInboundHandler", () => {
     expect(capturedInput?.conversationId).toBe("447700900123@s.whatsapp.net");
   });
 
+  test("a multi-session channel's endpointId splits one chat JID into a thread per session", async () => {
+    const seen: (string | undefined)[] = [];
+    const { handler, sock } = createHarness({
+      answerFn: async (input) => {
+        seen.push(input.conversationId);
+        return "ok";
+      },
+    });
+
+    await handler({ ...waEvent(sock), endpointId: "sim-a" });
+    await handler({ ...waEvent(sock), endpointId: "sim-b" });
+
+    expect(seen).toEqual([
+      "447700900123@s.whatsapp.net#sim-a",
+      "447700900123@s.whatsapp.net#sim-b",
+    ]);
+  });
+
   test("rewriteQuery reshapes the retrieval query and sees the resolved sender", async () => {
     const queries: string[] = [];
     const store = {
@@ -1018,6 +1090,21 @@ describe("createWhatsAppInboundHandler", () => {
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }
+  });
+
+  test("a personaResolver is handed the session that received the message", async () => {
+    const seen: Array<string | undefined> = [];
+    const { handler, sock } = createHarness({
+      personaResolver: ({ endpointId }) => {
+        seen.push(endpointId);
+        return undefined;
+      },
+    });
+
+    await handler({ ...waEvent(sock), endpointId: "sim-b" });
+    await handler(waEvent(sock));
+
+    expect(seen).toEqual(["sim-b", undefined]);
   });
 
   test("a throwing personaResolver degrades to no persona instead of failing the reply", async () => {
