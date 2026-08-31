@@ -4,13 +4,16 @@ Complete examples showing different ways to use Chatter.
 
 ## Quick Start
 
-All examples require environment variables:
+Most examples require environment variables:
 ```bash
 export OPENAI_API_KEY="sk-..."
 export TURSO_URL="libsql://..."
 export TURSO_AUTH_TOKEN="..."
 export CHATTER_SECRET="your-secret-key"  # For HTTP servers
 ```
+
+The embedded-in-an-existing-app example is the exception: it brings its own
+retriever, so it needs neither `TURSO_URL` nor `TURSO_AUTH_TOKEN`.
 
 ## Examples
 
@@ -37,7 +40,30 @@ bun run examples/http-server-basic.ts
 
 ---
 
-### 2. HTTP Server with Clerk
+### 2. Embedded in an Existing App
+**File:** `embedded-in-existing-app.ts`
+
+Mounts chatter inside a host's own Hono app, instead of letting chatter own
+the outermost server.
+
+```bash
+bun run examples/embedded-in-existing-app.ts
+```
+
+**Features:**
+- Host constructs its own Hono app and mounts chatter with `app.route()`
+- Host's own retriever, so chatter never opens a knowledge store of its own
+- A channel configured through `channels`, not started directly
+- A host route mounted onto chatter via `customRoutes`
+- Shutdown through the returned app's `stopChannels()`
+
+**Use when:**
+- You already run your own server and want to add chatter to it
+- You have your own retrieval backend
+
+---
+
+### 3. HTTP Server with Clerk
 **File:** `http-server-with-clerk.ts`
 
 HTTP server with Clerk authentication for private endpoints.
@@ -62,7 +88,7 @@ bun run examples/http-server-with-clerk.ts
 
 ---
 
-### 3. MCP Server (Basic)
+### 4. MCP Server (Basic)
 **File:** `mcp-server-example.ts`
 
 Basic Model Context Protocol server for Claude Desktop and other MCP clients.
@@ -100,7 +126,7 @@ bun run examples/mcp-server-example.ts
 
 ---
 
-### 4. MCP Server with Advanced Features
+### 5. MCP Server with Advanced Features
 **File:** `mcp-server-with-features.ts`
 
 MCP server demonstrating conversation tracking, cost monitoring, and rate limiting.
@@ -141,7 +167,7 @@ Session total: $0.003670 (998 tokens)
 
 ---
 
-### 5. API Client Usage
+### 6. API Client Usage
 **File:** `api-client-usage.ts`
 
 Shows how to call Chatter HTTP API from code.
@@ -172,7 +198,7 @@ bun run examples/api-client-usage.ts
 
 ---
 
-### 6. Programmatic RAG
+### 7. Programmatic RAG
 **File:** `programmatic-rag.ts`
 
 Use Chatter's core modules directly without HTTP server.
