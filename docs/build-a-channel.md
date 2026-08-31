@@ -8,6 +8,11 @@ channels are three implementations; this doc is the other half - everything a
 channel needs from `./channels` to answer a message, worked through Telegram
 so nothing here is WhatsApp-specific by accident.
 
+A channel is only ever started by `createServer`, which is the one place
+that assembles the `deps` a channel's `start` receives. A host embedding
+chatter into its own server calls `createServer` and mounts `customRoutes`
+or the returned `ChatterApp`, rather than calling `channel.start` directly.
+
 The Telegram walkthrough below is deliberately a *sketch*: it is the shortest
 thing that works, not the shipped channel. The real one lives in
 `src/channels/telegram/` and adds what a sketch skips - long-poll backoff,

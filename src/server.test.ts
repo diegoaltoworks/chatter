@@ -12,8 +12,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { ApiKeyManager } from "./auth/apikeys";
 import type { Channel, SessionIdentityRegistry } from "./channels";
-import { createSenderRegistry, isEffectivelyFromSelf } from "./channels";
-import { createConsoleLogger } from "./core/logger";
+import { isEffectivelyFromSelf } from "./channels";
 import { createServer } from "./server";
 import type { ChatterConfig, CustomRoutes } from "./types";
 
@@ -216,31 +215,6 @@ describe("createServer channels", () => {
 
     expect(app).toBeDefined();
     expect(goodStarted).toBe(true);
-  });
-
-  test("channel.start(deps) also works standalone, outside createServer", () => {
-    const calls: string[] = [];
-    const channel: Channel = {
-      name: "standalone",
-      start: (deps) => {
-        calls.push(typeof deps.db.execute);
-      },
-    };
-
-    // A hand-built ServerDependencies-shaped object, no server involved -
-    // proves the Channel SPI does not require createServer to be usable.
-    channel.start({
-      client: {} as never,
-      store: {} as never,
-      db: { execute: async () => ({ rows: [] }) } as never,
-      config: baseConfig(),
-      prompts: {} as never,
-      senders: createSenderRegistry(),
-      identities: new Map(),
-      logger: createConsoleLogger(),
-    });
-
-    expect(calls).toEqual(["function"]);
   });
 
   test("stopChannels() stops every channel that started successfully", async () => {
