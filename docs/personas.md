@@ -8,9 +8,10 @@ import { createPersonaResolver, createGreeter, timeContext } from "@diegoaltowor
 ```
 
 Nothing in this module is chat- or transport-specific, and it adds no required
-dependencies. It ships **no content** - no bot names, no in-character copy, no
-default templates. A registry and, for greetings, template pools are always
-supplied by the caller.
+dependencies. Like every seam in chatter, it ships no content
+([ADR 0005](./decisions/0005-ships-no-content.md)) - no bot names, no
+in-character copy, no default templates. A registry and, for greetings,
+template pools are always supplied by the caller.
 
 ## Registry
 
