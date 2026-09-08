@@ -155,8 +155,17 @@ describe("scheduleKnowledgeHealthChecks", () => {
 
       // Simulate the interval firing.
       calls[0].fn();
-      await Promise.resolve();
-      await Promise.resolve();
+      // `schedule`'s callback is fire-and-forget, so there is no promise to
+      // await here. How many microtasks the check takes depends on the db
+      // driver's own await depth, so poll for the line rather than flushing a
+      // fixed number of ticks.
+      const deadline = Date.now() + 2000;
+      while (
+        lines.filter((l) => l.includes("Knowledge base health")).length < 2 &&
+        Date.now() < deadline
+      ) {
+        await new Promise((resolve) => setTimeout(resolve, 5));
+      }
 
       expect(lines.filter((l) => l.includes("Knowledge base health")).length).toBe(2);
 
