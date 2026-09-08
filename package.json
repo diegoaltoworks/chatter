@@ -1,6 +1,6 @@
 {
   "name": "@diegoaltoworks/chatter",
-  "version": "1.0.0",
+  "version": "2.0.0",
   "description": "Embeddable AI chatbot framework with RAG, authentication, and customizable widgets",
   "main": "./dist/index.js",
   "module": "./dist/index.mjs",
