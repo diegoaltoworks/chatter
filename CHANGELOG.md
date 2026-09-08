@@ -39,10 +39,6 @@ section - so review it before naming a previously-unnamed channel or adding
 a second endpoint to one that already carries history.
 
 ### Added
-- **OpenAI-compatible endpoints**: `POST /v1/chat/completions` (public pipeline, API key auth) and `POST /api/private/v1/chat/completions` (private pipeline, JWT auth), with SSE streaming (`chat.completion.chunk` + `[DONE]`) and non-streaming responses. Any OpenAI-format chat UI or SDK can now be the front end. Disable with `features.enableOpenAICompat: false`.
-- **Headless mode**: `features.headless: true` runs the server as a pure API - widget assets and static/demo pages are not served.
-- **Exported chat pipeline**: `prepareChat` (RAG retrieval + system prompt assembly) is exported for programmatic use, fully decoupled from HTTP and the widget.
-- **UI integration examples**: runnable sample apps for [Deep Chat](https://deepchat.dev) (`examples/deep-chat`) and [assistant-ui](https://www.assistant-ui.com) (`examples/assistant-ui`), plus a new [integrations guide](./docs/integrations.md).
 - **Injectable guardrail refusal copy**: `answerOnce`/`answerStream`/`completeOnce` accept a per-call `refusal`, and `BrainHooks.refusal` sets a channel- or server-level default, so a host can voice the leak-guard refusal in its own character instead of chatter's built-in English copy. A host that configures nothing sees byte-identical behaviour.
 - **Framework-owned identity registry**: `createServer` builds one `SessionIdentityRegistry` per call and shares it with every channel as `deps.identities`, so cross-transport loop protection (see the Breaking section above) is the default rather than something a host wires by hand.
 - **`ChannelMessage.endpointId`** and `conversationKeyFor(chatId, endpointId)` (exported from the `chatter/channels` subpath) let a host bind conversation history to which of its own endpoints received a message, not only to who sent it - see [The endpoint that received a message](./docs/channels.md#the-endpoint-that-received-a-message).
@@ -51,6 +47,12 @@ a second endpoint to one that already carries history.
 ## Changes after 0.5.0
 
 All released - see GitHub Releases for exact version numbers.
+
+### Added
+- **OpenAI-compatible endpoints**: `POST /v1/chat/completions` (public pipeline, API key auth) and `POST /api/private/v1/chat/completions` (private pipeline, JWT auth), with SSE streaming (`chat.completion.chunk` + `[DONE]`) and non-streaming responses. Any OpenAI-format chat UI or SDK can now be the front end. Disable with `features.enableOpenAICompat: false`.
+- **Headless mode**: `features.headless: true` runs the server as a pure API - widget assets and static/demo pages are not served.
+- **Exported chat pipeline**: `prepareChat` (RAG retrieval + system prompt assembly) is exported for programmatic use, fully decoupled from HTTP and the widget.
+- **UI integration examples**: runnable sample apps for [Deep Chat](https://deepchat.dev) (`examples/deep-chat`) and [assistant-ui](https://www.assistant-ui.com) (`examples/assistant-ui`), plus a new [integrations guide](./docs/integrations.md).
 
 ### Fixed
 - `config.openai.model` is now respected; previously all completions were hard-coded to `gpt-4o`.
