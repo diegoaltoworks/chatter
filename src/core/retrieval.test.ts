@@ -437,3 +437,181 @@ describe("openLibsqlClient", () => {
     expect(typeof db.execute).toBe("function");
   });
 });
+
+describe("VectorStore chunking modes", () => {
+  const DOC = "# Guide\n\nIntro line.\n\n## Hours\n\nSupport hours are 9-5.\n";
+
+  function setup(files: Record<string, string> = { "base/info.md": DOC }) {
+    const dir = mkdtempSync(join(tmpdir(), "chatter-chunking-"));
+    const knowledgeDir = join(dir, "knowledge");
+    for (const [rel, text] of Object.entries(files)) {
+      mkdirSync(join(knowledgeDir, rel, ".."), { recursive: true });
+      writeFileSync(join(knowledgeDir, rel), text);
+    }
+    return { dir, knowledgeDir };
+  }
+
+  function recordingEmbedder() {
+    const inputs: string[] = [];
+    const embed: Embedder = async (input) => {
+      inputs.push(...input);
+      return input.map(() => [1, 0]);
+    };
+    return { embed, inputs };
+  }
+
+  async function count(db: LibsqlClient, table: string) {
+    const res = await db.execute(`SELECT COUNT(*) as n FROM ${table}`);
+    return Number(res.rows[0].n);
+  }
+
+  test("'lines' (default) keeps raw ids, sources and embedder inputs", async () => {
+    const { dir, knowledgeDir } = setup();
+    try {
+      const db = createClient({ url: "file::memory:", authToken: "" });
+      const { embed, inputs } = recordingEmbedder();
+      await new VectorStore(embed, { databaseClient: db, knowledgeDir, chunking: "lines" }).build();
+
+      const source = join(knowledgeDir, "base", "info.md");
+      const text = DOC.trim();
+      const hash = new Bun.CryptoHasher("sha256").update(`base|${source}|${text}`).digest("hex");
+      const rows = (await db.execute("SELECT id, source, text FROM chunks")).rows;
+      expect<unknown>(rows.map((r) => ({ ...r }))).toEqual([{ id: hash, source, text }]);
+      expect(inputs).toEqual([text]);
+      const cols = (await db.execute("PRAGMA table_info(chunks)")).rows.map((r) => r.name);
+      expect(cols).toEqual(["id", "bucket", "source", "text"]);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  test("'sections' stores section, position and a relative source; embeds with a context line", async () => {
+    const { dir, knowledgeDir } = setup({
+      "base/info.md": DOC,
+      "public/notes.md": "Preamble before any heading.\n",
+    });
+    try {
+      const db = createClient({ url: "file::memory:", authToken: "" });
+      const { embed, inputs } = recordingEmbedder();
+      const store = new VectorStore(embed, {
+        databaseClient: db,
+        knowledgeDir,
+        chunking: "sections",
+      });
+      await store.build();
+
+      const rows = (
+        await db.execute(
+          "SELECT source, text, section, position FROM chunks ORDER BY source, position",
+        )
+      ).rows.map((r) => ({ ...r }));
+      expect<unknown>(rows).toEqual([
+        { source: "base/info.md", text: "# Guide\n\nIntro line.", section: "Guide", position: 0 },
+        {
+          source: "base/info.md",
+          text: "## Hours\n\nSupport hours are 9-5.",
+          section: "Guide > Hours",
+          position: 1,
+        },
+        {
+          source: "public/notes.md",
+          text: "Preamble before any heading.",
+          section: "",
+          position: 0,
+        },
+      ]);
+      expect([...inputs].sort()).toEqual(
+        [
+          "base/info.md > Guide\n\n# Guide\n\nIntro line.",
+          "base/info.md > Guide > Hours\n\n## Hours\n\nSupport hours are 9-5.",
+          "public/notes.md\n\nPreamble before any heading.",
+        ].sort(),
+      );
+      expect(await store.query("hours", 5, ["base"])).toContain(
+        "## Hours\n\nSupport hours are 9-5.",
+      );
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  test("'sections' adds the columns to a table created by an earlier release; a second build is a no-op", async () => {
+    const { dir, knowledgeDir } = setup();
+    try {
+      const db = createClient({ url: "file::memory:", authToken: "" });
+      await db.execute(
+        "CREATE TABLE chunks (id TEXT PRIMARY KEY, bucket TEXT NOT NULL, source TEXT NOT NULL, text TEXT NOT NULL)",
+      );
+      const messages: string[] = [];
+      const logger = {
+        debug() {},
+        warn() {},
+        error() {},
+        info: (m: string) => void messages.push(m),
+      };
+      const { embed, inputs } = recordingEmbedder();
+      const store = new VectorStore(embed, {
+        databaseClient: db,
+        knowledgeDir,
+        chunking: "sections",
+        logger,
+      });
+
+      await store.build();
+      const cols = (await db.execute("PRAGMA table_info(chunks)")).rows.map((r) => r.name);
+      expect(cols).toEqual(["id", "bucket", "source", "text", "section", "position"]);
+      expect(messages).toContain("Chunking mode: sections");
+
+      const embedded = inputs.length;
+      await store.build();
+      expect(inputs.length).toBe(embedded);
+      expect(messages.some((m) => m.includes("No new chunks to embed"))).toBe(true);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  test("identical paragraphs under different headings get distinct ids", async () => {
+    const { dir, knowledgeDir } = setup({ "base/a.md": "# A\nSame.\n\n# B\nSame.\n" });
+    try {
+      const db = createClient({ url: "file::memory:", authToken: "" });
+      const { embed } = recordingEmbedder();
+      await new VectorStore(embed, {
+        databaseClient: db,
+        knowledgeDir,
+        chunking: "sections",
+      }).build();
+      expect(await count(db, "chunks")).toBe(2);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  test("switching 'lines' to 'sections' and back re-embeds once and leaves no orphans", async () => {
+    const { dir, knowledgeDir } = setup();
+    try {
+      const db = createClient({ url: "file::memory:", authToken: "" });
+      const { embed, inputs } = recordingEmbedder();
+      const make = (chunking: "lines" | "sections") =>
+        new VectorStore(embed, { databaseClient: db, knowledgeDir, chunking });
+
+      await make("lines").build();
+      expect(inputs.length).toBe(1);
+
+      await make("sections").build();
+      expect(inputs.length).toBe(3);
+      expect(await count(db, "chunks")).toBe(2);
+      expect(await count(db, "embeddings")).toBe(2);
+      const unset = (await db.execute("SELECT COUNT(*) as n FROM chunks WHERE section IS NULL"))
+        .rows[0].n;
+      expect(Number(unset)).toBe(0);
+
+      await make("lines").build();
+      expect(inputs.length).toBe(4);
+      expect(await count(db, "chunks")).toBe(1);
+      expect(await count(db, "embeddings")).toBe(1);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+});

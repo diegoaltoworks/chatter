@@ -1,3 +1,4 @@
+import { relative, sep } from "node:path";
 import type { Client as LibsqlClient } from "@libsql/client";
 import type OpenAI from "openai";
 import {
@@ -6,6 +7,7 @@ import {
   type BuildLock,
   createTursoBuildLock,
 } from "./buildLock";
+import { chunkSections } from "./chunking";
 import { type Bucket, loadKnowledge } from "./loaders";
 import { createConsoleLogger, type Logger } from "./logger";
 
@@ -109,6 +111,20 @@ async function sha256(input: string) {
     .join("");
 }
 
+/** Chunking strategy for {@link VectorStoreOptions.chunking}. */
+export type ChunkingMode = "lines" | "sections";
+
+type ChunkRow = {
+  id: string;
+  bucket: Bucket;
+  source: string;
+  text: string;
+  /** Text sent to the embedder; equals `text` unless a context line is prepended. */
+  embedText: string;
+  section: string | null;
+  position: number | null;
+};
+
 /**
  * `VectorStore` always takes an already-open libsql client rather than
  * credentials to open its own - the same rule every other store in this
@@ -125,6 +141,15 @@ export interface VectorStoreOptions {
   databaseClient: LibsqlClient;
   /** Directory of markdown knowledge files. Default: `./config/knowledge` */
   knowledgeDir?: string;
+  /**
+   * How knowledge files are cut into chunks. `'lines'` (default) keeps the
+   * original fixed-size line chunks, so ids and embeddings are unchanged.
+   * `'sections'` cuts at Markdown headings (see
+   * [chunking.ts](./chunking.ts)), records each chunk's heading trail and
+   * position, and embeds it with a `<source> > <heading trail>` context line.
+   * Switching modes re-embeds every chunk once on the next build.
+   */
+  chunking?: ChunkingMode;
   /** Logger for build progress. Default: a console logger writing to stderr. */
   logger?: Logger;
   /**
@@ -149,6 +174,7 @@ export class VectorStore implements Retriever {
    */
   readonly db: LibsqlClient;
   private knowledgeDir: string;
+  private chunking: ChunkingMode;
   private logger: Logger;
   private buildLock: BuildLock;
   private instanceId: string;
@@ -160,6 +186,7 @@ export class VectorStore implements Retriever {
   ) {
     this.db = options.databaseClient;
     this.knowledgeDir = options.knowledgeDir || DEFAULT_KNOWLEDGE_DIR;
+    this.chunking = options.chunking ?? "lines";
     this.logger = options.logger ?? createConsoleLogger();
     this.buildLock = options.buildLock ?? createTursoBuildLock(this.db);
     this.instanceId = options.instanceId ?? crypto.randomUUID();
@@ -238,11 +265,40 @@ export class VectorStore implements Retriever {
       return;
     }
 
-    const rows: { id: string; bucket: Bucket; source: string; text: string }[] = [];
+    this.logger.info(`Chunking mode: ${this.chunking}`);
+    if (this.chunking === "sections") await this.ensureSectionColumns();
+
+    const rows: ChunkRow[] = [];
     for (const d of docs) {
-      for (const part of chunk(d.text)) {
-        const id = await sha256(`${d.bucket}|${d.source}|${part}`);
-        rows.push({ id, bucket: d.bucket, source: d.source, text: part });
+      if (this.chunking === "sections") {
+        const source = relative(this.knowledgeDir, d.source).split(sep).join("/");
+        for (const c of chunkSections(d.text)) {
+          const section = c.section.join(" > ");
+          const id = await sha256(`${d.bucket}|${source}|${section}|${c.text}`);
+          const context = section ? `${source} > ${section}` : source;
+          rows.push({
+            id,
+            bucket: d.bucket,
+            source,
+            text: c.text,
+            embedText: `${context}\n\n${c.text}`,
+            section,
+            position: c.position,
+          });
+        }
+      } else {
+        for (const part of chunk(d.text)) {
+          const id = await sha256(`${d.bucket}|${d.source}|${part}`);
+          rows.push({
+            id,
+            bucket: d.bucket,
+            source: d.source,
+            text: part,
+            embedText: part,
+            section: null,
+            position: null,
+          });
+        }
       }
     }
 
@@ -263,11 +319,19 @@ export class VectorStore implements Retriever {
     for (let i = 0; i < rows.length; i += UPSERT_BATCH) {
       const batch = rows.slice(i, i + UPSERT_BATCH);
       await this.db.batch(
-        batch.map((r) => ({
-          sql: `INSERT INTO chunks(id,bucket,source,text) VALUES(?,?,?,?)
-                ON CONFLICT(id) DO NOTHING`,
-          args: [r.id, r.bucket, r.source, r.text],
-        })),
+        batch.map((r) =>
+          this.chunking === "sections"
+            ? {
+                sql: `INSERT INTO chunks(id,bucket,source,text,section,position) VALUES(?,?,?,?,?,?)
+                      ON CONFLICT(id) DO NOTHING`,
+                args: [r.id, r.bucket, r.source, r.text, r.section, r.position],
+              }
+            : {
+                sql: `INSERT INTO chunks(id,bucket,source,text) VALUES(?,?,?,?)
+                      ON CONFLICT(id) DO NOTHING`,
+                args: [r.id, r.bucket, r.source, r.text],
+              },
+        ),
         "write",
       );
     }
@@ -295,7 +359,7 @@ export class VectorStore implements Retriever {
     this.logger.info(`Embedding ${missing.length} new/updated chunks with ${EMB_MODEL}...`);
 
     // Embed missing in batches of N
-    const textById = new Map(rows.map((r) => [r.id, r.text]));
+    const textById = new Map(rows.map((r) => [r.id, r.embedText]));
     const BATCH = 96;
     for (let i = 0; i < missing.length; i += BATCH) {
       const batchIds = missing.slice(i, i + BATCH);
@@ -322,6 +386,19 @@ export class VectorStore implements Retriever {
     }
 
     this.logger.info(`Successfully embedded ${missing.length} new chunks`);
+  }
+
+  /**
+   * Adds the nullable `section`/`position` columns to a `chunks` table that
+   * every released version created without them. Checked via table_info so it
+   * is a no-op once present; only `'sections'` mode ever calls it.
+   */
+  private async ensureSectionColumns() {
+    const info = await this.db.execute("PRAGMA table_info(chunks)");
+    const have = new Set(info.rows.map((r) => String(r.name)));
+    if (!have.has("section")) await this.db.execute("ALTER TABLE chunks ADD COLUMN section TEXT");
+    if (!have.has("position"))
+      await this.db.execute("ALTER TABLE chunks ADD COLUMN position INTEGER");
   }
 
   // Remove chunks from database that no longer exist in markdown files

@@ -94,6 +94,7 @@ Specify where your content lives:
 ```typescript
 {
   knowledgeDir: './config/knowledge',  // Markdown files for RAG
+  chunking: 'lines',                   // or 'sections' (see Knowledge base)
   promptsDir: './config/prompts',      // System prompts
   publicDir: './public'                // Static files
 }
@@ -673,6 +674,15 @@ knowledge/
 - The system tracks file hashes
 - Only changed files are re-embedded
 - No need to rebuild entire database on updates
+
+**Section-aware chunking.** `chunking: 'sections'` (also accepted by
+`VectorStoreOptions`) cuts files at Markdown headings instead of every ~900
+characters. Each chunk is stored with its heading trail (`section`, joined with
+` > `) and its `position` in the file, `source` becomes relative to
+`knowledgeDir`, and the text sent to the embedder is prefixed with
+`<source> > <heading trail>` while the stored text stays clean. The default,
+`'lines'`, is unchanged. Switching modes re-embeds every chunk once on the next
+build and the stale rows are removed; switching back does the reverse.
 
 **Concurrent builds are serialised.** A build ends by deleting every chunk the
 current `knowledgeDir` did not produce, so two instances booting against one

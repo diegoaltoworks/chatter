@@ -123,6 +123,7 @@ export async function createMCPServer(config: MCPServerOptions) {
     store = new VectorStore(createOpenAIEmbedder(client), {
       databaseClient: db,
       knowledgeDir: config.knowledgeDir || DEFAULT_KNOWLEDGE_DIR,
+      chunking: config.chunking,
       logger: log,
     });
   }
