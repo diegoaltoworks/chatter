@@ -675,14 +675,32 @@ knowledge/
 - Only changed files are re-embedded
 - No need to rebuild entire database on updates
 
-**Section-aware chunking.** `chunking: 'sections'` (also accepted by
-`VectorStoreOptions`) cuts files at Markdown headings instead of every ~900
-characters. Each chunk is stored with its heading trail (`section`, joined with
-` > `) and its `position` in the file, `source` becomes relative to
-`knowledgeDir`, and the text sent to the embedder is prefixed with
-`<source> > <heading trail>` while the stored text stays clean. The default,
-`'lines'`, is unchanged. Switching modes re-embeds every chunk once on the next
-build and the stale rows are removed; switching back does the reverse.
+#### Section-aware chunking
+
+Set `chunking: 'sections'` (on `ChatterConfig`, `MCPServerOptions` or
+`VectorStoreOptions`) to cut files at Markdown headings instead of every ~900
+characters. The default, `'lines'`, is unchanged: same chunks, same ids, no
+re-embed.
+
+- Each chunk is stored with its heading trail (`section`, joined with ` > `)
+  and its `position` in the file, and `source` becomes relative to
+  `knowledgeDir`.
+- A **context line** is prepended to the text sent to the embedder:
+  `<source> > <heading trail>`, then a blank line, then the chunk. With no
+  heading the line is the source alone. The stored `text` stays clean, so
+  retrieved passages carry no context line.
+- Switching modes re-embeds every chunk exactly once on the next build and
+  the stale rows are removed; switching back does the reverse.
+
+Heading structure drives retrieval quality: use one H1 per file, give each
+section a descriptive heading, and keep sections short enough not to be split
+(an oversized section is split on paragraph boundaries, and each piece keeps
+the trail).
+
+To get provenance back at query time, call `VectorStore.queryChunks`, which
+returns `{ text, bucket, source, section, score }` records; `query` is the same
+result as bare text. See
+[patterns/adding-a-retriever.md](./patterns/adding-a-retriever.md).
 
 **Concurrent builds are serialised.** A build ends by deleting every chunk the
 current `knowledgeDir` did not produce, so two instances booting against one

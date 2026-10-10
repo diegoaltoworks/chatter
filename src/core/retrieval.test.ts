@@ -615,3 +615,114 @@ describe("VectorStore chunking modes", () => {
     }
   });
 });
+
+describe("VectorStore.queryChunks", () => {
+  const DOC = "# Guide\n\nIntro line.\n\n## Hours\n\nSupport hours are 9-5.\n";
+
+  // Texts mentioning hours embed along [1,0], everything else along [0,1].
+  const embedder = (calls: string[][] = []): Embedder => {
+    return async (input) => {
+      calls.push(input);
+      return input.map((t) => (/hours/i.test(t) ? [1, 0] : [0, 1]));
+    };
+  };
+
+  function setup(files: Record<string, string>) {
+    const dir = mkdtempSync(join(tmpdir(), "chatter-querychunks-"));
+    const knowledgeDir = join(dir, "knowledge");
+    for (const [rel, text] of Object.entries(files)) {
+      mkdirSync(join(knowledgeDir, rel, ".."), { recursive: true });
+      writeFileSync(join(knowledgeDir, rel), text);
+    }
+    return { dir, knowledgeDir };
+  }
+
+  test("returns text, bucket, relative source, section trail and score, best first", async () => {
+    const { dir, knowledgeDir } = setup({ "base/info.md": DOC });
+    try {
+      const db = createClient({ url: "file::memory:", authToken: "" });
+      const store = new VectorStore(embedder(), {
+        databaseClient: db,
+        knowledgeDir,
+        chunking: "sections",
+      });
+      await store.build();
+
+      const got = await store.queryChunks("opening hours", 5, ["base"]);
+      expect(got.length).toBe(2);
+      expect(got[0].text).toContain("Support hours are 9-5.");
+      expect(got[0].text).not.toContain("info.md");
+      expect(got[0].bucket).toBe("base");
+      expect(got[0].source).toBe("base/info.md");
+      expect(got[0].section).toEqual(["Guide", "Hours"]);
+      expect(got[0].score).toBeCloseTo(1);
+      expect(got[1].score).toBeCloseTo(0);
+      expect(got[0].score).toBeGreaterThan(got[1].score);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  test("never returns a row from a bucket that was not asked for", async () => {
+    const { dir, knowledgeDir } = setup({
+      "base/a.md": "# A\n\nHours in base.\n",
+      "private/b.md": "# B\n\nHours in private.\n",
+    });
+    try {
+      const db = createClient({ url: "file::memory:", authToken: "" });
+      const store = new VectorStore(embedder(), { databaseClient: db, knowledgeDir });
+      await store.build();
+
+      const got = await store.queryChunks("hours", 10, ["base"]);
+      expect(got.length).toBe(1);
+      expect(got.every((c) => c.bucket === "base")).toBe(true);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  test("query is exactly queryChunks mapped to text", async () => {
+    const { dir, knowledgeDir } = setup({ "base/info.md": DOC });
+    try {
+      const db = createClient({ url: "file::memory:", authToken: "" });
+      const store = new VectorStore(embedder(), {
+        databaseClient: db,
+        knowledgeDir,
+        chunking: "sections",
+      });
+      await store.build();
+
+      for (const k of [1, 2, 5]) {
+        const chunks = await store.queryChunks("hours", k, ["base"]);
+        expect(await store.query("hours", k, ["base"])).toEqual(chunks.map((c) => c.text));
+      }
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  test("rows ingested in 'lines' mode come back with an empty section", async () => {
+    const { dir, knowledgeDir } = setup({ "base/info.md": DOC });
+    try {
+      const db = createClient({ url: "file::memory:", authToken: "" });
+      const store = new VectorStore(embedder(), { databaseClient: db, knowledgeDir });
+      await store.build();
+
+      const got = await store.queryChunks("hours", 5, ["base"]);
+      expect(got.length).toBe(1);
+      expect(got[0].section).toEqual([]);
+      expect(got[0].source).toContain("info.md");
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  test("an empty bucket list returns nothing without calling the embedder", async () => {
+    const calls: string[][] = [];
+    const db = createClient({ url: "file::memory:", authToken: "" });
+    const store = new VectorStore(embedder(calls), { databaseClient: db });
+
+    expect(await store.queryChunks("hours", 5, [])).toEqual([]);
+    expect(calls).toEqual([]);
+  });
+});

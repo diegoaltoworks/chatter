@@ -29,11 +29,31 @@ export interface Retriever {
   /** Retrieve up to `k` chunks across `allowedBuckets` for `query`, most relevant first. */
   query(query: string, k: number, allowedBuckets: string[]): Promise<string[]>;
   /**
+   * Optional record-returning variant of `query`, for a host that needs to
+   * know where a passage came from (a search route, citations). `prepareChat`
+   * never calls it; implement it only if your own code wants provenance.
+   * Same scoping and ordering rules as `query`.
+   */
+  queryChunks?(query: string, k: number, allowedBuckets: string[]): Promise<RetrievedChunk[]>;
+  /**
    * Optional one-time ingest/warm-up step, run once at server startup before
    * the store answers any query. Omit it for a retriever that is always
    * already up to date (a remote index another process maintains).
    */
   build?(): Promise<void>;
+}
+
+/** One retrieval result with its provenance. See {@link Retriever.queryChunks}. */
+export interface RetrievedChunk {
+  /** The chunk text alone, without any embedding context line. */
+  text: string;
+  bucket: string;
+  /** Where the chunk came from; knowledgeDir-relative for rows ingested in `'sections'` mode. */
+  source: string;
+  /** Heading trail from the H1 down; empty when the row has none (every `'lines'` row). */
+  section: string[];
+  /** Cosine similarity between the query and the chunk embedding. */
+  score: number;
 }
 
 /**
@@ -462,28 +482,39 @@ export class VectorStore implements Retriever {
    * interpolated. An empty list retrieves nothing, and short-circuits before
    * the embedding call.
    */
-  async query(q: string, k = 6, allowed: string[] = ["base"]): Promise<string[]> {
+  async queryChunks(q: string, k = 6, allowed: string[] = ["base"]): Promise<RetrievedChunk[]> {
     if (allowed.length === 0) return [];
 
     const [qv] = await this.embed([q]);
 
-    // Pull candidate rows (you can optimize by limiting rows per bucket)
+    // `c.*` rather than named columns: the `section` column only exists once
+    // a build has run in 'sections' mode, and a row without it must still work.
     const placeholders = allowed.map(() => "?").join(",");
     const res = await this.db.execute({
-      sql: `SELECT c.id, c.text, e.embedding
+      sql: `SELECT c.*, e.embedding
             FROM chunks c
             JOIN embeddings e ON e.id = c.id
             WHERE c.bucket IN (${placeholders})`,
       args: allowed,
     });
 
-    const scored: Array<{ s: number; text: string }> = [];
-    for (const row of res.rows) {
+    const scored: RetrievedChunk[] = res.rows.map((row) => {
       const emb = JSON.parse(String(row.embedding)) as number[];
-      const s = VectorStore.cosine(qv, emb);
-      scored.push({ s, text: String(row.text) });
-    }
-    scored.sort((a, b) => b.s - a.s);
-    return scored.slice(0, k).map((r) => r.text);
+      const trail = row.section == null ? "" : String(row.section);
+      return {
+        text: String(row.text),
+        bucket: String(row.bucket ?? ""),
+        source: String(row.source ?? ""),
+        section: trail ? trail.split(" > ") : [],
+        score: VectorStore.cosine(qv, emb),
+      };
+    });
+    scored.sort((a, b) => b.score - a.score);
+    return scored.slice(0, k);
+  }
+
+  /** Same results as {@link queryChunks}, as bare text. */
+  async query(q: string, k = 6, allowed: string[] = ["base"]): Promise<string[]> {
+    return (await this.queryChunks(q, k, allowed)).map((c) => c.text);
   }
 }
