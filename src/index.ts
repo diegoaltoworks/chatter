@@ -50,6 +50,9 @@ export {
   canAcquireBuildLock,
   createTursoBuildLock,
 } from "./core/buildLock";
+export type { SectionChunk } from "./core/chunking";
+// Section-aware Markdown chunker for hosts building their own retriever
+export { chunkSections } from "./core/chunking";
 export { DEFAULT_REFUSAL, detectLeakage, guardOutput, scrubOutput } from "./core/guardrails";
 export { completeOnce, completeStream, DEFAULT_MODEL } from "./core/llm";
 export { loadKnowledge } from "./core/loaders";
