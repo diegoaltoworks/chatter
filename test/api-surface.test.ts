@@ -25,8 +25,10 @@ import type {
   BrainHooks,
   BucketsFor,
   Channel,
+  ChunkingMode,
   Embedder,
   Logger,
+  MCPServerOptions,
   PipelineMessage,
   RerankContext,
   Retriever,
@@ -122,6 +124,21 @@ describe("API surface", () => {
 
     expect(store.db).toBe(db);
     expect(custom.db).toBe(db);
+  });
+
+  test("chunking is reachable from VectorStoreOptions, ChatterConfig and MCPServerOptions", () => {
+    const db = {} as ServerDependencies["db"];
+    const mode: ChunkingMode = "sections";
+    const store = new VectorStore(async (input) => input.map(() => [0]), {
+      databaseClient: db,
+      chunking: mode,
+    });
+    const config: Pick<ChatterConfig, "chunking"> = { chunking: "sections" };
+    const mcp: Pick<MCPServerOptions, "chunking"> = { chunking: "lines" };
+
+    expect(store.db).toBe(db);
+    expect(config.chunking).toBe("sections");
+    expect(mcp.chunking).toBe("lines");
   });
 
   test("ServerDependencies.logger is a leveled Logger, satisfiable by a custom implementation", () => {

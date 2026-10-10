@@ -198,6 +198,13 @@ export interface ChatterConfig extends BrainHooks {
   configDir?: string;
   /** Knowledge base directory. Default: ./config/knowledge */
   knowledgeDir?: string;
+  /**
+   * How knowledge files are chunked by the default `VectorStore`: `'lines'`
+   * (default, unchanged) or `'sections'` (heading-aware, with section context
+   * in the embedding). Switching re-embeds the knowledge base once. Ignored
+   * when `retriever` is set.
+   */
+  chunking?: "lines" | "sections";
   /** Prompts directory. Default: ./config/prompts */
   promptsDir?: string;
   /** Public static files directory. Default: ./public */
