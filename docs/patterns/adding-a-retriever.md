@@ -83,6 +83,27 @@ const embed: Embedder = async (input) => myProvider.embed(input);
 const store = new VectorStore(embed, { databaseClient: db, knowledgeDir });
 ```
 
+## Chunking Markdown for your own retriever
+
+`chunkSections(text, max = 900)` is a pure helper for hosts that index their own
+Markdown. It starts a new chunk at every ATX heading (the heading line stays at
+the top of the chunk) and returns `{ text, section, position }` per chunk:
+`section` is the heading trail from the H1 down (empty before the first
+heading) and `position` is the zero-based index within the document. A section
+longer than `max` is split on blank-line paragraph boundaries, each piece
+keeping the trail. Fenced code blocks, lists and tables are never split, even
+when one block alone exceeds `max`; small sections are not merged.
+
+```typescript
+import { chunkSections } from "@diegoaltoworks/chatter";
+
+for (const c of chunkSections(markdown)) {
+  await index.add({ id: `${file}#${c.position}`, text: c.text, section: c.section });
+}
+```
+
+`VectorStore` does not use it yet; it still cuts on line boundaries.
+
 ## Testing
 
 Fake a `Retriever` the same way pipeline tests already do - an object literal
