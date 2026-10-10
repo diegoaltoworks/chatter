@@ -5,7 +5,7 @@ describe("timeContext", () => {
   test("formats one line per zone with a fixed clock", () => {
     const at = Date.UTC(2026, 7, 14, 12, 0); // 2026-08-14T12:00Z
     const result = timeContext(["UTC"], at);
-    expect(result).toContain("Friday 14 August 2026");
+    expect(result).toBe("Current date and time: Friday 14 August 2026 at 12:00 (UTC).");
     expect(result).toContain("(UTC)");
   });
 

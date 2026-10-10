@@ -22,6 +22,10 @@ describe("expectedDocFiles", () => {
       "decisions/0001-x.md",
     ]);
   });
+
+  test("skips the gitignored agents/ directory", () => {
+    expect(expectedDocFiles(["a.md", "agents", "agents/domain.md"])).toEqual(["a.md"]);
+  });
 });
 
 describe("missingDocLinks", () => {
