@@ -50,3 +50,6 @@ Thumbs.db
 
 # Local workflow state (never committed)
 .claude/
+.scratch/
+AGENTS.md
+docs/agents/

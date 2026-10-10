@@ -15,10 +15,13 @@
 /**
  * `docs/*.md` files a ToC is expected to link, in the shape `readdirSync`
  * returns them: every markdown file in `docs/` except `index.md` itself
- * (which is the page the docs-side ToC lives on, not an entry in it).
+ * (which is the page the docs-side ToC lives on, not an entry in it) and
+ * anything under `agents/` (gitignored local tooling config, not a guide).
  */
 export function expectedDocFiles(docsDirEntries: readonly string[]): string[] {
-  return docsDirEntries.filter((name) => name.endsWith(".md") && name !== "index.md").sort();
+  return docsDirEntries
+    .filter((name) => name.endsWith(".md") && name !== "index.md" && !name.startsWith("agents/"))
+    .sort();
 }
 
 /**
