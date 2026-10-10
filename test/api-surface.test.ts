@@ -31,6 +31,7 @@ import type {
   MCPServerOptions,
   PipelineMessage,
   RerankContext,
+  RetrievedChunk,
   Retriever,
   RewriteQuery,
   ServerDependencies,
@@ -139,6 +140,22 @@ describe("API surface", () => {
     expect(store.db).toBe(db);
     expect(config.chunking).toBe("sections");
     expect(mcp.chunking).toBe("lines");
+  });
+
+  test("RetrievedChunk is exported and queryChunks is optional on Retriever", () => {
+    const chunk: RetrievedChunk = {
+      text: "t",
+      bucket: "base",
+      source: "a.md",
+      section: [],
+      score: 1,
+    };
+    const queryOnly: Retriever = { query: async () => [] };
+    const withChunks: Retriever = { query: async () => [], queryChunks: async () => [chunk] };
+
+    expect(chunk.section).toEqual([]);
+    expect(queryOnly.queryChunks).toBeUndefined();
+    expect(withChunks.queryChunks).toBeDefined();
   });
 
   test("ServerDependencies.logger is a leveled Logger, satisfiable by a custom implementation", () => {

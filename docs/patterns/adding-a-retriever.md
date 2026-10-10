@@ -14,6 +14,7 @@ retrieval-augmented service another team already runs.
 ```typescript
 interface Retriever {
   query(query: string, k: number, allowedBuckets: string[]): Promise<string[]>;
+  queryChunks?(query: string, k: number, allowedBuckets: string[]): Promise<RetrievedChunk[]>;
   build?(): Promise<void>;
 }
 ```
@@ -24,6 +25,7 @@ interface Retriever {
   [ARCHITECTURE.md](../ARCHITECTURE.md), invariant 2) - a `Retriever` just
   has to honor whichever bucket names it's given and never return chunks from
   a bucket that wasn't asked for.
+- **`queryChunks`** is optional. See [Returning provenance](#returning-provenance).
 - **`build`** is optional. `createServer`/`createMCPServer` call it once at
   startup, before anything queries the store, if it's present. Implement it
   for a one-time ingest/embed step (what `VectorStore.build()` does);
@@ -33,6 +35,29 @@ interface Retriever {
   destructive part with a single-writer lock the way `VectorStore` does (see
   `src/core/buildLock.ts`), or a rolling deploy will have two builds deleting
   each other's writes.
+
+## Returning provenance
+
+`query` returns bare strings, so a host building its own search route or
+citation feature on `deps.store` cannot tell which file or section a passage
+came from. Implement `queryChunks` to return records instead:
+
+```typescript
+type RetrievedChunk = {
+  text: string;      // the chunk text alone
+  bucket: string;
+  source: string;    // knowledgeDir-relative in 'sections' mode
+  section: string[]; // heading trail; [] when the row has none
+  score: number;     // cosine similarity
+};
+```
+
+`prepareChat` never calls it and a `Retriever` without it keeps working, so
+implement it only if your own code needs provenance. Bucket scoping and
+ordering are the same as `query`. `VectorStore` implements it, and its `query`
+is `queryChunks` mapped to `text`, so the two cannot disagree on order or
+membership; do the same in your own retriever. Rows ingested in `'lines'` mode
+have no heading trail and come back with `section: []`.
 
 ## Wiring it in
 
@@ -102,7 +127,7 @@ for (const c of chunkSections(markdown)) {
 }
 ```
 
-`VectorStore` does not use it yet; it still cuts on line boundaries.
+`VectorStore` uses the same chunker when built with `chunking: 'sections'`.
 
 ## Testing
 
